@@ -32,7 +32,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm overflow-hidden border-t-4 border-brand">
+      <Card className="w-full max-w-sm overflow-hidden border-t-4 border-t-brand">
         <div className="bg-white px-6 pb-4 pt-7 text-center">
           <Image
             src="/logo.png"
