@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Optimum Swim School — KPI & Bonus Dashboard
 
-## Getting Started
+A rebuild of the original single-file `KPI_Calculator_v11.1.html` as a deployable
+Next.js app with cloud-saved monthly history, AI-assisted instructor-name merging,
+per-coach manual inputs with a readiness checklist, month-over-month trends, and
+real Claude performance analysis.
 
-First, run the development server:
+## What it does
+
+1. **Upload** the monthly tutor-KPI CSV.
+2. **AI merge** — a deterministic clean-name pass plus Claude reconciliation auto-groups
+   the account names that belong to the same coach (e.g. `HONG LI [BK]` + `HONG LI HARVEST`).
+   Groupings are editable (split / move accounts).
+3. **Readiness list** — every coach is listed with their per-month manual inputs
+   (position, teaching allowance, management assessment). Coaches missing data are
+   flagged; allowance is pre-filled from last month and the management-assessment age
+   is shown so you just confirm or update it.
+4. **Leaderboard + detail** — scores, grades, and bonus payout per coach, with a radar
+   profile, score breakdown, and a Claude-generated insight.
+5. **Save month** → persisted to the database; remembered coach profiles make next
+   month's merge + data entry faster.
+6. **History** and **Trends** — browse past months and compare coaches over time.
+7. **Settings** — enable/disable metrics, edit weights, min/max, center targets, and
+   grade thresholds. The scoring math matches v11.1 by default.
+
+## Tech stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Drizzle ORM ·
+Postgres (Neon/Vercel) with a PGlite fallback for local dev · iron-session ·
+Anthropic SDK · Recharts · Vitest.
+
+## Local development
 
 ```bash
+npm install
+cp .env.example .env.local   # set APP_PASSWORD + SESSION_SECRET (>=32 chars)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+With no `POSTGRES_URL`, local dev uses an in-process **PGlite** database persisted to
+`./.pglite` (gitignored) — no cloud DB needed to try it. With no `ANTHROPIC_API_KEY`,
+AI name-merging is skipped (deterministic merge still works) and analysis falls back to
+a template. Default login password in dev is `swim123`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test         # KPI engine + DB integration tests (Vitest)
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment variables
 
-## Learn More
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `APP_PASSWORD` | yes (prod) | Single shared login password. |
+| `SESSION_SECRET` | yes | ≥32 random chars; encrypts the session cookie. |
+| `POSTGRES_URL` | yes (prod) | Postgres connection string (Neon/Vercel pooled URL). Unset → PGlite locally. |
+| `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy to Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Push this repo to GitHub and **Import** it into Vercel (framework auto-detected as Next.js).
+2. In the project's **Storage** tab, add a **Postgres** database (Neon). Vercel injects
+   `POSTGRES_URL` (use the pooled connection string).
+3. In **Settings → Environment Variables**, add `APP_PASSWORD`, `SESSION_SECRET`
+   (e.g. `openssl rand -base64 32`), and optionally `ANTHROPIC_API_KEY`.
+4. Create the tables once against the production database:
+   ```bash
+   POSTGRES_URL="<your prod url>" npm run db:migrate
+   ```
+   (or `npm run db:push`). Re-run after future schema changes.
+5. Deploy. The app is gated by the shared password on every route.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> `.npmrc` sets `legacy-peer-deps=true` so installs succeed on the Next 16 / React 19
+> peer ranges — keep it for Vercel's install step.
