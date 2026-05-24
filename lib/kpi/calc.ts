@@ -138,7 +138,7 @@ export function getGrade(
   thresholds: GradeThresholds,
 ): Grade {
   if (score >= thresholds.S)
-    return { grade: "S", className: "bg-emerald-100 text-emerald-800 border-emerald-300" };
+    return { grade: "S", className: "bg-accent text-[#312b29] border-[#e0a020]" };
   if (score >= thresholds.A)
     return { grade: "A", className: "bg-indigo-100 text-indigo-800 border-indigo-300" };
   if (score >= thresholds.B)

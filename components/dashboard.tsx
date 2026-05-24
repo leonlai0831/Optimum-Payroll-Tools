@@ -360,7 +360,7 @@ export function Dashboard() {
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-3 w-3 text-indigo-500" /> {groups.length} coaches ·{" "}
+                  <Sparkles className="h-3 w-3 text-accent" /> {groups.length} coaches ·{" "}
                   {rows.length} rows
                 </>
               )}
@@ -626,16 +626,16 @@ function CoachDetail(props: DetailProps) {
           <RadarProfile data={radarData} />
         </div>
 
-        <div className="mt-4 rounded-lg border border-purple-100 bg-purple-50 p-3">
-          <p className="mb-1 flex items-center gap-1 text-sm font-bold text-purple-800">
-            <Sparkles className="h-4 w-4" /> AI Insight
+        <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+          <p className="mb-1 flex items-center gap-1 text-sm font-bold text-indigo-800">
+            <Sparkles className="h-4 w-4 text-accent" /> AI Insight
           </p>
           {loading ? (
-            <p className="flex items-center gap-2 text-sm text-purple-700">
-              <Spinner className="text-purple-500" /> Analyzing…
+            <p className="flex items-center gap-2 text-sm text-indigo-700">
+              <Spinner className="text-indigo-500" /> Analyzing…
             </p>
           ) : (
-            <p className="text-sm leading-relaxed text-purple-900">{insight}</p>
+            <p className="text-sm leading-relaxed text-gray-800">{insight}</p>
           )}
         </div>
 

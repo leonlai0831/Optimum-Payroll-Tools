@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
 import type { TrendData } from "@/lib/db/queries";
 
 const COLORS = [
-  "#4f46e5", "#16a34a", "#dc2626", "#d97706", "#0891b2",
-  "#9333ea", "#db2777", "#65a30d", "#2563eb", "#ea580c",
+  "#0061ff", "#fcb731", "#16a34a", "#dc2626", "#0891b2",
+  "#9333ea", "#db2777", "#65a30d", "#ea580c", "#0a3d99",
 ];
 
 export function TrendsView({ data }: { data: TrendData }) {

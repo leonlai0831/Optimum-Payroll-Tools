@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Waves } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui";
 
 export default function LoginPage() {
@@ -32,11 +32,17 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm overflow-hidden">
-        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 text-center text-white">
-          <Waves className="mx-auto mb-2 h-8 w-8" />
-          <h1 className="text-lg font-bold">Optimum Swim School</h1>
-          <p className="text-sm text-indigo-100">KPI &amp; Bonus Dashboard</p>
+      <Card className="w-full max-w-sm overflow-hidden border-t-4 border-brand">
+        <div className="bg-white px-6 pb-4 pt-7 text-center">
+          <Image
+            src="/logo.png"
+            alt="Optimum Swim School"
+            width={560}
+            height={433}
+            priority
+            className="mx-auto h-auto w-36"
+          />
+          <p className="mt-3 text-sm font-semibold text-gray-500">KPI &amp; Bonus Dashboard</p>
         </div>
         <form onSubmit={submit} className="space-y-4 p-6">
           <div>
