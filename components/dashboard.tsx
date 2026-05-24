@@ -40,6 +40,17 @@ interface GroupInputs {
   groupConfig: GroupConfig | null;
 }
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    // Surface the server's real error/status instead of a misleading
+    // "Unexpected end of JSON input" from calling .json() on an empty error body.
+    const body = (await res.text().catch(() => "")).slice(0, 300);
+    throw new Error(`${url} failed (${res.status})${body ? `: ${body}` : ""}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 function derivePeriod(filename: string): string {
   const m = filename.match(/(20\d{2})[^\d]?(\d{2})/);
   if (m) return `${m[1]}-${m[2]}`;
@@ -84,12 +95,10 @@ export function Dashboard() {
           setFileName(file.name);
           setPeriod(derivePeriod(file.name));
 
-          const [cfgRes, coachRes] = await Promise.all([
-            fetch("/api/config"),
-            fetch("/api/coaches"),
+          const [cfg, coachList] = await Promise.all([
+            fetchJson<AppConfig>("/api/config"),
+            fetchJson<CoachProfile[]>("/api/coaches"),
           ]);
-          const cfg = (await cfgRes.json()) as AppConfig;
-          const coachList = (await coachRes.json()) as CoachProfile[];
           setConfig(cfg);
 
           const names = uniqueInstructorNames(parsed);
