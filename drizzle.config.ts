@@ -5,6 +5,9 @@ export default defineConfig({
   out: "./lib/db/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.POSTGRES_URL || "postgres://localhost:5432/placeholder",
+    url:
+      process.env.POSTGRES_URL ||
+      process.env.DATABASE_URL ||
+      "postgres://localhost:5432/placeholder",
   },
 });
