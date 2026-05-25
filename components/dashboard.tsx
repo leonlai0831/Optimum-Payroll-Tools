@@ -34,10 +34,33 @@ interface GroupInputs {
   canonicalName: string;
   position: Position;
   allowance: number | null;
+  /** Where the active allowance came from (drives the badge + re-fetch behavior). */
+  allowanceSource: "auto" | "carryover" | "manual" | null;
+  /** Profile carry-over (last month's allowance), used as a fallback. */
+  carryAllowance: number | null;
   mgmt: number | null;
   lastMgmtAt: string | null;
   coachId: number | null;
   groupConfig: GroupConfig | null;
+}
+
+/** A coach's saved teaching allowance for the selected period (from /api/allowance/runs). */
+interface AllowanceRec {
+  coachId: number | null;
+  canonicalName: string;
+  teaching: number;
+}
+
+/** Match a merged coach to a period's allowance record: prefer coachId, else canonical name. */
+function matchAllowance(
+  list: AllowanceRec[],
+  coachId: number | null,
+  canonicalName: string,
+): number | null {
+  const rec =
+    (coachId != null ? list.find((r) => r.coachId === coachId) : undefined) ??
+    list.find((r) => r.canonicalName === canonicalName);
+  return rec ? rec.teaching : null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -93,7 +116,8 @@ export function Dashboard() {
           const parsed = mapCsvRows(res.data);
           setRows(parsed);
           setFileName(file.name);
-          setPeriod(derivePeriod(file.name));
+          const derivedPeriod = derivePeriod(file.name);
+          setPeriod(derivedPeriod);
 
           const [cfg, coachList] = await Promise.all([
             fetchJson<AppConfig>("/api/config"),
@@ -153,6 +177,8 @@ export function Dashboard() {
               canonicalName: g.canonicalName,
               position: profile?.defaultPosition ?? "Instructor",
               allowance: profile?.lastAllowance ?? null,
+              allowanceSource: profile?.lastAllowance != null ? "carryover" : null,
+              carryAllowance: profile?.lastAllowance ?? null,
               mgmt: profile?.lastMgmtAssessment ?? null,
               lastMgmtAt: profile?.lastMgmtAssessmentAt ?? null,
               coachId: profile?.id ?? null,
@@ -162,6 +188,7 @@ export function Dashboard() {
           setAccts(nextAccts);
           setMeta(nextMeta);
           setPhase("working");
+          await applyAllowanceForPeriod(derivedPeriod);
         } catch (e) {
           setError(e instanceof Error ? e.message : "Failed to process file");
         } finally {
@@ -172,6 +199,40 @@ export function Dashboard() {
         setError(err.message);
         setParsing(false);
       },
+    });
+  }
+
+  /** Fetch the period's saved allowances and overlay them onto each coach's teaching allowance. */
+  async function applyAllowanceForPeriod(p: string) {
+    if (!p) return;
+    let list: AllowanceRec[];
+    try {
+      list = await fetchJson<AllowanceRec[]>(`/api/allowance/runs?period=${encodeURIComponent(p)}`);
+    } catch {
+      return; // no allowances saved for this period — keep carry-over values
+    }
+    setMeta((prev) => {
+      const next: Record<string, GroupInputs> = {};
+      for (const [id, m] of Object.entries(prev)) {
+        if (m.allowanceSource === "manual") {
+          next[id] = m; // never clobber a manual override
+          continue;
+        }
+        const auto = matchAllowance(list, m.coachId, m.canonicalName);
+        if (auto != null) {
+          next[id] = { ...m, allowance: auto, allowanceSource: "auto" };
+        } else if (m.allowanceSource === "auto") {
+          // an auto value from a different period no longer applies — fall back to carry-over
+          next[id] = {
+            ...m,
+            allowance: m.carryAllowance,
+            allowanceSource: m.carryAllowance != null ? "carryover" : null,
+          };
+        } else {
+          next[id] = m;
+        }
+      }
+      return next;
     });
   }
 
@@ -203,7 +264,10 @@ export function Dashboard() {
     return list.sort((a, b) => b.comp.finalScore - a.comp.finalScore);
   }, [accts, meta, rows, config]);
 
-  const incompleteCount = groups.filter((g) => !g.comp.isComplete).length;
+  // Only coaches with a teaching allowance (auto-linked or manual) appear in the leaderboard.
+  const ranked = useMemo(() => groups.filter((g) => (g.meta.allowance ?? 0) > 0), [groups]);
+  const hiddenCount = groups.length - ranked.length;
+  const incompleteCount = ranked.filter((g) => !g.comp.isComplete).length;
 
   function updateMeta(id: string, patch: Partial<GroupInputs>) {
     setMeta((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -220,6 +284,8 @@ export function Dashboard() {
           canonicalName: getCleanName(name),
           position: "Instructor",
           allowance: null,
+          allowanceSource: null,
+          carryAllowance: null,
           mgmt: null,
           lastMgmtAt: null,
           coachId: null,
@@ -235,7 +301,7 @@ export function Dashboard() {
     if (!config) return;
     setSaving(true);
     setError("");
-    const coachResults: RunCoach[] = groups.map((g) => ({
+    const coachResults: RunCoach[] = ranked.map((g) => ({
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
       accounts: g.names,
@@ -287,7 +353,7 @@ export function Dashboard() {
       "Payout (RM)",
       "Complete",
     ];
-    const lines = groups.map((g) =>
+    const lines = ranked.map((g) =>
       [
         `"${g.meta.canonicalName}"`,
         `"${g.center}"`,
@@ -315,8 +381,8 @@ export function Dashboard() {
           <FileUp className="mx-auto mb-3 h-10 w-10 text-indigo-500" />
           <h2 className="text-lg font-bold text-gray-900">Upload monthly KPI CSV</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Names are auto-merged with AI; you&apos;ll then fill in each coach&apos;s allowance and
-            management assessment.
+            Names are auto-merged with AI. Each coach&apos;s teaching allowance auto-links from the
+            Allowance Calculator (override anytime); just fill in the management assessment.
           </p>
           <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
             {parsing ? <Spinner /> : <FileUp className="h-4 w-4" />}
@@ -347,7 +413,10 @@ export function Dashboard() {
             <Input
               id="period"
               value={period}
-              onChange={(e) => setPeriod(e.target.value)}
+              onChange={(e) => {
+                setPeriod(e.target.value);
+                void applyAllowanceForPeriod(e.target.value);
+              }}
               className="mt-1 w-32"
             />
           </div>
@@ -390,10 +459,16 @@ export function Dashboard() {
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>{incompleteCount}</strong> coach(es) still need manual data (teaching allowance
-            / management assessment). They&apos;re highlighted below.
+            <strong>{incompleteCount}</strong> coach(es) still need management data (assessment /
+            group hours). They&apos;re highlighted below.
           </span>
         </div>
+      )}
+      {hiddenCount > 0 && (
+        <p className="text-xs text-gray-500">
+          {hiddenCount} coach(es) hidden from the leaderboard — no teaching allowance for {period}.
+          Save it in the Allowance Calculator for the same month to include them.
+        </p>
       )}
 
       {/* Coaches table */}
@@ -415,7 +490,7 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {groups.map((g, idx) => (
+              {ranked.map((g, idx) => (
                 <tr
                   key={g.id}
                   className={cn(
@@ -454,10 +529,17 @@ export function Dashboard() {
                       onChange={(e) =>
                         updateMeta(g.id, {
                           allowance: e.target.value === "" ? null : Number(e.target.value),
+                          allowanceSource: "manual",
                         })
                       }
                       className="w-24 py-1 text-xs"
                     />
+                    {g.meta.allowanceSource === "auto" && (
+                      <div className="text-[10px] font-medium text-brand">auto-linked</div>
+                    )}
+                    {g.meta.allowanceSource === "carryover" && (
+                      <div className="text-[10px] text-gray-400">last month</div>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <Input

@@ -10,6 +10,12 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { Position, RunCoach } from "@/lib/types";
+import type {
+  AllowanceConfig,
+  AllowanceInput,
+  AllowanceResult,
+  AllowanceTier,
+} from "@/lib/allowance/types";
 
 /** Singleton active configuration (one row, id = 1). */
 export const config = pgTable("config", {
@@ -28,6 +34,7 @@ export const coaches = pgTable("coaches", {
   lastMgmtAssessment: real("last_mgmt_assessment"),
   lastMgmtAssessmentAt: timestamp("last_mgmt_assessment_at", { withTimezone: true }),
   lastAllowance: real("last_allowance"),
+  allowanceTier: text("allowance_tier").$type<AllowanceTier>(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -45,6 +52,29 @@ export const runs = pgTable("runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Singleton allowance rate tables (one row, id = 1). */
+export const allowanceConfig = pgTable("allowance_config", {
+  id: integer("id").primaryKey().default(1),
+  data: jsonb("data").$type<AllowanceConfig>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** A saved full-time allowance calculation for one coach in one month. */
+export const allowanceRuns = pgTable("allowance_runs", {
+  id: serial("id").primaryKey(),
+  periodLabel: text("period_label").notNull(),
+  coachId: integer("coach_id"),
+  canonicalName: text("canonical_name").notNull(),
+  tier: text("tier").$type<AllowanceTier>().notNull(),
+  center: text("center").default("").notNull(),
+  input: jsonb("input").$type<AllowanceInput>().notNull(),
+  result: jsonb("result").$type<AllowanceResult>().notNull(),
+  configSnapshot: jsonb("config_snapshot").$type<AllowanceConfig>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type CoachRecord = typeof coaches.$inferSelect;
 export type RunRecord = typeof runs.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;
+export type AllowanceConfigRecord = typeof allowanceConfig.$inferSelect;
+export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
