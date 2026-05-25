@@ -450,7 +450,7 @@ export function Dashboard() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {savedId && (
         <p className="text-sm text-green-700">
-          Saved to history. <a className="underline" href={`/history/${savedId}`}>View record →</a>
+          Saved to history. <a className="underline" href={`/kpi/history/${savedId}`}>View record →</a>
         </p>
       )}
 

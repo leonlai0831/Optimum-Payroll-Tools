@@ -13,7 +13,7 @@ export function DeleteRunButton({ id }: { id: number }) {
     if (!confirm("Delete this saved month? This cannot be undone.")) return;
     setBusy(true);
     await fetch(`/api/runs/${id}`, { method: "DELETE" });
-    router.push("/history");
+    router.push("/kpi/history");
     router.refresh();
   }
 

@@ -1,5 +1,5 @@
 import { getAllowanceConfig, listCoaches } from "@/lib/db/queries";
-import { AllowanceTabs } from "@/components/allowance-tabs";
+import { SectionNav } from "@/components/section-nav";
 import { AllowanceCalculator } from "@/components/allowance-calculator";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function AllowancePage() {
   }));
   return (
     <div className="fade-in space-y-4">
-      <AllowanceTabs />
+      <SectionNav section="allowance" />
       <AllowanceCalculator config={config} coaches={roster} />
     </div>
   );

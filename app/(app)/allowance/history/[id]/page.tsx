@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getAllowanceRun } from "@/lib/db/queries";
-import { AllowanceTabs } from "@/components/allowance-tabs";
+import { SectionNav } from "@/components/section-nav";
 import { DeleteAllowanceRunButton } from "@/components/delete-allowance-run-button";
 import { Card } from "@/components/ui";
 import { rm } from "@/lib/utils";
@@ -26,7 +26,7 @@ export default async function AllowanceRunDetailPage({
 
   return (
     <div className="fade-in space-y-4">
-      <AllowanceTabs />
+      <SectionNav section="allowance" />
       <div className="flex items-start justify-between">
         <div>
           <Link

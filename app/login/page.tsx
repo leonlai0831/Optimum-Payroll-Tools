@@ -42,7 +42,7 @@ export default function LoginPage() {
             priority
             className="mx-auto h-auto w-36"
           />
-          <p className="mt-3 text-sm font-semibold text-gray-500">KPI &amp; Bonus Dashboard</p>
+          <p className="mt-3 text-sm font-semibold text-gray-500">Optimum Payroll Tools</p>
         </div>
         <form onSubmit={submit} className="space-y-4 p-6">
           <div>

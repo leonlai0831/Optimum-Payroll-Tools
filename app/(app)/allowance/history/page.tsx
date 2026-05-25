@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Coins } from "lucide-react";
 import { listAllowanceRuns, type AllowanceRunSummary } from "@/lib/db/queries";
-import { AllowanceTabs } from "@/components/allowance-tabs";
+import { SectionNav } from "@/components/section-nav";
 import { AllowanceExportButton } from "@/components/allowance-export-button";
 import { Card } from "@/components/ui";
 import { rm } from "@/lib/utils";
@@ -20,7 +20,7 @@ export default async function AllowanceHistoryPage() {
 
   return (
     <div className="fade-in space-y-4">
-      <AllowanceTabs />
+      <SectionNav section="allowance" />
       <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
         <Coins className="h-5 w-5 text-indigo-500" /> Saved Allowances
       </h1>

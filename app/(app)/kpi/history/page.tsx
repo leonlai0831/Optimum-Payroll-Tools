@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { History } from "lucide-react";
 import { listRuns } from "@/lib/db/queries";
+import { SectionNav } from "@/components/section-nav";
 import { Card } from "@/components/ui";
 import { rm } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ export default async function HistoryPage() {
 
   return (
     <div className="fade-in space-y-4">
+      <SectionNav section="kpi" />
       <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
         <History className="h-5 w-5 text-indigo-500" /> Saved Months
       </h1>
@@ -46,7 +48,7 @@ export default async function HistoryPage() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     <Link
-                      href={`/history/${r.id}`}
+                      href={`/kpi/history/${r.id}`}
                       className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                     >
                       View
