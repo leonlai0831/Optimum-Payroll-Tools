@@ -63,9 +63,9 @@ export default async function AllowanceRunDetailPage({
             <thead className="text-[11px] uppercase tracking-wide text-gray-400">
               <tr className="border-t border-gray-200">
                 <th className="py-1 text-left">Teaching — center</th>
-                <th className="py-1 text-center">Normal</th>
-                <th className="py-1 text-center">Young Sw.</th>
-                <th className="py-1 text-center">Pre-comp</th>
+                <th className="py-1 text-center">LTS</th>
+                <th className="py-1 text-center">YS</th>
+                <th className="py-1 text-center">PC &amp; LS</th>
                 <th className="py-1 text-right">Subtotal</th>
               </tr>
             </thead>

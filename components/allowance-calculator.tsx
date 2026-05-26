@@ -42,7 +42,6 @@ export function AllowanceCalculator({
   const [isNew, setIsNew] = useState(false);
   const [name, setName] = useState("");
   const [tier, setTier] = useState<AllowanceTier>("T1");
-  const [center, setCenter] = useState("");
   const [opHours, setOpHours] = useState(0);
   const [leaveHours, setLeaveHours] = useState(0);
   const [teachingRows, setTeachingRows] = useState<TeachingHoursRow[]>([]);
@@ -55,6 +54,10 @@ export function AllowanceCalculator({
   function dirty() {
     setSavedId(null);
   }
+
+  // Center is keyed per row in the teaching section; the run-level center is the
+  // distinct set of those, so there's no separate top-level center field.
+  const center = [...new Set(teachingRows.map((r) => r.center.trim()).filter(Boolean))].join(", ");
 
   const input: AllowanceInput = {
     coachId,
@@ -90,12 +93,11 @@ export function AllowanceCalculator({
     setIsNew(false);
     setCoachId(c.id);
     setName(c.canonicalName);
-    setCenter(c.center);
     if (c.allowanceTier) setTier(c.allowanceTier);
   }
 
   function addTeachingRow() {
-    setTeachingRows((r) => [...r, { center, normalH: 0, ysH: 0, precompH: 0 }]);
+    setTeachingRows((r) => [...r, { center: "", normalH: 0, ysH: 0, precompH: 0 }]);
     dirty();
   }
   function updateTeachingRow(i: number, patch: Partial<TeachingHoursRow>) {
@@ -108,7 +110,7 @@ export function AllowanceCalculator({
   }
 
   function addOtherItem() {
-    setOtherItems((r) => [...r, { center, reason: "", amount: 0 }]);
+    setOtherItems((r) => [...r, { center: "", reason: "", amount: 0 }]);
     dirty();
   }
   function updateOtherItem(i: number, patch: Partial<OtherAllowanceItem>) {
@@ -157,7 +159,7 @@ export function AllowanceCalculator({
         {/* Coach + period + actions */}
         <Card className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
                 <Label htmlFor="period">Period</Label>
                 <Input
@@ -204,17 +206,6 @@ export function AllowanceCalculator({
                     </option>
                   ))}
                 </Select>
-              </div>
-              <div>
-                <Label>Center</Label>
-                <Input
-                  className="mt-1"
-                  value={center}
-                  onChange={(e) => {
-                    setCenter(e.target.value);
-                    dirty();
-                  }}
-                />
               </div>
             </div>
             <div className="flex gap-2">
@@ -322,15 +313,15 @@ export function AllowanceCalculator({
           <p className="mb-3 text-[11px] text-gray-400">
             {noTeaching
               ? `Tier ${tier} earns no teaching allowance.`
-              : `Rates (RM/hr) for ${tier} — Normal ${rates.normal} · Young Swimmer ${rates.youngSwimmer} · Pre-comp/Lifesaving ${rates.precompLifesaving}.`}
+              : `Rates (RM/hr) for ${tier} — LTS ${rates.normal} · YS ${rates.youngSwimmer} · PC & LS ${rates.precompLifesaving}.`}
           </p>
           {teachingRows.length > 0 && (
             <div className="space-y-2">
               <div className="hidden grid-cols-12 gap-2 px-1 text-[10px] uppercase tracking-wide text-gray-400 sm:grid">
                 <span className="col-span-4">Center</span>
-                <span className="col-span-2 text-center">Normal</span>
-                <span className="col-span-2 text-center">Young Sw.</span>
-                <span className="col-span-2 text-center">Pre-comp</span>
+                <span className="col-span-2 text-center">LTS</span>
+                <span className="col-span-2 text-center">YS</span>
+                <span className="col-span-2 text-center">PC &amp; LS</span>
                 <span className="col-span-2 text-right">Subtotal</span>
               </div>
               {teachingRows.map((row, i) => (
@@ -518,9 +509,9 @@ function AllowanceReport({
             <thead className="text-[11px] uppercase tracking-wide text-gray-400">
               <tr className="border-t border-gray-200">
                 <th className="py-1 text-left">Teaching — center</th>
-                <th className="py-1 text-center">Normal</th>
-                <th className="py-1 text-center">Young Sw.</th>
-                <th className="py-1 text-center">Pre-comp</th>
+                <th className="py-1 text-center">LTS</th>
+                <th className="py-1 text-center">YS</th>
+                <th className="py-1 text-center">PC &amp; LS</th>
                 <th className="py-1 text-right">Subtotal</th>
               </tr>
             </thead>

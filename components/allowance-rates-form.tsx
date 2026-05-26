@@ -110,9 +110,9 @@ export function AllowanceRatesForm({ initial }: { initial: AllowanceConfig }) {
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
               <th className="px-2 py-1 text-left">Tier</th>
-              <th className="px-2 py-1 text-left">Normal</th>
-              <th className="px-2 py-1 text-left">Young Swimmer</th>
-              <th className="px-2 py-1 text-left">Pre-comp / Lifesaving</th>
+              <th className="px-2 py-1 text-left">LTS</th>
+              <th className="px-2 py-1 text-left">YS</th>
+              <th className="px-2 py-1 text-left">PC &amp; LS</th>
             </tr>
           </thead>
           <tbody>
