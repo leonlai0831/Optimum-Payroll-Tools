@@ -11,6 +11,9 @@ import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
 import { cn, rm } from "@/lib/utils";
+import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
+
+const GRADE_RANK: Record<string, number> = { S: 4, A: 3, B: 2, C: 1 };
 
 interface CoachProfile {
   id: number;
@@ -269,6 +272,37 @@ export function Dashboard() {
   const hiddenCount = groups.length - ranked.length;
   const incompleteCount = ranked.filter((g) => !g.comp.isComplete).length;
 
+  // Display-only sort/filter — save() and exportCsv() always use the full `ranked` list.
+  const [q, setQ] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const filtered = useMemo(
+    () =>
+      ranked.filter((g) => {
+        if (!includesText(`${g.meta.canonicalName} ${g.center}`, q)) return false;
+        if (positionFilter && g.meta.position !== positionFilter) return false;
+        if (gradeFilter && !(g.comp.isComplete && g.comp.grade === gradeFilter)) return false;
+        return true;
+      }),
+    [ranked, q, positionFilter, gradeFilter],
+  );
+  const {
+    sorted: visible,
+    sort,
+    toggleSort,
+  } = useTableSort(
+    filtered,
+    {
+      name: (g) => g.meta.canonicalName,
+      students: (g) => g.comp.students,
+      position: (g) => g.meta.position,
+      score: (g) => (g.comp.isComplete ? g.comp.finalScore : null),
+      grade: (g) => (g.comp.isComplete ? (GRADE_RANK[g.comp.grade] ?? 0) : null),
+      payout: (g) => (g.comp.isComplete ? g.comp.payout : null),
+    },
+    { key: "score", dir: "desc" },
+  );
+
   function updateMeta(id: string, patch: Partial<GroupInputs>) {
     setMeta((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
     setSavedId(null);
@@ -473,24 +507,62 @@ export function Dashboard() {
 
       {/* Coaches table */}
       <Card className="overflow-hidden">
+        <TableToolbar>
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search coach…"
+            className="w-44 py-1.5 text-xs"
+          />
+          <Select
+            value={positionFilter}
+            onChange={(e) => setPositionFilter(e.target.value)}
+            className="w-auto py-1.5 text-xs"
+          >
+            <option value="">All positions</option>
+            <option value="Instructor">Instructor</option>
+            <option value="Pool Supervisor">Supervisor</option>
+          </Select>
+          <Select
+            value={gradeFilter}
+            onChange={(e) => setGradeFilter(e.target.value)}
+            className="w-auto py-1.5 text-xs"
+          >
+            <option value="">All grades</option>
+            <option value="S">S</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </Select>
+          <span className="ml-auto text-xs text-gray-500">
+            {visible.length} of {ranked.length}
+          </span>
+        </TableToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Coach</th>
-                <th className="px-3 py-2 text-center">Students</th>
-                <th className="px-3 py-2 text-left">Position</th>
+                <SortTh label="Coach" sortKey="name" sort={sort} onSort={toggleSort} className="px-3" />
+                <SortTh label="Students" sortKey="students" sort={sort} onSort={toggleSort} align="center" className="px-3" />
+                <SortTh label="Position" sortKey="position" sort={sort} onSort={toggleSort} className="px-3" />
                 <th className="px-3 py-2 text-left">Allowance (RM)</th>
                 <th className="px-3 py-2 text-left">Mgmt&nbsp;%</th>
-                <th className="px-3 py-2 text-center">Score</th>
-                <th className="px-3 py-2 text-center">Grade</th>
-                <th className="px-3 py-2 text-right">Payout</th>
+                <SortTh label="Score" sortKey="score" sort={sort} onSort={toggleSort} align="center" className="px-3" />
+                <SortTh label="Grade" sortKey="grade" sort={sort} onSort={toggleSort} align="center" className="px-3" />
+                <SortTh label="Payout" sortKey="payout" sort={sort} onSort={toggleSort} align="right" className="px-3" />
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {ranked.map((g, idx) => (
+              {visible.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-gray-500">
+                    No coaches match the current filters.
+                  </td>
+                </tr>
+              ) : (
+                visible.map((g, idx) => (
                 <tr
                   key={g.id}
                   className={cn(
@@ -581,7 +653,8 @@ export function Dashboard() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
