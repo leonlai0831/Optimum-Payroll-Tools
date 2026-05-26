@@ -67,6 +67,24 @@ export async function getKnownCoaches(): Promise<KnownCoach[]> {
     .map((c) => ({ canonicalName: c.canonicalName, aliases: c.aliases ?? [] }));
 }
 
+/** Update editable staff profile fields (name, center, position tier, active). */
+export async function updateCoach(
+  id: number,
+  patch: Partial<Pick<CoachRecord, "canonicalName" | "center" | "allowanceTier" | "active">>,
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(coaches)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(coaches.id, id));
+}
+
+/** Permanently remove a staff profile. Saved allowance/KPI records are kept. */
+export async function deleteCoach(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(coaches).where(eq(coaches.id, id));
+}
+
 /**
  * Persist/refresh coach profiles from a finalized run: union aliases, remember
  * position, and carry forward the latest management assessment + allowance.

@@ -6,12 +6,14 @@ export const dynamic = "force-dynamic";
 
 export default async function AllowancePage() {
   const [config, coaches] = await Promise.all([getAllowanceConfig(), listCoaches()]);
-  const roster = coaches.map((c) => ({
-    id: c.id,
-    canonicalName: c.canonicalName,
-    center: c.center,
-    allowanceTier: c.allowanceTier,
-  }));
+  const roster = coaches
+    .filter((c) => c.active)
+    .map((c) => ({
+      id: c.id,
+      canonicalName: c.canonicalName,
+      center: c.center,
+      allowanceTier: c.allowanceTier,
+    }));
   return (
     <div className="fade-in space-y-4">
       <SectionNav section="allowance" />

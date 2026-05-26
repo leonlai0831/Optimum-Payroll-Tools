@@ -10,6 +10,7 @@ import {
   Home,
   LayoutDashboard,
   Settings,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const NAVS = {
     title: "Staff Allowance",
     items: [
       { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
+      { href: "/allowance/staff", label: "Staff List", icon: Users },
       { href: "/allowance/history", label: "History", icon: History },
       { href: "/allowance/settings", label: "Rates", icon: Coins },
     ],
