@@ -71,7 +71,7 @@ export function AllowanceRatesForm({ initial }: { initial: AllowanceConfig }) {
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
-              <th className="px-2 py-1 text-left">Tier</th>
+              <th className="px-2 py-1 text-left">Position</th>
               <th className="px-2 py-1 text-left">Met (95%–99%)</th>
               <th className="px-2 py-1 text-left">Perfect (100%)</th>
             </tr>
@@ -109,7 +109,7 @@ export function AllowanceRatesForm({ initial }: { initial: AllowanceConfig }) {
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
-              <th className="px-2 py-1 text-left">Tier</th>
+              <th className="px-2 py-1 text-left">Position</th>
               <th className="px-2 py-1 text-left">LTS</th>
               <th className="px-2 py-1 text-left">YS</th>
               <th className="px-2 py-1 text-left">PC &amp; LS</th>

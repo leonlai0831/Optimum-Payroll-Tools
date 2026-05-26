@@ -48,8 +48,8 @@ export default async function AllowanceHistoryPage() {
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
-                      <th className="px-4 py-2 text-left">Coach</th>
-                      <th className="px-4 py-2 text-left">Tier</th>
+                      <th className="px-4 py-2 text-left">Staff</th>
+                      <th className="px-4 py-2 text-left">Position</th>
                       <th className="px-4 py-2 text-left">Center</th>
                       <th className="px-4 py-2 text-right">Attendance</th>
                       <th className="px-4 py-2 text-right">Teaching</th>

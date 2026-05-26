@@ -132,7 +132,7 @@ export function AllowanceCalculator({
 
   async function save() {
     if (!input.name) {
-      setError("Pick or name a coach first.");
+      setError("Pick or name a staff member first.");
       return;
     }
     setSaving(true);
@@ -174,7 +174,7 @@ export function AllowanceCalculator({
                 />
               </div>
               <div className="col-span-2 sm:col-span-1">
-                <Label>Coach</Label>
+                <Label>Staff</Label>
                 <Select
                   className="mt-1"
                   value={isNew ? "__new__" : coachId === null ? "" : String(coachId)}
@@ -187,11 +187,11 @@ export function AllowanceCalculator({
                       {c.allowanceTier ? ` (${c.allowanceTier})` : ""}
                     </option>
                   ))}
-                  <option value="__new__">+ new coach…</option>
+                  <option value="__new__">+ new staff…</option>
                 </Select>
               </div>
               <div>
-                <Label>Tier</Label>
+                <Label>Position</Label>
                 <Select
                   className="mt-1"
                   value={tier}
@@ -220,7 +220,7 @@ export function AllowanceCalculator({
           </div>
           {isNew && (
             <div className="mt-3">
-              <Label htmlFor="newname">New coach name</Label>
+              <Label htmlFor="newname">New staff name</Label>
               <Input
                 id="newname"
                 className="mt-1 sm:w-72"
@@ -232,7 +232,7 @@ export function AllowanceCalculator({
                 }}
               />
               <p className="mt-1 text-[11px] text-gray-400">
-                Saving creates a coach profile so it auto-links to KPI next time.
+                Saving creates a staff profile, reused next time (and linked to KPI for instructors).
               </p>
             </div>
           )}
@@ -478,11 +478,11 @@ function AllowanceReport({
 
         <div className="grid grid-cols-3 gap-3 text-sm">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-gray-400">Coach</p>
+            <p className="text-[11px] uppercase tracking-wide text-gray-400">Staff</p>
             <p className="font-semibold text-gray-900">{input.name}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-gray-400">Tier</p>
+            <p className="text-[11px] uppercase tracking-wide text-gray-400">Position</p>
             <p className="font-semibold text-gray-900">{input.tier}</p>
           </div>
           <div>

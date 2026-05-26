@@ -17,8 +17,8 @@ export function AllowanceExportButton({
   function exportCsv() {
     const headers = [
       "Period",
-      "Coach",
-      "Tier",
+      "Staff",
+      "Position",
       "Center",
       "Op hours",
       "Leave hours",
