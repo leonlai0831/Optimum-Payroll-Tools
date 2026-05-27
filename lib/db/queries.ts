@@ -5,6 +5,7 @@ import {
   allowanceRuns,
   coaches,
   config,
+  permissionConfig,
   runs,
   users,
   type AllowanceRunRecord,
@@ -13,7 +14,7 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import type { Role } from "@/lib/auth/types";
+import { DEFAULT_PERMISSION_CONFIG, type PermissionConfig, type Role } from "@/lib/auth/types";
 import {
   DEFAULT_CENTER_KPI,
   DEFAULT_CENTER_TARGETS,
@@ -473,6 +474,28 @@ export async function updateUser(
 export async function deleteUser(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(users).where(eq(users.id, id));
+}
+
+/** Read the singleton permission matrix, seeding defaults on first use. */
+export async function getPermissionConfig(): Promise<PermissionConfig> {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(permissionConfig)
+    .where(eq(permissionConfig.id, 1))
+    .limit(1);
+  if (rows[0]) return rows[0].data;
+  const data = structuredClone(DEFAULT_PERMISSION_CONFIG);
+  await db.insert(permissionConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+}
+
+export async function savePermissionConfig(data: PermissionConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(permissionConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: permissionConfig.id, set: { data, updatedAt: new Date() } });
 }
 
 /**

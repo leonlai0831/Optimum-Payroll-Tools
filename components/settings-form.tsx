@@ -10,7 +10,13 @@ import { cn } from "@/lib/utils";
 
 type ListKey = "personalKpi" | "centerKpi";
 
-export function SettingsForm({ initial }: { initial: AppConfig }) {
+export function SettingsForm({
+  initial,
+  canEdit = true,
+}: {
+  initial: AppConfig;
+  canEdit?: boolean;
+}) {
   const router = useRouter();
   const [cfg, setCfg] = useState<AppConfig>(() => structuredClone(initial));
   const [saving, setSaving] = useState(false);
@@ -161,15 +167,25 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
         <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
           <Settings className="h-5 w-5 text-indigo-500" /> Settings
         </h1>
-        <Button onClick={save} disabled={saving || !personalOk || !centerOk}>
-          {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save config"}
-        </Button>
+        {canEdit ? (
+          <Button onClick={save} disabled={saving || !personalOk || !centerOk}>
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save config"}
+          </Button>
+        ) : (
+          <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
+            Read-only
+          </span>
+        )}
       </div>
-      {(!personalOk || !centerOk) && (
+      {!canEdit && (
+        <p className="text-sm text-gray-500">You have read-only access to these settings.</p>
+      )}
+      {canEdit && (!personalOk || !centerOk) && (
         <p className="text-sm text-red-600">Enabled weights must total 100% in both sections to save.</p>
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
       {renderMetrics("personalKpi", personalOk)}
       {renderMetrics("centerKpi", centerOk)}
 
@@ -221,6 +237,7 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
           ))}
         </div>
       </Card>
+      </fieldset>
     </div>
   );
 }

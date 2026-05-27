@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
 import { createAllowanceRun, getAllowanceConfig, listAllowanceRuns } from "@/lib/db/queries";
 import { calcAllowance } from "@/lib/allowance/calc";
 import type { AllowanceInput } from "@/lib/allowance/types";
@@ -11,7 +12,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = await requireCapability("run_allowance");
+  if (denied) return denied;
   const body = (await req.json()) as { periodLabel: string; input: AllowanceInput };
   if (!body.periodLabel) {
     return NextResponse.json({ error: "periodLabel is required" }, { status: 400 });

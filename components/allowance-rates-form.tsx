@@ -7,7 +7,13 @@ import { Button, Card, Input, Spinner } from "@/components/ui";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type { AllowanceConfig, AllowanceTier } from "@/lib/allowance/types";
 
-export function AllowanceRatesForm({ initial }: { initial: AllowanceConfig }) {
+export function AllowanceRatesForm({
+  initial,
+  canEdit = true,
+}: {
+  initial: AllowanceConfig;
+  canEdit?: boolean;
+}) {
   const router = useRouter();
   const [cfg, setCfg] = useState<AllowanceConfig>(() => structuredClone(initial));
   const [saving, setSaving] = useState(false);
@@ -74,12 +80,22 @@ export function AllowanceRatesForm({ initial }: { initial: AllowanceConfig }) {
         <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
           <SlidersHorizontal className="h-5 w-5 text-indigo-500" /> Options
         </h1>
-        <Button onClick={save} disabled={saving}>
-          {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save options"}
-        </Button>
+        {canEdit ? (
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save options"}
+          </Button>
+        ) : (
+          <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
+            Read-only
+          </span>
+        )}
       </div>
+      {!canEdit && (
+        <p className="text-sm text-gray-500">You have read-only access to these settings.</p>
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
       <Card className="p-4">
         <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-indigo-700">Centers</h3>
         <p className="mb-3 text-[11px] text-gray-400">
@@ -200,6 +216,7 @@ export function AllowanceRatesForm({ initial }: { initial: AllowanceConfig }) {
           calculations; saved months keep their own rate snapshot.
         </p>
       </Card>
+      </fieldset>
     </div>
   );
 }

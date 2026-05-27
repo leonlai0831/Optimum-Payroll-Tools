@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
 import { getAllowanceConfig, saveAllowanceConfig } from "@/lib/db/queries";
 import type { AllowanceConfig } from "@/lib/allowance/types";
 
@@ -9,7 +10,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = await requireCapability("edit_settings");
+  if (denied) return denied;
   const data = (await req.json()) as AllowanceConfig;
   // Normalize the center list: trim, drop blanks, dedupe (preserve order).
   if (Array.isArray(data.centers)) {

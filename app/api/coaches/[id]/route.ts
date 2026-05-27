@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
 import { deleteCoach, updateCoach } from "@/lib/db/queries";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = await requireCapability("edit_staff");
+  if (denied) return denied;
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => ({}))) as {
     canonicalName?: string;
@@ -33,7 +34,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
 }
 
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/coaches/[id]">) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = await requireCapability("edit_staff");
+  if (denied) return denied;
   const { id } = await ctx.params;
   await deleteCoach(Number(id));
   return NextResponse.json({ ok: true });

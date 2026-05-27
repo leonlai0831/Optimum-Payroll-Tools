@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { ROLE_LABELS, type Role } from "@/lib/auth/types";
 
-export function Nav() {
+export function Nav({ email, role }: { email: string; role: Role }) {
   const router = useRouter();
 
   async function logout() {
@@ -30,13 +31,19 @@ export function Nav() {
           <span className="hidden text-sm font-semibold text-gray-500 sm:inline">Payroll Tools</span>
         </Link>
 
-        <button
-          onClick={logout}
-          title="Log out"
-          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-red-600"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="hidden text-right leading-tight sm:block">
+            <div className="text-xs font-medium text-gray-700">{email}</div>
+            <div className="text-[11px] text-gray-400">{ROLE_LABELS[role]}</div>
+          </div>
+          <button
+            onClick={logout}
+            title="Log out"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-red-600"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </nav>
   );

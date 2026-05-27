@@ -10,7 +10,7 @@ export default async function AppLayout({
 
   return (
     <>
-      <Nav />
+      <Nav email={user.email} role={user.role} />
       <main className="mx-auto max-w-7xl p-4 md:p-6">{children}</main>
     </>
   );

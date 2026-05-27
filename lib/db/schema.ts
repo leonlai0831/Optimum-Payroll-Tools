@@ -8,7 +8,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import type { Role } from "@/lib/auth/types";
+import type { PermissionConfig, Role } from "@/lib/auth/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
@@ -38,6 +38,13 @@ export const coaches = pgTable("coaches", {
   allowanceTier: text("allowance_tier").$type<AllowanceTier>(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Singleton role→capability matrix (one row, id = 1). super_admin is not stored. */
+export const permissionConfig = pgTable("permission_config", {
+  id: integer("id").primaryKey().default(1),
+  data: jsonb("data").$type<PermissionConfig>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -88,6 +95,7 @@ export const allowanceRuns = pgTable("allowance_runs", {
 });
 
 export type UserRecord = typeof users.$inferSelect;
+export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;
 export type CoachRecord = typeof coaches.$inferSelect;
 export type RunRecord = typeof runs.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;
