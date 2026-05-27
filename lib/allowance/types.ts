@@ -20,6 +20,14 @@ export const ALLOWANCE_TIERS = [
 
 export type AllowanceTier = (typeof ALLOWANCE_TIERS)[number];
 
+/**
+ * Known operating centers (short codes). Single source of truth for the center
+ * dropdowns across the allowance UI. To add a center, add it here.
+ */
+export const CENTERS = ["HQ", "BK", "BT", "PK", "KK", "USJ", "QSM", "KM"] as const;
+
+export type Center = (typeof CENTERS)[number];
+
 /** Attendance allowance amounts (RM) per performance bracket. */
 export interface AttendanceAmounts {
   /** 95% ≤ attendance < 100%. */

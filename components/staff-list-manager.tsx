@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Save, Trash2, Users } from "lucide-react";
 import { Button, Card, Input, Select, Spinner } from "@/components/ui";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
+import { CenterSelect } from "@/components/center-select";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import { cn } from "@/lib/utils";
 
@@ -251,11 +252,11 @@ function StaffRow({ member }: { member: StaffMember }) {
       </td>
       {[0, 1, 2].map((i) => (
         <td key={i} className="px-4 py-1.5">
-          <Input
-            className="w-24 py-1 text-xs"
+          <CenterSelect
+            className="w-28 py-1 text-xs"
             value={centers[i]}
             placeholder={i === 0 ? "Center" : "—"}
-            onChange={(e) => setCenter(i, e.target.value)}
+            onChange={(v) => setCenter(i, v)}
           />
         </td>
       ))}

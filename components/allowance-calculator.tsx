@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { CenterSelect } from "@/components/center-select";
 import { attendanceBracket, calcAllowance } from "@/lib/allowance/calc";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type {
@@ -326,11 +327,10 @@ export function AllowanceCalculator({
               </div>
               {teachingRows.map((row, i) => (
                 <div key={i} className="grid grid-cols-12 items-center gap-2">
-                  <Input
+                  <CenterSelect
                     className="col-span-4 py-1 text-xs"
-                    placeholder="Center"
                     value={row.center}
-                    onChange={(e) => updateTeachingRow(i, { center: e.target.value })}
+                    onChange={(v) => updateTeachingRow(i, { center: v })}
                   />
                   <Input
                     type="number"
@@ -381,11 +381,10 @@ export function AllowanceCalculator({
             <div className="space-y-2">
               {otherItems.map((item, i) => (
                 <div key={i} className="grid grid-cols-12 items-center gap-2">
-                  <Input
+                  <CenterSelect
                     className="col-span-4 py-1 text-xs"
-                    placeholder="Center"
                     value={item.center}
-                    onChange={(e) => updateOtherItem(i, { center: e.target.value })}
+                    onChange={(v) => updateOtherItem(i, { center: v })}
                   />
                   <Input
                     className="col-span-5 py-1 text-xs"
