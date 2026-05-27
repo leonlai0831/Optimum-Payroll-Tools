@@ -329,6 +329,7 @@ export function AllowanceCalculator({
                 <div key={i} className="grid grid-cols-12 items-center gap-2">
                   <CenterSelect
                     className="col-span-4 py-1 text-xs"
+                    centers={config.centers}
                     value={row.center}
                     onChange={(v) => updateTeachingRow(i, { center: v })}
                   />
@@ -383,6 +384,7 @@ export function AllowanceCalculator({
                 <div key={i} className="grid grid-cols-12 items-center gap-2">
                   <CenterSelect
                     className="col-span-4 py-1 text-xs"
+                    centers={config.centers}
                     value={item.center}
                     onChange={(v) => updateOtherItem(i, { center: v })}
                   />

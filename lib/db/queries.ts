@@ -20,11 +20,12 @@ import { DEFAULT_ALLOWANCE_CONFIG } from "@/lib/allowance/defaults";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
 import type { RunCoach } from "@/lib/types";
-import type {
-  AllowanceConfig,
-  AllowanceInput,
-  AllowanceResult,
-  AllowanceTier,
+import {
+  CENTERS,
+  type AllowanceConfig,
+  type AllowanceInput,
+  type AllowanceResult,
+  type AllowanceTier,
 } from "@/lib/allowance/types";
 
 export function defaultConfig(): AppConfig {
@@ -234,7 +235,14 @@ export async function getAllowanceConfig(): Promise<AllowanceConfig> {
     .from(allowanceConfig)
     .where(eq(allowanceConfig.id, 1))
     .limit(1);
-  if (rows[0]) return rows[0].data;
+  if (rows[0]) {
+    const data = rows[0].data;
+    // Backfill the center list for configs saved before centers were configurable.
+    if (!Array.isArray(data.centers) || data.centers.length === 0) {
+      data.centers = [...CENTERS];
+    }
+    return data;
+  }
   const data = structuredClone(DEFAULT_ALLOWANCE_CONFIG);
   await db.insert(allowanceConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;

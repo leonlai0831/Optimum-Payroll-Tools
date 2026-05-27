@@ -25,7 +25,13 @@ function splitCenters(center: string): string[] {
     .filter(Boolean);
 }
 
-export function StaffListManager({ staff }: { staff: StaffMember[] }) {
+export function StaffListManager({
+  staff,
+  centers,
+}: {
+  staff: StaffMember[];
+  centers: string[];
+}) {
   const [q, setQ] = useState("");
   const [centerFilter, setCenterFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
@@ -146,7 +152,7 @@ export function StaffListManager({ staff }: { staff: StaffMember[] }) {
                     </td>
                   </tr>
                 ) : (
-                  sorted.map((s) => <StaffRow key={s.id} member={s} />)
+                  sorted.map((s) => <StaffRow key={s.id} member={s} centers={centers} />)
                 )}
               </tbody>
             </table>
@@ -157,11 +163,11 @@ export function StaffListManager({ staff }: { staff: StaffMember[] }) {
   );
 }
 
-function StaffRow({ member }: { member: StaffMember }) {
+function StaffRow({ member, centers }: { member: StaffMember; centers: string[] }) {
   const router = useRouter();
   const initialCenters = splitCenters(member.center);
   const [name, setName] = useState(member.name);
-  const [centers, setCenters] = useState<string[]>([
+  const [rowCenters, setRowCenters] = useState<string[]>([
     initialCenters[0] ?? "",
     initialCenters[1] ?? "",
     initialCenters[2] ?? "",
@@ -172,7 +178,7 @@ function StaffRow({ member }: { member: StaffMember }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  const joinedCenters = centers
+  const joinedCenters = rowCenters
     .map((c) => c.trim())
     .filter(Boolean)
     .join(", ");
@@ -190,7 +196,7 @@ function StaffRow({ member }: { member: StaffMember }) {
   }
 
   function setCenter(i: number, value: string) {
-    setCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
+    setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
     touch();
   }
 
@@ -254,7 +260,8 @@ function StaffRow({ member }: { member: StaffMember }) {
         <td key={i} className="px-4 py-1.5">
           <CenterSelect
             className="w-28 py-1 text-xs"
-            value={centers[i]}
+            centers={centers}
+            value={rowCenters[i]}
             placeholder={i === 0 ? "Center" : "—"}
             onChange={(v) => setCenter(i, v)}
           />

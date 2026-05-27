@@ -45,6 +45,8 @@ export interface TeachingRates {
 
 /** The two editable rate tables, persisted as the allowance config singleton. */
 export interface AllowanceConfig {
+  /** Editable list of operating centers shown in the center dropdowns. */
+  centers: string[];
   attendance: Record<AllowanceTier, AttendanceAmounts>;
   teaching: Record<AllowanceTier, TeachingRates>;
 }

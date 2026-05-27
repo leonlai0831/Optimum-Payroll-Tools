@@ -1,4 +1,4 @@
-import type { AllowanceConfig } from "./types";
+import { CENTERS, type AllowanceConfig } from "./types";
 
 /** Standard attendance amounts shared by most tiers. */
 const STD_ATT = { met: 200, perfect: 300 };
@@ -9,6 +9,7 @@ const STD_ATT = { met: 200, perfect: 300 };
  * Admin tiers A1–A3 (and PA) carry no teaching rate; precomp/lifesaving is I2/I3 only.
  */
 export const DEFAULT_ALLOWANCE_CONFIG: AllowanceConfig = {
+  centers: [...CENTERS],
   attendance: {
     A1: { ...STD_ATT },
     A2: { ...STD_ATT },

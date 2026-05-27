@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Calculator,
-  Coins,
   History,
   Home,
   LayoutDashboard,
   Settings,
+  SlidersHorizontal,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -25,7 +25,7 @@ const NAVS = {
       { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
       { href: "/allowance/staff", label: "Staff List", icon: Users },
       { href: "/allowance/history", label: "History", icon: History },
-      { href: "/allowance/settings", label: "Rates", icon: Coins },
+      { href: "/allowance/settings", label: "Options", icon: SlidersHorizontal },
     ],
   },
   kpi: {

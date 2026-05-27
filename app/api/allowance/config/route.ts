@@ -11,6 +11,10 @@ export async function GET() {
 export async function PUT(req: Request) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const data = (await req.json()) as AllowanceConfig;
+  // Normalize the center list: trim, drop blanks, dedupe (preserve order).
+  if (Array.isArray(data.centers)) {
+    data.centers = [...new Set(data.centers.map((c) => String(c).trim()).filter(Boolean))];
+  }
   await saveAllowanceConfig(data);
   return NextResponse.json({ ok: true });
 }
