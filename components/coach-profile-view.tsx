@@ -3,9 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { rm } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import {
   EMPLOYEE_ROLES,
@@ -26,16 +36,37 @@ export interface CoachProfile {
   allowanceTier: AllowanceTier | null;
 }
 
+export interface KpiPoint {
+  period: string;
+  finalScore: number;
+  grade: string;
+  payout: number;
+  students: number;
+}
+
+export interface AllowancePoint {
+  id: number;
+  period: string;
+  tier: string;
+  center: string;
+  teaching: number;
+  grandTotal: number;
+}
+
 export function CoachProfileView({
   coach,
   centers,
   canEdit,
   backHref,
+  kpi,
+  allowance,
 }: {
   coach: CoachProfile;
   centers: string[];
   canEdit: boolean;
   backHref?: string;
+  kpi: KpiPoint[];
+  allowance: AllowancePoint[];
 }) {
   return (
     <div className="space-y-4">
@@ -64,7 +95,91 @@ export function CoachProfileView({
       </div>
 
       <DetailsCard coach={coach} centers={centers} canEdit={canEdit} />
+      <KpiHistoryCard kpi={kpi} />
+      <AllowanceHistoryCard allowance={allowance} />
     </div>
+  );
+}
+
+function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
+  if (kpi.length === 0) return null;
+  const chart = kpi.map((k) => ({ period: k.period, score: Number(k.finalScore.toFixed(2)) }));
+  return (
+    <Card className="p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <TrendingUp className="h-4 w-4" /> KPI history
+      </h3>
+      {kpi.length > 1 && (
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chart} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} domain={[0, "auto"]} />
+              <Tooltip />
+              <Line type="monotone" dataKey="score" stroke="#0061ff" strokeWidth={2} dot={{ r: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="text-[11px] uppercase tracking-wide text-gray-400">
+            <tr>
+              <th className="px-2 py-1 text-left">Period</th>
+              <th className="px-2 py-1 text-right">Score</th>
+              <th className="px-2 py-1 text-center">Grade</th>
+              <th className="px-2 py-1 text-right">Payout</th>
+            </tr>
+          </thead>
+          <tbody>
+            {kpi.map((k) => (
+              <tr key={k.period} className="border-t border-gray-100">
+                <td className="px-2 py-1 text-gray-700">{k.period}</td>
+                <td className="px-2 py-1 text-right text-gray-900">{k.finalScore.toFixed(3)}</td>
+                <td className="px-2 py-1 text-center font-semibold">{k.grade}</td>
+                <td className="px-2 py-1 text-right text-gray-900">{rm(k.payout)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
+  if (allowance.length === 0) return null;
+  return (
+    <Card className="p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <Wallet className="h-4 w-4" /> Allowance history
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="text-[11px] uppercase tracking-wide text-gray-400">
+            <tr>
+              <th className="px-2 py-1 text-left">Period</th>
+              <th className="px-2 py-1 text-left">Tier</th>
+              <th className="px-2 py-1 text-left">Center</th>
+              <th className="px-2 py-1 text-right">Teaching</th>
+              <th className="px-2 py-1 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allowance.map((a) => (
+              <tr key={a.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 text-gray-700">{a.period}</td>
+                <td className="px-2 py-1 text-gray-700">{a.tier}</td>
+                <td className="px-2 py-1 text-gray-700">{a.center || "—"}</td>
+                <td className="px-2 py-1 text-right text-gray-900">{rm(a.teaching)}</td>
+                <td className="px-2 py-1 text-right text-gray-900">{rm(a.grandTotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 

@@ -81,6 +81,60 @@ export async function getCoach(id: number): Promise<CoachRecord | undefined> {
   return rows[0];
 }
 
+export interface CoachKpiPoint {
+  period: string;
+  finalScore: number;
+  grade: string;
+  payout: number;
+  students: number;
+}
+
+export interface CoachProfileData {
+  coach: CoachRecord;
+  kpi: CoachKpiPoint[];
+  allowance: AllowanceRunSummary[];
+}
+
+/**
+ * Aggregate one coach's record: identity + KPI history (from saved runs) +
+ * allowance history. KPI rows are matched by coachId, canonical name, or any
+ * merged account/alias — mirroring `upsertCoachesFromRun`'s precedence.
+ */
+export async function getCoachProfile(coachId: number): Promise<CoachProfileData | null> {
+  const coach = await getCoach(coachId);
+  if (!coach) return null;
+  const db = await getDb();
+  const runRows = await db
+    .select({ periodLabel: runs.periodLabel, coachResults: runs.coachResults })
+    .from(runs)
+    .orderBy(runs.createdAt);
+
+  const names = new Set([coach.canonicalName, ...(coach.aliases ?? [])]);
+  const kpi: CoachKpiPoint[] = [];
+  for (const r of runRows) {
+    const rc = r.coachResults.find(
+      (c) =>
+        c.coachId === coachId ||
+        c.canonicalName === coach.canonicalName ||
+        c.accounts.some((a) => names.has(a)),
+    );
+    if (rc) {
+      kpi.push({
+        period: r.periodLabel,
+        finalScore: rc.finalScore,
+        grade: rc.grade,
+        payout: rc.payout,
+        students: rc.students,
+      });
+    }
+  }
+
+  const allowance = (await listAllowanceRuns()).filter(
+    (a) => a.coachId === coachId || a.canonicalName === coach.canonicalName,
+  );
+  return { coach, kpi, allowance };
+}
+
 /** Manually add an employee (distinct from the auto-create on a saved run). */
 export async function createCoach(input: {
   canonicalName: string;
