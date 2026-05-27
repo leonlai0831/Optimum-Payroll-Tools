@@ -8,7 +8,7 @@ export function BrandedLoader({ label = "Loading…" }: { label?: string }) {
       aria-live="polite"
     >
       <video
-        className="w-44 max-w-[70vw] rounded-2xl shadow-sm"
+        className="w-28 max-w-[60vw] rounded-2xl shadow-sm"
         autoPlay
         loop
         muted
