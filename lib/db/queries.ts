@@ -6,10 +6,14 @@ import {
   coaches,
   config,
   runs,
+  users,
   type AllowanceRunRecord,
   type CoachRecord,
   type RunRecord,
+  type UserRecord,
 } from "./schema";
+import { hashPassword } from "@/lib/auth/password";
+import type { Role } from "@/lib/auth/types";
 import {
   DEFAULT_CENTER_KPI,
   DEFAULT_CENTER_TARGETS,
@@ -397,4 +401,102 @@ export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | 
 export async function deleteAllowanceRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(allowanceRuns).where(eq(allowanceRuns.id, id));
+}
+
+// ── Users / auth ───────────────────────────────────────────────────────────
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+export async function listUsers(): Promise<UserRecord[]> {
+  const db = await getDb();
+  return db.select().from(users).orderBy(users.email);
+}
+
+export async function getUserById(id: number): Promise<UserRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function getUserByEmail(email: string): Promise<UserRecord | undefined> {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizeEmail(email)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function countUsers(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select({ id: users.id }).from(users);
+  return rows.length;
+}
+
+export async function createUser(input: {
+  email: string;
+  password: string;
+  role: Role;
+  coachId?: number | null;
+}): Promise<UserRecord> {
+  const db = await getDb();
+  const email = normalizeEmail(input.email);
+  if (await getUserByEmail(email)) {
+    throw new Error("A user with that email already exists.");
+  }
+  const [row] = await db
+    .insert(users)
+    .values({
+      email,
+      passwordHash: hashPassword(input.password),
+      role: input.role,
+      coachId: input.coachId ?? null,
+    })
+    .returning();
+  return row;
+}
+
+export async function updateUser(
+  id: number,
+  patch: { role?: Role; active?: boolean; coachId?: number | null; password?: string },
+): Promise<void> {
+  const db = await getDb();
+  const set: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
+  if (patch.role !== undefined) set.role = patch.role;
+  if (patch.active !== undefined) set.active = patch.active;
+  if (patch.coachId !== undefined) set.coachId = patch.coachId;
+  if (patch.password) set.passwordHash = hashPassword(patch.password);
+  await db.update(users).set(set).where(eq(users.id, id));
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(users).where(eq(users.id, id));
+}
+
+/**
+ * Seed the first super_admin so a fresh deployment is loginable. No-op once any
+ * user exists. In production both env vars are required; locally they fall back
+ * to admin@local / swim123 so dev works with no setup.
+ */
+export async function ensureSuperAdmin(): Promise<void> {
+  const db = await getDb();
+  const existing = await db.select({ id: users.id }).from(users).limit(1);
+  if (existing.length > 0) return;
+
+  const isProd = process.env.NODE_ENV === "production";
+  const email = process.env.SUPER_ADMIN_EMAIL || (isProd ? undefined : "admin@local");
+  const password = process.env.SUPER_ADMIN_PASSWORD || (isProd ? undefined : "swim123");
+  if (!email || !password) return; // prod without creds: cannot seed (login route surfaces this)
+
+  await db
+    .insert(users)
+    .values({
+      email: normalizeEmail(email),
+      passwordHash: hashPassword(password),
+      role: "super_admin",
+      active: true,
+    })
+    .onConflictDoNothing();
 }

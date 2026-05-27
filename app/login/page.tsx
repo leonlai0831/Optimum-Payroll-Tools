@@ -7,6 +7,7 @@ import { Button, Card, Input } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,7 +19,7 @@ export default function LoginPage() {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
       router.replace("/");
@@ -46,20 +47,34 @@ export default function LoginPage() {
         </div>
         <form onSubmit={submit} className="space-y-4 p-6">
           <div>
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              autoFocus
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@optimumtrain.page"
+            />
+          </div>
+          <div>
             <label htmlFor="pw" className="mb-1 block text-sm font-medium text-gray-700">
               Password
             </label>
             <Input
               id="pw"
               type="password"
-              autoFocus
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter shared password"
+              placeholder="Enter your password"
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading || !password}>
+          <Button type="submit" className="w-full" disabled={loading || !email || !password}>
             {loading ? "Signing in…" : "Sign In"}
           </Button>
         </form>

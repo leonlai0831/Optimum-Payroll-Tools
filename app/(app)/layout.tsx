@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { Nav } from "@/components/nav";
 
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getSession();
-  if (!session.authenticated) redirect("/login");
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
   return (
     <>
