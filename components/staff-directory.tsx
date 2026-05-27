@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Plus, UserPlus, Users, X } from "lucide-react";
+import { Check, ChevronRight, Plus, Save, UserPlus, Users, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
@@ -157,38 +157,7 @@ export function StaffDirectory({
                     </tr>
                   ) : (
                     sorted.map((e) => (
-                      <tr key={e.id} className={cn(!e.active && "bg-gray-50/60 opacity-60")}>
-                        <td className="px-4 py-2 font-medium">
-                          <Link href={`/staff/${e.id}`} className="text-indigo-700 hover:underline">
-                            {e.name}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2 text-gray-700">{EMPLOYEE_ROLE_LABELS[e.jobRole]}</td>
-                        <td className="px-4 py-2 text-gray-700">
-                          {EMPLOYMENT_TYPE_LABELS[e.employmentType]}
-                        </td>
-                        {[0, 1, 2].map((i) => (
-                          <td key={i} className="px-4 py-2 text-gray-700">
-                            {splitCenters(e.center)[i] || "—"}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-center">
-                          {e.active ? (
-                            <span className="text-green-600">●</span>
-                          ) : (
-                            <span className="text-gray-300">●</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <Link
-                            href={`/staff/${e.id}`}
-                            className="inline-flex items-center text-gray-400 hover:text-indigo-600"
-                            title="Open profile"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Link>
-                        </td>
-                      </tr>
+                      <DirectoryRow key={e.id} employee={e} centers={centers} canEdit={canEdit} />
                     ))
                   )}
                 </tbody>
@@ -198,6 +167,123 @@ export function StaffDirectory({
         )}
       </Card>
     </div>
+  );
+}
+
+function DirectoryRow({
+  employee,
+  centers,
+  canEdit,
+}: {
+  employee: EmployeeRow;
+  centers: string[];
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const initial = splitCenters(employee.center);
+  const [rowCenters, setRowCenters] = useState<string[]>([
+    initial[0] ?? "",
+    initial[1] ?? "",
+    initial[2] ?? "",
+  ]);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  const joinedCenters = rowCenters
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .join(", ");
+  const dirty = joinedCenters !== splitCenters(employee.center).join(", ");
+
+  function setCenter(i: number, value: string) {
+    setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
+    setSaved(false);
+    setError("");
+  }
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/coaches/${employee.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ center: joinedCenters }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setSaved(true);
+      router.refresh();
+    } catch {
+      setError("Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <tr className={cn(!employee.active && "bg-gray-50/60 opacity-60")}>
+      <td className="px-4 py-2 font-medium">
+        <Link href={`/staff/${employee.id}`} className="text-indigo-700 hover:underline">
+          {employee.name}
+        </Link>
+      </td>
+      <td className="px-4 py-2 text-gray-700">{EMPLOYEE_ROLE_LABELS[employee.jobRole]}</td>
+      <td className="px-4 py-2 text-gray-700">{EMPLOYMENT_TYPE_LABELS[employee.employmentType]}</td>
+      {[0, 1, 2].map((i) =>
+        canEdit ? (
+          <td key={i} className="px-4 py-1.5">
+            <CenterSelect
+              className="w-28 py-1 text-xs"
+              centers={centers}
+              value={rowCenters[i]}
+              placeholder={i === 0 ? "Center" : "—"}
+              onChange={(v) => setCenter(i, v)}
+            />
+          </td>
+        ) : (
+          <td key={i} className="px-4 py-2 text-gray-700">
+            {rowCenters[i] || "—"}
+          </td>
+        ),
+      )}
+      <td className="px-4 py-2 text-center">
+        {employee.active ? (
+          <span className="text-green-600">●</span>
+        ) : (
+          <span className="text-gray-300">●</span>
+        )}
+      </td>
+      <td className="px-4 py-2">
+        <div className="flex items-center justify-end gap-2">
+          {error && <span className="text-[11px] text-red-600">{error}</span>}
+          {canEdit && (
+            <Button
+              variant="outline"
+              className="px-2 py-1 text-xs"
+              onClick={save}
+              disabled={busy || !dirty}
+            >
+              {busy ? (
+                <Spinner />
+              ) : saved && !dirty ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {saved && !dirty ? "Saved" : "Save"}
+            </Button>
+          )}
+          <Link
+            href={`/staff/${employee.id}`}
+            className="inline-flex items-center text-gray-400 hover:text-indigo-600"
+            title="Open profile"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </td>
+    </tr>
   );
 }
 
