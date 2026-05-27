@@ -16,6 +16,7 @@ import {
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { AppraisalsSection, type AppraisalView } from "@/components/appraisals-section";
+import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import {
@@ -65,6 +66,8 @@ export function CoachProfileView({
   appraisals,
   dimensions,
   canEditAppraisals,
+  notes,
+  canEditNotes,
 }: {
   coach: CoachProfile;
   centers: string[];
@@ -75,6 +78,8 @@ export function CoachProfileView({
   appraisals: AppraisalView[];
   dimensions: AppraisalDimension[];
   canEditAppraisals: boolean;
+  notes: NoteView[];
+  canEditNotes: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -109,6 +114,7 @@ export function CoachProfileView({
         dimensions={dimensions}
         canEdit={canEditAppraisals}
       />
+      <NotesTimeline coachId={coach.id} notes={notes} canEdit={canEditNotes} />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
     </div>

@@ -13,6 +13,8 @@ import type {
   AppraisalRating,
   EmployeeRole,
   EmploymentType,
+  NoteSeverity,
+  NoteType,
   PerformanceConfig,
 } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
@@ -123,10 +125,25 @@ export const appraisals = pgTable("appraisals", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** A free-form HR note (recognition / disciplinary / coaching / general) on an employee. */
+export const notes = pgTable("notes", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coach_id").notNull(),
+  noteDate: timestamp("note_date", { withTimezone: true }).defaultNow().notNull(),
+  type: text("type").$type<NoteType>().default("general").notNull(),
+  title: text("title").default("").notNull(),
+  body: text("body").default("").notNull(),
+  severity: text("severity").$type<NoteSeverity>(),
+  followUp: boolean("follow_up").default(false).notNull(),
+  authoredBy: text("authored_by").default("").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type UserRecord = typeof users.$inferSelect;
 export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;
 export type PerformanceConfigRecord = typeof performanceConfig.$inferSelect;
 export type AppraisalRecord = typeof appraisals.$inferSelect;
+export type NoteRecord = typeof notes.$inferSelect;
 export type CoachRecord = typeof coaches.$inferSelect;
 export type RunRecord = typeof runs.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;

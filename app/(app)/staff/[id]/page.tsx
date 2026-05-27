@@ -4,6 +4,7 @@ import {
   getCoachProfile,
   getPerformanceConfig,
   listAppraisalsForCoach,
+  listNotesForCoach,
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
@@ -14,6 +15,7 @@ import {
   type CoachProfile,
 } from "@/components/coach-profile-view";
 import type { AppraisalView } from "@/components/appraisals-section";
+import type { NoteView } from "@/components/notes-timeline";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +30,12 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
   const isOwn = caps.has("view_own") && user.coachId === coachId;
   if (!canViewAll && !isOwn) redirect("/");
 
-  const [profile, config, perfConfig, appraisalRecords] = await Promise.all([
+  const [profile, config, perfConfig, appraisalRecords, noteRecords] = await Promise.all([
     getCoachProfile(coachId),
     getAllowanceConfig(),
     getPerformanceConfig(),
     listAppraisalsForCoach(coachId),
+    listNotesForCoach(coachId),
   ]);
   if (!profile) notFound();
   const { coach, kpi, allowance } = profile;
@@ -44,6 +47,16 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
     ratings: a.ratings,
     overallScore: a.overallScore,
     comments: a.comments,
+  }));
+  const noteViews: NoteView[] = noteRecords.map((n) => ({
+    id: n.id,
+    noteDate: n.noteDate.toISOString(),
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    severity: n.severity,
+    followUp: n.followUp,
+    authoredBy: n.authoredBy,
   }));
 
   const coachProfile: CoachProfile = {
@@ -77,6 +90,8 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
         appraisals={appraisalViews}
         dimensions={perfConfig.dimensions}
         canEditAppraisals={caps.has("edit_appraisals")}
+        notes={noteViews}
+        canEditNotes={caps.has("edit_notes")}
       />
     </div>
   );

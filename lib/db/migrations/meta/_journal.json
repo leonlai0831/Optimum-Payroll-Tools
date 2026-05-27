@@ -43,6 +43,13 @@
       "when": 1779907847548,
       "tag": "0005_outgoing_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779908135447,
+      "tag": "0006_nervous_nick_fury",
+      "breakpoints": true
     }
   ]
 }

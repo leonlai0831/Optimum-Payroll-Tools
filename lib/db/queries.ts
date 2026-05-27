@@ -6,6 +6,7 @@ import {
   appraisals,
   coaches,
   config,
+  notes,
   performanceConfig,
   permissionConfig,
   runs,
@@ -13,6 +14,7 @@ import {
   type AllowanceRunRecord,
   type AppraisalRecord,
   type CoachRecord,
+  type NoteRecord,
   type RunRecord,
   type UserRecord,
 } from "./schema";
@@ -23,6 +25,8 @@ import type {
   AppraisalRating,
   EmployeeRole,
   EmploymentType,
+  NoteSeverity,
+  NoteType,
   PerformanceConfig,
 } from "@/lib/performance/types";
 import {
@@ -655,6 +659,31 @@ export async function updateAppraisal(
 export async function deleteAppraisal(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(appraisals).where(eq(appraisals.id, id));
+}
+
+export async function listNotesForCoach(coachId: number): Promise<NoteRecord[]> {
+  const db = await getDb();
+  return db.select().from(notes).where(eq(notes.coachId, coachId)).orderBy(desc(notes.noteDate));
+}
+
+export async function createNote(input: {
+  coachId: number;
+  noteDate: Date;
+  type: NoteType;
+  title: string;
+  body: string;
+  severity: NoteSeverity | null;
+  followUp: boolean;
+  authoredBy: string;
+}): Promise<NoteRecord> {
+  const db = await getDb();
+  const [row] = await db.insert(notes).values(input).returning();
+  return row;
+}
+
+export async function deleteNote(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(notes).where(eq(notes.id, id));
 }
 
 /** Latest appraisal overall (0–100) per coach, for prefilling the KPI mgmt assessment. */

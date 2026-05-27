@@ -35,6 +35,24 @@ export interface PerformanceConfig {
   dimensions: AppraisalDimension[];
 }
 
+/** Kinds of free-form HR notes kept against an employee. */
+export const NOTE_TYPES = ["recognition", "disciplinary", "coaching", "general"] as const;
+export type NoteType = (typeof NOTE_TYPES)[number];
+export const NOTE_TYPE_LABELS: Record<NoteType, string> = {
+  recognition: "Recognition",
+  disciplinary: "Disciplinary",
+  coaching: "Coaching",
+  general: "General",
+};
+
+export const NOTE_SEVERITIES = ["low", "medium", "high"] as const;
+export type NoteSeverity = (typeof NOTE_SEVERITIES)[number];
+export const NOTE_SEVERITY_LABELS: Record<NoteSeverity, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
 export const RATING_MIN = 1;
 export const RATING_MAX = 5;
 
