@@ -13,10 +13,9 @@ export async function PUT(req: Request) {
   const denied = await requireCapability("edit_settings");
   if (denied) return denied;
   const data = (await req.json()) as AllowanceConfig;
-  // Normalize the center list: trim, drop blanks, dedupe (preserve order).
-  if (Array.isArray(data.centers)) {
-    data.centers = [...new Set(data.centers.map((c) => String(c).trim()).filter(Boolean))];
-  }
+  // Centers are managed in the Staff module (Staff -> Settings); a rates save here
+  // must never change them, so always keep the stored list.
+  data.centers = (await getAllowanceConfig()).centers;
   await saveAllowanceConfig(data);
   return NextResponse.json({ ok: true });
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Save, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Save, SlidersHorizontal } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type { AllowanceConfig, AllowanceTier } from "@/lib/allowance/types";
@@ -39,32 +39,16 @@ export function AllowanceRatesForm({
     setSaved(false);
   }
 
-  function patchCenter(i: number, val: string) {
-    setCfg((c) => ({ ...c, centers: c.centers.map((x, idx) => (idx === i ? val : x)) }));
-    setSaved(false);
-  }
-  function addCenter() {
-    setCfg((c) => ({ ...c, centers: [...c.centers, ""] }));
-    setSaved(false);
-  }
-  function removeCenter(i: number) {
-    setCfg((c) => ({ ...c, centers: c.centers.filter((_, idx) => idx !== i) }));
-    setSaved(false);
-  }
-
   async function save() {
     setSaving(true);
     setError("");
     try {
-      const centers = [...new Set(cfg.centers.map((c) => c.trim()).filter(Boolean))];
-      const payload: AllowanceConfig = { ...cfg, centers };
       const res = await fetch("/api/allowance/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(cfg),
       });
       if (!res.ok) throw new Error("Save failed");
-      setCfg(payload);
       setSaved(true);
       router.refresh();
     } catch (e) {
@@ -78,11 +62,11 @@ export function AllowanceRatesForm({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-          <SlidersHorizontal className="h-5 w-5 text-indigo-500" /> Options
+          <SlidersHorizontal className="h-5 w-5 text-indigo-500" /> Settings
         </h1>
         {canEdit ? (
           <Button onClick={save} disabled={saving}>
-            {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save options"}
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save settings"}
           </Button>
         ) : (
           <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
@@ -96,36 +80,6 @@ export function AllowanceRatesForm({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
-      <Card className="p-4">
-        <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-indigo-700">Centers</h3>
-        <p className="mb-3 text-[11px] text-gray-400">
-          Options shown in the center dropdowns on the Calculator and Staff List. Removing a center
-          here won&apos;t change records that already use it.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {cfg.centers.map((c, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <Input
-                className="w-24 py-1 text-xs uppercase"
-                value={c}
-                placeholder="Code"
-                onChange={(e) => patchCenter(i, e.target.value)}
-              />
-              <button
-                className="text-gray-300 transition hover:text-red-500"
-                onClick={() => removeCenter(i)}
-                title="Remove center"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-        <Button variant="outline" className="mt-3 px-3 py-1.5 text-xs" onClick={addCenter}>
-          <Plus className="h-3.5 w-3.5" /> Add center
-        </Button>
-      </Card>
-
       <Card className="overflow-x-auto p-4">
         <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
           Attendance allowance (RM)
