@@ -24,7 +24,7 @@ export type AllowanceTier = (typeof ALLOWANCE_TIERS)[number];
  * Known operating centers (short codes). Single source of truth for the center
  * dropdowns across the allowance UI. To add a center, add it here.
  */
-export const CENTERS = ["HQ", "BK", "BT", "PK", "KK", "USJ", "QSM", "KM"] as const;
+export const CENTERS = ["HQ", "BK", "BT", "PK", "PJ", "KK", "USJ", "QSM", "KM"] as const;
 
 export type Center = (typeof CENTERS)[number];
 
