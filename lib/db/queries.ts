@@ -26,6 +26,7 @@ import {
   type AllowanceInput,
   type AllowanceResult,
   type AllowanceTier,
+  type OtherAllowanceItem,
 } from "@/lib/allowance/types";
 
 export function defaultConfig(): AppConfig {
@@ -345,6 +346,7 @@ export interface AllowanceRunSummary {
   attendance: number;
   teaching: number;
   other: number;
+  otherItems: OtherAllowanceItem[];
   grandTotal: number;
   createdAt: Date;
 }
@@ -380,6 +382,7 @@ export async function listAllowanceRuns(period?: string): Promise<AllowanceRunSu
     attendance: r.result.attendance,
     teaching: r.result.teaching,
     other: r.result.other,
+    otherItems: r.input.otherItems ?? [],
     grandTotal: r.result.grandTotal,
     createdAt: r.createdAt,
   }));

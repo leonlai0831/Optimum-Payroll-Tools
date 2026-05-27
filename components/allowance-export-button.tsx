@@ -26,8 +26,16 @@ export function AllowanceExportButton({
       "Attendance (RM)",
       "Teaching (RM)",
       "Other (RM)",
+      "Other detail (center · reason · RM)",
       "Grand total (RM)",
     ];
+    const otherDetail = (r: AllowanceRunSummary) =>
+      r.otherItems
+        .map(
+          (it) =>
+            `${it.center || "—"} · ${it.reason || "—"} · RM${Math.round(it.amount)}`,
+        )
+        .join("; ");
     const lines = rows.map((r) =>
       [
         r.periodLabel,
@@ -40,6 +48,7 @@ export function AllowanceExportButton({
         Math.round(r.attendance),
         Math.round(r.teaching),
         Math.round(r.other),
+        csvCell(otherDetail(r)),
         Math.round(r.grandTotal),
       ].join(","),
     );
@@ -56,6 +65,7 @@ export function AllowanceExportButton({
       sum((r) => r.attendance),
       sum((r) => r.teaching),
       sum((r) => r.other),
+      "",
       sum((r) => r.grandTotal),
     ].join(",");
     const csv = [headers.join(","), ...lines, totals].join("\n");
