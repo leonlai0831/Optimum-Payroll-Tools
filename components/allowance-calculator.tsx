@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { StaffCombobox } from "@/components/staff-combobox";
 import { attendanceBracket, calcAllowance } from "@/lib/allowance/calc";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type {
@@ -176,20 +177,12 @@ export function AllowanceCalculator({
               </div>
               <div className="col-span-2 sm:col-span-1">
                 <Label>Staff</Label>
-                <Select
+                <StaffCombobox
                   className="mt-1"
+                  options={coaches}
                   value={isNew ? "__new__" : coachId === null ? "" : String(coachId)}
-                  onChange={(e) => onPickCoach(e.target.value)}
-                >
-                  <option value="">— select —</option>
-                  {coaches.map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      {c.canonicalName}
-                      {c.allowanceTier ? ` (${c.allowanceTier})` : ""}
-                    </option>
-                  ))}
-                  <option value="__new__">+ new staff…</option>
-                </Select>
+                  onChange={onPickCoach}
+                />
               </div>
               <div>
                 <Label>Position</Label>
