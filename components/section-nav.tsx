@@ -57,6 +57,12 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
         exact: true,
         requires: { cap: "view_all_staff" },
       },
+      {
+        href: "/staff/settings",
+        label: "Options",
+        icon: SlidersHorizontal,
+        requires: { cap: "view_all_staff" },
+      },
       { href: "/staff/users", label: "Users", icon: UserCog, requires: { cap: "manage_users" } },
       {
         href: "/staff/permissions",

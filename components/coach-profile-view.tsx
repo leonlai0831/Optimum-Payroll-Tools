@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { AppraisalsSection, type AppraisalView } from "@/components/appraisals-section";
 import { rm } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import {
@@ -22,6 +23,7 @@ import {
   EMPLOYEE_ROLE_LABELS,
   EMPLOYMENT_TYPES,
   EMPLOYMENT_TYPE_LABELS,
+  type AppraisalDimension,
   type EmployeeRole,
   type EmploymentType,
 } from "@/lib/performance/types";
@@ -60,6 +62,9 @@ export function CoachProfileView({
   backHref,
   kpi,
   allowance,
+  appraisals,
+  dimensions,
+  canEditAppraisals,
 }: {
   coach: CoachProfile;
   centers: string[];
@@ -67,6 +72,9 @@ export function CoachProfileView({
   backHref?: string;
   kpi: KpiPoint[];
   allowance: AllowancePoint[];
+  appraisals: AppraisalView[];
+  dimensions: AppraisalDimension[];
+  canEditAppraisals: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -95,6 +103,12 @@ export function CoachProfileView({
       </div>
 
       <DetailsCard coach={coach} centers={centers} canEdit={canEdit} />
+      <AppraisalsSection
+        coachId={coach.id}
+        appraisals={appraisals}
+        dimensions={dimensions}
+        canEdit={canEditAppraisals}
+      />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
     </div>

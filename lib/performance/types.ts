@@ -16,3 +16,31 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
   full_time: "Full-time",
   freelancer: "Freelancer",
 };
+
+/** A configurable appraisal dimension (e.g. "Teaching Quality"). */
+export interface AppraisalDimension {
+  key: string;
+  label: string;
+}
+
+/** One dimension's score on an appraisal, snapshotted so history survives config edits. */
+export interface AppraisalRating {
+  key: string;
+  label: string;
+  score: number; // 1–5
+}
+
+/** Editable appraisal configuration, persisted as a singleton. */
+export interface PerformanceConfig {
+  dimensions: AppraisalDimension[];
+}
+
+export const RATING_MIN = 1;
+export const RATING_MAX = 5;
+
+/** Overall 0–100 score from the mean of 1–5 dimension ratings. */
+export function overallFromRatings(ratings: AppraisalRating[]): number {
+  if (ratings.length === 0) return 0;
+  const mean = ratings.reduce((s, r) => s + r.score, 0) / ratings.length;
+  return Math.round((mean / RATING_MAX) * 100);
+}
