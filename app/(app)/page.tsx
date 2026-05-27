@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShieldCheck, Trophy, Wallet, type LucideIcon } from "lucide-react";
+import { ShieldCheck, Trophy, UserCircle, Users, Wallet, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -31,6 +31,13 @@ const TOOLS: Tool[] = [
     cap: "run_kpi",
   },
   {
+    href: "/staff",
+    title: "Staff",
+    subtitle: "Employee directory, appraisals & notes",
+    icon: Users,
+    cap: "view_all_staff",
+  },
+  {
     title: "Admin KPI Bonus",
     subtitle: "Coming soon",
     icon: ShieldCheck,
@@ -45,6 +52,14 @@ export default async function HubPage() {
   const user = await getCurrentUser();
   const caps = user ? await getCapabilities(user) : new Set<Capability>();
   const tools = TOOLS.filter((tool) => !tool.cap || caps.has(tool.cap));
+  if (user?.coachId && caps.has("view_own")) {
+    tools.push({
+      href: `/staff/${user.coachId}`,
+      title: "My Profile",
+      subtitle: "Your performance record",
+      icon: UserCircle,
+    });
+  }
 
   return (
     <div className="fade-in space-y-6">

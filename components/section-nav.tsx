@@ -9,16 +9,26 @@ import {
   Home,
   LayoutDashboard,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
+  UserCog,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Capability } from "@/lib/auth/types";
 
-type SectionItem = { href: string; label: string; icon: LucideIcon; exact?: boolean };
+type Requirement = { cap?: Capability; superAdmin?: boolean };
+type SectionItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+  requires?: Requirement;
+};
 type SectionConfig = { title: string; items: SectionItem[] };
 
-const NAVS = {
+const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
   allowance: {
     title: "Staff Allowance",
     items: [
@@ -37,11 +47,46 @@ const NAVS = {
       { href: "/kpi/settings", label: "Settings", icon: Settings },
     ],
   },
-} satisfies Record<string, SectionConfig>;
+  staff: {
+    title: "Staff",
+    items: [
+      {
+        href: "/staff",
+        label: "Directory",
+        icon: Users,
+        exact: true,
+        requires: { cap: "view_all_staff" },
+      },
+      { href: "/staff/users", label: "Users", icon: UserCog, requires: { cap: "manage_users" } },
+      {
+        href: "/staff/permissions",
+        label: "Permissions",
+        icon: ShieldCheck,
+        requires: { superAdmin: true },
+      },
+    ],
+  },
+};
 
-export function SectionNav({ section }: { section: keyof typeof NAVS }) {
+function allowed(req: Requirement | undefined, caps: Capability[], isSuperAdmin: boolean): boolean {
+  if (!req) return true;
+  if (req.superAdmin && !isSuperAdmin) return false;
+  if (req.cap && !caps.includes(req.cap)) return false;
+  return true;
+}
+
+export function SectionNav({
+  section,
+  caps = [],
+  isSuperAdmin = false,
+}: {
+  section: keyof typeof NAVS;
+  caps?: Capability[];
+  isSuperAdmin?: boolean;
+}) {
   const pathname = usePathname();
   const { title, items } = NAVS[section];
+  const visible = items.filter((it) => allowed(it.requires, caps, isSuperAdmin));
 
   return (
     <div className="flex flex-wrap items-center gap-2 no-print">
@@ -54,7 +99,7 @@ export function SectionNav({ section }: { section: keyof typeof NAVS }) {
       </Link>
       <span className="px-1 text-sm font-bold text-gray-900">{title}</span>
       <span className="mx-1 hidden h-5 w-px bg-gray-200 sm:block" aria-hidden />
-      {items.map(({ href, label, icon: Icon, exact }) => {
+      {visible.map(({ href, label, icon: Icon, exact }) => {
         const active = exact ? pathname === href : pathname.startsWith(href);
         return (
           <Link

@@ -15,6 +15,7 @@ import {
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
 import { DEFAULT_PERMISSION_CONFIG, type PermissionConfig, type Role } from "@/lib/auth/types";
+import type { EmployeeRole, EmploymentType } from "@/lib/performance/types";
 import {
   DEFAULT_CENTER_KPI,
   DEFAULT_CENTER_TARGETS,
@@ -74,10 +75,43 @@ export async function getKnownCoaches(): Promise<KnownCoach[]> {
     .map((c) => ({ canonicalName: c.canonicalName, aliases: c.aliases ?? [] }));
 }
 
-/** Update editable staff profile fields (name, center, position tier, active). */
+export async function getCoach(id: number): Promise<CoachRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(coaches).where(eq(coaches.id, id)).limit(1);
+  return rows[0];
+}
+
+/** Manually add an employee (distinct from the auto-create on a saved run). */
+export async function createCoach(input: {
+  canonicalName: string;
+  jobRole?: EmployeeRole;
+  employmentType?: EmploymentType;
+  center?: string;
+  allowanceTier?: AllowanceTier | null;
+}): Promise<CoachRecord> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(coaches)
+    .values({
+      canonicalName: input.canonicalName.trim(),
+      jobRole: input.jobRole ?? "instructor",
+      employmentType: input.employmentType ?? "full_time",
+      center: input.center?.trim() ?? "",
+      allowanceTier: input.allowanceTier ?? null,
+    })
+    .returning();
+  return row;
+}
+
+/** Update editable staff profile fields. */
 export async function updateCoach(
   id: number,
-  patch: Partial<Pick<CoachRecord, "canonicalName" | "center" | "allowanceTier" | "active">>,
+  patch: Partial<
+    Pick<
+      CoachRecord,
+      "canonicalName" | "center" | "allowanceTier" | "active" | "jobRole" | "employmentType"
+    >
+  >,
 ): Promise<void> {
   const db = await getDb();
   await db

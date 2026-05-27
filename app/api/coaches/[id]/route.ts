@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { requireCapability } from "@/lib/auth/permissions";
 import { deleteCoach, updateCoach } from "@/lib/db/queries";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
+import {
+  EMPLOYEE_ROLES,
+  EMPLOYMENT_TYPES,
+  type EmployeeRole,
+  type EmploymentType,
+} from "@/lib/performance/types";
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">) {
   const denied = await requireCapability("edit_staff");
@@ -12,6 +18,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
     center?: string;
     allowanceTier?: string | null;
     active?: boolean;
+    jobRole?: string;
+    employmentType?: string;
   };
 
   const patch: Parameters<typeof updateCoach>[1] = {};
@@ -28,6 +36,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
     patch.allowanceTier = body.allowanceTier as AllowanceTier;
   }
   if (typeof body.active === "boolean") patch.active = body.active;
+  if ((EMPLOYEE_ROLES as readonly string[]).includes(body.jobRole ?? "")) {
+    patch.jobRole = body.jobRole as EmployeeRole;
+  }
+  if ((EMPLOYMENT_TYPES as readonly string[]).includes(body.employmentType ?? "")) {
+    patch.employmentType = body.employmentType as EmploymentType;
+  }
 
   await updateCoach(Number(id), patch);
   return NextResponse.json({ ok: true });

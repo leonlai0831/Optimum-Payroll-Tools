@@ -9,6 +9,7 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import type { PermissionConfig, Role } from "@/lib/auth/types";
+import type { EmployeeRole, EmploymentType } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
@@ -31,6 +32,9 @@ export const coaches = pgTable("coaches", {
   canonicalName: text("canonical_name").notNull(),
   aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
   center: text("center").default("").notNull(),
+  // Employee job role (instructor / front_desk) — distinct from the KPI position below.
+  jobRole: text("job_role").$type<EmployeeRole>().default("instructor").notNull(),
+  employmentType: text("employment_type").$type<EmploymentType>().default("full_time").notNull(),
   defaultPosition: text("default_position").$type<Position>().default("Instructor").notNull(),
   lastMgmtAssessment: real("last_mgmt_assessment"),
   lastMgmtAssessmentAt: timestamp("last_mgmt_assessment_at", { withTimezone: true }),
