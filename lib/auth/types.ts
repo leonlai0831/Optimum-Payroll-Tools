@@ -23,6 +23,19 @@ export const CAPABILITIES = [
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
+export const CAPABILITY_LABELS: Record<Capability, string> = {
+  manage_users: "Manage user accounts",
+  edit_settings: "Edit settings",
+  view_settings: "View settings",
+  edit_staff: "Edit staff profiles",
+  view_all_staff: "View all staff",
+  view_own: "View own profile",
+  edit_appraisals: "Create/edit appraisals",
+  edit_notes: "Create/edit notes",
+  run_kpi: "Run KPI bonus",
+  run_allowance: "Run allowance",
+};
+
 /** Roles whose capabilities are configurable (super_admin is always all-access). */
 export type ConfigurableRole = Exclude<Role, "super_admin">;
 export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "staff"];
