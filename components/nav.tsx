@@ -19,17 +19,15 @@ export function Nav() {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2.5">
           <Image
-            src="/logo-mark.png"
+            src="/logo-full.png"
             alt="Optimum Swim School"
-            width={240}
-            height={140}
+            width={1080}
+            height={350}
             priority
-            className="h-9 w-auto"
+            className="h-8 w-auto sm:h-9"
           />
-          <div className="hidden sm:block">
-            <p className="text-sm font-bold leading-tight text-gray-900">Optimum Payroll Tools</p>
-            <p className="text-[11px] text-gray-500">Optimum Swim School</p>
-          </div>
+          <span className="hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
+          <span className="hidden text-sm font-semibold text-gray-500 sm:inline">Payroll Tools</span>
         </Link>
 
         <button
