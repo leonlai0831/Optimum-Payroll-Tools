@@ -15,7 +15,9 @@ export function AllowanceExportButton({
   rows: AllowanceRunSummary[];
 }) {
   function exportCsv() {
-    const headers = [
+    const maxOther = rows.reduce((m, r) => Math.max(m, r.otherItems.length), 0);
+    const idx = Array.from({ length: maxOther }, (_, i) => i);
+    const baseHeaders = [
       "Period",
       "Staff",
       "Position",
@@ -26,18 +28,15 @@ export function AllowanceExportButton({
       "Attendance (RM)",
       "Teaching (RM)",
       "Other (RM)",
-      "Other detail (center · reason · RM)",
-      "Grand total (RM)",
     ];
-    const otherDetail = (r: AllowanceRunSummary) =>
-      r.otherItems
-        .map(
-          (it) =>
-            `${it.center || "—"} · ${it.reason || "—"} · RM${Math.round(it.amount)}`,
-        )
-        .join("; ");
-    const lines = rows.map((r) =>
-      [
+    const otherHeaders = idx.flatMap((i) => [
+      `Other ${i + 1} Center`,
+      `Other ${i + 1} Reason`,
+      `Other ${i + 1} (RM)`,
+    ]);
+    const headers = [...baseHeaders, ...otherHeaders, "Grand total (RM)"];
+    const lines = rows.map((r) => {
+      const base = [
         r.periodLabel,
         csvCell(r.canonicalName),
         r.tier,
@@ -48,10 +47,15 @@ export function AllowanceExportButton({
         Math.round(r.attendance),
         Math.round(r.teaching),
         Math.round(r.other),
-        csvCell(otherDetail(r)),
-        Math.round(r.grandTotal),
-      ].join(","),
-    );
+      ];
+      const other = idx.flatMap((i) => {
+        const it = r.otherItems[i];
+        return it
+          ? [csvCell(it.center || ""), csvCell(it.reason || ""), Math.round(it.amount)]
+          : ["", "", ""];
+      });
+      return [...base, ...other, Math.round(r.grandTotal)].join(",");
+    });
     const sum = (pick: (r: AllowanceRunSummary) => number) =>
       Math.round(rows.reduce((s, r) => s + pick(r), 0));
     const totals = [
@@ -65,10 +69,11 @@ export function AllowanceExportButton({
       sum((r) => r.attendance),
       sum((r) => r.teaching),
       sum((r) => r.other),
-      "",
+      ...idx.flatMap(() => ["", "", ""]),
       sum((r) => r.grandTotal),
     ].join(",");
-    const csv = [headers.join(","), ...lines, totals].join("\n");
+    // Lead with a UTF-8 BOM so Excel reads the encoding correctly.
+    const csv = "\uFEFF" + [headers.join(","), ...lines, totals].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
