@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Card, Input, Spinner } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,15 +35,31 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm overflow-hidden border-t-4 border-t-brand">
         <div className="bg-white px-6 pb-4 pt-7 text-center">
-          <Image
-            src="/logo.png"
-            alt="Optimum Swim School"
-            width={560}
-            height={433}
-            priority
-            className="mx-auto h-auto w-36"
-          />
-          <p className="mt-3 text-sm font-semibold text-gray-500">Optimum Payroll Tools</p>
+          {loading ? (
+            <video
+              className="mx-auto h-auto w-36"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              aria-label="Signing in…"
+            >
+              <source src="/logo-animation.mp4" type="video/mp4" />
+            </video>
+          ) : (
+            <Image
+              src="/logo.png"
+              alt="Optimum Swim School"
+              width={560}
+              height={433}
+              priority
+              className="mx-auto h-auto w-36"
+            />
+          )}
+          <p className="mt-3 text-sm font-semibold text-gray-500">
+            {loading ? "Signing in…" : "Optimum Payroll Tools"}
+          </p>
         </div>
         <form onSubmit={submit} className="space-y-4 p-6">
           <div>
@@ -75,7 +91,13 @@ export default function LoginPage() {
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading || !email || !password}>
-            {loading ? "Signing in…" : "Sign In"}
+            {loading ? (
+              <>
+                <Spinner /> Signing in…
+              </>
+            ) : (
+              "Sign In"
+            )}
           </Button>
         </form>
       </Card>
