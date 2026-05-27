@@ -65,6 +65,22 @@ body {
   }
 }
 
+/* Branded loader: the logo mark gently "breathes" inside a spinning brand ring. */
+.animate-brand-breathe {
+  animation: brandBreathe 1.6s ease-in-out infinite;
+}
+@keyframes brandBreathe {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.78;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;
