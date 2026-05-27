@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "./index";
 import {
@@ -58,14 +59,14 @@ export function defaultConfig(): AppConfig {
 }
 
 /** Read the singleton config, seeding defaults on first use. */
-export async function getConfig(): Promise<AppConfig> {
+export const getConfig = cache(async (): Promise<AppConfig> => {
   const db = await getDb();
   const rows = await db.select().from(config).where(eq(config.id, 1)).limit(1);
   if (rows[0]) return rows[0].data;
   const data = defaultConfig();
   await db.insert(config).values({ id: 1, data }).onConflictDoNothing();
   return data;
-}
+});
 
 export async function saveConfig(data: AppConfig): Promise<void> {
   const db = await getDb();
@@ -335,7 +336,7 @@ export async function deleteRun(id: number): Promise<void> {
 // ── Allowance ────────────────────────────────────────────────────────────────
 
 /** Read the singleton allowance rate tables, seeding defaults on first use. */
-export async function getAllowanceConfig(): Promise<AllowanceConfig> {
+export const getAllowanceConfig = cache(async (): Promise<AllowanceConfig> => {
   const db = await getDb();
   const rows = await db
     .select()
@@ -353,7 +354,7 @@ export async function getAllowanceConfig(): Promise<AllowanceConfig> {
   const data = structuredClone(DEFAULT_ALLOWANCE_CONFIG);
   await db.insert(allowanceConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;
-}
+});
 
 export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> {
   const db = await getDb();
@@ -514,11 +515,11 @@ export async function listUsers(): Promise<UserRecord[]> {
   return db.select().from(users).orderBy(users.email);
 }
 
-export async function getUserById(id: number): Promise<UserRecord | undefined> {
+export const getUserById = cache(async (id: number): Promise<UserRecord | undefined> => {
   const db = await getDb();
   const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return rows[0];
-}
+});
 
 export async function getUserByEmail(email: string): Promise<UserRecord | undefined> {
   const db = await getDb();
@@ -578,7 +579,7 @@ export async function deleteUser(id: number): Promise<void> {
 }
 
 /** Read the singleton permission matrix, seeding defaults on first use. */
-export async function getPermissionConfig(): Promise<PermissionConfig> {
+export const getPermissionConfig = cache(async (): Promise<PermissionConfig> => {
   const db = await getDb();
   const rows = await db
     .select()
@@ -589,7 +590,7 @@ export async function getPermissionConfig(): Promise<PermissionConfig> {
   const data = structuredClone(DEFAULT_PERMISSION_CONFIG);
   await db.insert(permissionConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;
-}
+});
 
 export async function savePermissionConfig(data: PermissionConfig): Promise<void> {
   const db = await getDb();
@@ -602,7 +603,7 @@ export async function savePermissionConfig(data: PermissionConfig): Promise<void
 // ── Performance / appraisals ─────────────────────────────────────────────────
 
 /** Read the singleton appraisal config, seeding defaults on first use. */
-export async function getPerformanceConfig(): Promise<PerformanceConfig> {
+export const getPerformanceConfig = cache(async (): Promise<PerformanceConfig> => {
   const db = await getDb();
   const rows = await db
     .select()
@@ -613,7 +614,7 @@ export async function getPerformanceConfig(): Promise<PerformanceConfig> {
   const data = structuredClone(DEFAULT_PERFORMANCE_CONFIG);
   await db.insert(performanceConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;
-}
+});
 
 export async function savePerformanceConfig(data: PerformanceConfig): Promise<void> {
   const db = await getDb();
