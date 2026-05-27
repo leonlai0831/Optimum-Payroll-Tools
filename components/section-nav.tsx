@@ -33,7 +33,6 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
     title: "Staff Allowance",
     items: [
       { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
-      { href: "/allowance/staff", label: "Staff List", icon: Users },
       { href: "/allowance/history", label: "History", icon: History },
       { href: "/allowance/settings", label: "Options", icon: SlidersHorizontal },
     ],

@@ -27,6 +27,14 @@ export interface EmployeeRow {
   active: boolean;
 }
 
+/** Centers are stored as one comma-joined string; the directory shows them in up to 3 columns. */
+function splitCenters(center: string): string[] {
+  return center
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
 export function StaffDirectory({
   employees,
   centers,
@@ -58,7 +66,9 @@ export function StaffDirectory({
     name: (e) => e.name,
     jobRole: (e) => e.jobRole,
     employmentType: (e) => e.employmentType,
-    center: (e) => e.center,
+    center1: (e) => splitCenters(e.center)[0] ?? "",
+    center2: (e) => splitCenters(e.center)[1] ?? "",
+    center3: (e) => splitCenters(e.center)[2] ?? "",
     active: (e) => (e.active ? 1 : 0),
   });
 
@@ -131,7 +141,9 @@ export function StaffDirectory({
                     <SortTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
                     <SortTh label="Role" sortKey="jobRole" sort={sort} onSort={toggleSort} />
                     <SortTh label="Type" sortKey="employmentType" sort={sort} onSort={toggleSort} />
-                    <SortTh label="Center" sortKey="center" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Center 1" sortKey="center1" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Center 2" sortKey="center2" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Center 3" sortKey="center3" sort={sort} onSort={toggleSort} />
                     <SortTh label="Active" sortKey="active" sort={sort} onSort={toggleSort} align="center" />
                     <th className="px-4 py-2"></th>
                   </tr>
@@ -139,7 +151,7 @@ export function StaffDirectory({
                 <tbody className="divide-y divide-gray-100">
                   {sorted.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
                         No employees match the current filters.
                       </td>
                     </tr>
@@ -155,7 +167,11 @@ export function StaffDirectory({
                         <td className="px-4 py-2 text-gray-700">
                           {EMPLOYMENT_TYPE_LABELS[e.employmentType]}
                         </td>
-                        <td className="px-4 py-2 text-gray-700">{e.center || "—"}</td>
+                        {[0, 1, 2].map((i) => (
+                          <td key={i} className="px-4 py-2 text-gray-700">
+                            {splitCenters(e.center)[i] || "—"}
+                          </td>
+                        ))}
                         <td className="px-4 py-2 text-center">
                           {e.active ? (
                             <span className="text-green-600">●</span>

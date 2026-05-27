@@ -203,6 +203,14 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
   );
 }
 
+/** Centers are stored as one comma-joined string; edited here as up to 3 slots. */
+function splitCenters(center: string): string[] {
+  return center
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
 function DetailsCard({
   coach,
   centers,
@@ -216,24 +224,40 @@ function DetailsCard({
   const [name, setName] = useState(coach.name);
   const [jobRole, setJobRole] = useState<EmployeeRole>(coach.jobRole);
   const [employmentType, setEmploymentType] = useState<EmploymentType>(coach.employmentType);
-  const [center, setCenter] = useState(coach.center);
+  const initialCenters = splitCenters(coach.center);
+  const [rowCenters, setRowCenters] = useState<string[]>([
+    initialCenters[0] ?? "",
+    initialCenters[1] ?? "",
+    initialCenters[2] ?? "",
+  ]);
   const [tier, setTier] = useState<AllowanceTier | "">(coach.allowanceTier ?? "");
   const [active, setActive] = useState(coach.active);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
+  const joinedCenters = rowCenters
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .join(", ");
+  const normalizedOriginal = splitCenters(coach.center).join(", ");
+
   const dirty =
     name.trim() !== coach.name ||
     jobRole !== coach.jobRole ||
     employmentType !== coach.employmentType ||
-    center.trim() !== coach.center ||
+    joinedCenters !== normalizedOriginal ||
     (tier || null) !== (coach.allowanceTier ?? null) ||
     active !== coach.active;
 
   function touch() {
     setSaved(false);
     setError("");
+  }
+
+  function setCenter(i: number, value: string) {
+    setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
+    touch();
   }
 
   async function save() {
@@ -251,7 +275,7 @@ function DetailsCard({
           canonicalName: name.trim(),
           jobRole,
           employmentType,
-          center: center.trim(),
+          center: joinedCenters,
           allowanceTier: tier || null,
           active,
         }),
@@ -334,16 +358,35 @@ function DetailsCard({
             </Select>
           </div>
           <div>
-            <Label htmlFor="p-center">Center</Label>
+            <Label htmlFor="p-center-1">Center 1</Label>
             <CenterSelect
-              id="p-center"
+              id="p-center-1"
               className="mt-1"
               centers={centers}
-              value={center}
-              onChange={(v) => {
-                setCenter(v);
-                touch();
-              }}
+              value={rowCenters[0]}
+              onChange={(v) => setCenter(0, v)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="p-center-2">Center 2</Label>
+            <CenterSelect
+              id="p-center-2"
+              className="mt-1"
+              centers={centers}
+              value={rowCenters[1]}
+              placeholder="—"
+              onChange={(v) => setCenter(1, v)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="p-center-3">Center 3</Label>
+            <CenterSelect
+              id="p-center-3"
+              className="mt-1"
+              centers={centers}
+              value={rowCenters[2]}
+              placeholder="—"
+              onChange={(v) => setCenter(2, v)}
             />
           </div>
           <div>
