@@ -14,10 +14,20 @@ import {
 import type { AllowanceRunSummary } from "@/lib/db/queries";
 import { rm } from "@/lib/utils";
 
+/** Centers are stored as one comma-joined string; the history table shows them in up to 3 columns. */
+function splitCenters(center: string | null | undefined): string[] {
+  return (center ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
 const ACCESSORS = {
   staff: (r: AllowanceRunSummary) => r.canonicalName,
   position: (r: AllowanceRunSummary) => r.tier ?? "",
-  center: (r: AllowanceRunSummary) => r.center ?? "",
+  center1: (r: AllowanceRunSummary) => splitCenters(r.center)[0] ?? "",
+  center2: (r: AllowanceRunSummary) => splitCenters(r.center)[1] ?? "",
+  center3: (r: AllowanceRunSummary) => splitCenters(r.center)[2] ?? "",
   attendance: (r: AllowanceRunSummary) => r.attendance,
   teaching: (r: AllowanceRunSummary) => r.teaching,
   other: (r: AllowanceRunSummary) => r.other,
@@ -31,7 +41,7 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
   const { sort, toggleSort } = useSortState<keyof typeof ACCESSORS>();
 
   const centerOptions = useMemo(
-    () => [...new Set(rows.map((r) => r.center).filter(Boolean))].sort(),
+    () => [...new Set(rows.flatMap((r) => splitCenters(r.center)))].sort(),
     [rows],
   );
   const positionOptions = useMemo(
@@ -44,7 +54,7 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
   const groups = useMemo(() => {
     const filtered = rows.filter((r) => {
       if (!includesText(r.canonicalName, q)) return false;
-      if (centerFilter && r.center !== centerFilter) return false;
+      if (centerFilter && !splitCenters(r.center).includes(centerFilter)) return false;
       if (positionFilter && r.tier !== positionFilter) return false;
       return true;
     });
@@ -131,7 +141,9 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
                     <tr>
                       <SortTh label="Staff" sortKey="staff" sort={sort} onSort={toggleSort} />
                       <SortTh label="Position" sortKey="position" sort={sort} onSort={toggleSort} />
-                      <SortTh label="Center" sortKey="center" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Center 1" sortKey="center1" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Center 2" sortKey="center2" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Center 3" sortKey="center3" sort={sort} onSort={toggleSort} />
                       <SortTh
                         label="Attendance"
                         sortKey="attendance"
@@ -168,7 +180,11 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
                       <tr key={r.id} className="hover:bg-indigo-50/40">
                         <td className="px-4 py-2 font-medium text-gray-900">{r.canonicalName}</td>
                         <td className="px-4 py-2 text-gray-600">{r.tier}</td>
-                        <td className="px-4 py-2 text-gray-500">{r.center}</td>
+                        {[0, 1, 2].map((i) => (
+                          <td key={i} className="px-4 py-2 text-gray-500">
+                            {splitCenters(r.center)[i] || "—"}
+                          </td>
+                        ))}
                         <td className="px-4 py-2 text-right text-gray-600">{rm(r.attendance)}</td>
                         <td className="px-4 py-2 text-right text-gray-600">{rm(r.teaching)}</td>
                         <td className="px-4 py-2 text-right text-gray-600">{rm(r.other)}</td>
