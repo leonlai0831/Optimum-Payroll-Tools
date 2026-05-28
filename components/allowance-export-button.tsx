@@ -6,6 +6,14 @@ import type { AllowanceRunSummary } from "@/lib/db/queries";
 
 const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
 
+/** Centers are stored as one comma-joined string; the CSV breaks them into up to 3 columns. */
+function splitCenters(center: string | null | undefined): string[] {
+  return (center ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
 /** Download a whole month's allowance breakdown as a CSV (opens in Excel) for HR. */
 export function AllowanceExportButton({
   period,
@@ -21,7 +29,9 @@ export function AllowanceExportButton({
       "Period",
       "Staff",
       "Position",
-      "Center",
+      "Center 1",
+      "Center 2",
+      "Center 3",
       "Op hours",
       "Leave hours",
       "Attendance %",
@@ -36,11 +46,14 @@ export function AllowanceExportButton({
     ]);
     const headers = [...baseHeaders, ...otherHeaders, "Grand total (RM)"];
     const lines = rows.map((r) => {
+      const centers = splitCenters(r.center);
       const base = [
         r.periodLabel,
         csvCell(r.canonicalName),
         r.tier,
-        csvCell(r.center ?? ""),
+        csvCell(centers[0] ?? ""),
+        csvCell(centers[1] ?? ""),
+        csvCell(centers[2] ?? ""),
         r.opHours,
         r.leaveHours,
         (r.attendancePct * 100).toFixed(2),
@@ -60,6 +73,8 @@ export function AllowanceExportButton({
       Math.round(rows.reduce((s, r) => s + pick(r), 0));
     const totals = [
       "TOTAL",
+      "",
+      "",
       "",
       "",
       "",
