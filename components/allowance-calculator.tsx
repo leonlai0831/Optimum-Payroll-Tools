@@ -243,7 +243,7 @@ export function AllowanceCalculator({
 
         {/* 1. Attendance */}
         <Card className="p-4">
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+          <h3 className="mb-3 text-h3 text-gray-900">
             1 · Attendance
           </h3>
           <div className="flex flex-wrap items-end gap-4">
@@ -299,7 +299,7 @@ export function AllowanceCalculator({
         {/* 2. Teaching */}
         <Card className="p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-indigo-700">
+            <h3 className="text-h3 text-gray-900">
               2 · Teaching hours
             </h3>
             <span className="text-sm font-bold text-green-700">{rm(result.teaching)}</span>
@@ -366,7 +366,7 @@ export function AllowanceCalculator({
         {/* 3. Other */}
         <Card className="p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-indigo-700">
+            <h3 className="text-h3 text-gray-900">
               3 · Other allowances
             </h3>
             <span className="text-sm font-bold text-green-700">{rm(result.other)}</span>

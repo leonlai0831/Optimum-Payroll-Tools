@@ -2,6 +2,8 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline";
+type ButtonSize = "sm" | "md" | "lg";
+
 const buttonVariants: Record<ButtonVariant, string> = {
   primary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm",
   secondary: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
@@ -10,15 +12,26 @@ const buttonVariants: Record<ButtonVariant, string> = {
   outline: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
 };
 
+const buttonSizes: Record<ButtonSize, string> = {
+  sm: "gap-1.5 rounded-md px-3 py-1.5 text-xs",
+  md: "gap-2 rounded-md px-4 py-2 text-sm",
+  lg: "gap-2 rounded-md px-5 py-2.5 text-base",
+};
+
 export function Button({
   variant = "primary",
+  size = "md",
   className,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}) {
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        buttonSizes[size],
         buttonVariants[variant],
         className,
       )}
@@ -76,12 +89,7 @@ export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLS
 }
 
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
-  return (
-    <label
-      className={cn("text-xs font-semibold uppercase tracking-wide text-gray-500", className)}
-      {...props}
-    />
-  );
+  return <label className={cn("text-overline text-muted", className)} {...props} />;
 }
 
 export function Badge({ className, children }: { className?: string; children: React.ReactNode }) {

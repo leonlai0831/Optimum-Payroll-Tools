@@ -79,7 +79,7 @@ export function PerformanceOptionsForm({
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
         <Card className="p-4">
-          <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-indigo-700">
+          <h3 className="mb-1 text-h3 text-gray-900">
             Appraisal dimensions
           </h3>
           <p className="mb-3 text-[11px] text-gray-400">

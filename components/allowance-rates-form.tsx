@@ -81,7 +81,7 @@ export function AllowanceRatesForm({
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
       <Card className="overflow-x-auto p-4">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="mb-3 text-h3 text-gray-900">
           Attendance allowance (RM)
         </h3>
         <table className="min-w-full text-sm">
@@ -119,7 +119,7 @@ export function AllowanceRatesForm({
       </Card>
 
       <Card className="overflow-x-auto p-4">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="mb-3 text-h3 text-gray-900">
           Teaching rates (RM / hour)
         </h3>
         <table className="min-w-full text-sm">

@@ -126,7 +126,7 @@ function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
   const chart = kpi.map((k) => ({ period: k.period, score: Number(k.finalScore.toFixed(2)) }));
   return (
     <Card className="p-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-700">
+      <h3 className="mb-3 flex items-center gap-2 text-h3 text-gray-900">
         <TrendingUp className="h-4 w-4" /> KPI history
       </h3>
       {kpi.length > 1 && (
@@ -172,7 +172,7 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
   if (allowance.length === 0) return null;
   return (
     <Card className="p-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-700">
+      <h3 className="mb-3 flex items-center gap-2 text-h3 text-gray-900">
         <Wallet className="h-4 w-4" /> Allowance history
       </h3>
       <div className="overflow-x-auto">
@@ -306,7 +306,7 @@ function DetailsCard({
 
   return (
     <Card className="p-4">
-      <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">Details</h3>
+      <h3 className="mb-3 text-h3 text-gray-900">Details</h3>
       <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>

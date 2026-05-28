@@ -38,7 +38,7 @@ export function AppraisalsSection({
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="flex items-center gap-2 text-h3 text-gray-900">
           <ClipboardList className="h-4 w-4" /> Appraisals
         </h3>
       </div>

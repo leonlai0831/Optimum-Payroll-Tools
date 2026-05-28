@@ -78,7 +78,7 @@ export function SettingsForm({
     return (
       <Card className="p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-indigo-700">
+          <h3 className="text-h3 text-gray-900">
             {key === "personalKpi" ? "Personal KPI metrics" : "Center KPI metrics"}
           </h3>
           <span className={cn("text-xs font-bold", ok ? "text-green-600" : "text-red-600")}>
@@ -190,7 +190,7 @@ export function SettingsForm({
       {renderMetrics("centerKpi", centerOk)}
 
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="mb-3 text-h3 text-gray-900">
           Center student targets
         </h3>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -214,7 +214,7 @@ export function SettingsForm({
       </Card>
 
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="mb-3 text-h3 text-gray-900">
           Grade thresholds
         </h3>
         <div className="grid grid-cols-3 gap-3">
