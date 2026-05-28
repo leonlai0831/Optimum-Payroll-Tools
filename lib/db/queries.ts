@@ -365,6 +365,26 @@ export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> 
 }
 
 /**
+ * Save the allowance rate tables while preserving the stored centers list.
+ * Centers are managed via Staff -> Settings; the rates form must never overwrite
+ * them, even if the payload carries a stale or empty `centers` array.
+ */
+export async function saveAllowanceRates(payload: AllowanceConfig): Promise<void> {
+  const current = await getAllowanceConfig();
+  await saveAllowanceConfig({ ...payload, centers: current.centers });
+}
+
+/**
+ * Replace the centers list while preserving the allowance rate tables.
+ * Trims, drops blanks, and dedupes (order-preserving).
+ */
+export async function saveCenters(centers: readonly unknown[]): Promise<void> {
+  const normalized = [...new Set(centers.map((c) => String(c).trim()).filter(Boolean))];
+  const current = await getAllowanceConfig();
+  await saveAllowanceConfig({ ...current, centers: normalized });
+}
+
+/**
  * Resolve (or create) the coach profile an allowance record belongs to, and
  * remember the pay tier for next month. Returns the coach id. Mirrors the
  * matching in `upsertCoachesFromRun`, but only touches `allowanceTier`/`center`

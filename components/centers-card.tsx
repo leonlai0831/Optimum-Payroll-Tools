@@ -49,9 +49,9 @@ export function CentersCard({ initial, canEdit = true }: { initial: string[]; ca
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+        <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
           <Building2 className="h-5 w-5 text-indigo-500" /> Centers
-        </h1>
+        </h2>
         {canEdit ? (
           <Button onClick={save} disabled={busy}>
             {busy ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save centers"}

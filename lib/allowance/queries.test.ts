@@ -93,6 +93,27 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     expect(list[0].teaching).toBe(120);
   });
 
+  it("saveAllowanceRates preserves the centers list even when the payload clears them", async () => {
+    await queries.saveCenters(["HQ", "BK", "PJ"]);
+    const before = await queries.getAllowanceConfig();
+    // A rates save that arrives with empty centers must NOT wipe the stored list.
+    await queries.saveAllowanceRates({ ...before, centers: [] });
+    expect((await queries.getAllowanceConfig()).centers).toEqual(["HQ", "BK", "PJ"]);
+  });
+
+  it("saveCenters trims/dedupes and leaves the rate tables alone", async () => {
+    const before = await queries.getAllowanceConfig();
+    // Mutate a rate value so we can prove a centers save doesn't disturb it.
+    await queries.saveAllowanceConfig({
+      ...before,
+      attendance: { ...before.attendance, T0: { met: 999, perfect: 999 } },
+    });
+    await queries.saveCenters(["A", " B ", "B", ""]);
+    const after = await queries.getAllowanceConfig();
+    expect(after.centers).toEqual(["A", "B"]);
+    expect(after.attendance.T0).toEqual({ met: 999, perfect: 999 });
+  });
+
   it("gets and deletes a saved allowance", async () => {
     const cfg = await queries.getAllowanceConfig();
     const id = await queries.createAllowanceRun({
