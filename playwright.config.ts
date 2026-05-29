@@ -16,12 +16,13 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: "list",
+  reporter: [["list"], ["html", { open: "never" }]],
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
     baseURL: process.env.BASE_URL || "http://localhost:3000",
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
