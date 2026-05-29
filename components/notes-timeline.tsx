@@ -66,6 +66,7 @@ export function NotesTimeline({
 
 function AddNote({ coachId }: { coachId: number }) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<NoteType>("general");
   const [noteDate, setNoteDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -74,7 +75,6 @@ function AddNote({ coachId }: { coachId: number }) {
   const [severity, setSeverity] = useState<NoteSeverity>("low");
   const [followUp, setFollowUp] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
   function reset() {
     setType("general");
@@ -83,16 +83,14 @@ function AddNote({ coachId }: { coachId: number }) {
     setBody("");
     setSeverity("low");
     setFollowUp(false);
-    setError("");
   }
 
   async function submit() {
     if (!title.trim()) {
-      setError("A title is required.");
+      toast.error("A title is required.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       const res = await fetch(`/api/staff/${coachId}/notes`, {
         method: "POST",
@@ -110,11 +108,12 @@ function AddNote({ coachId }: { coachId: number }) {
         const d = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(d.error || "Save failed");
       }
+      toast.success("Note saved.");
       reset();
       setOpen(false);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -219,7 +218,6 @@ function AddNote({ coachId }: { coachId: number }) {
           Needs follow-up
         </label>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3">
         <Button onClick={submit} disabled={busy}>
           {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save note

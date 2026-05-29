@@ -221,8 +221,8 @@ function UserRow({
   actorIsSuperAdmin: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // A non-super admin cannot change the super_admin role on a row.
@@ -230,7 +230,6 @@ function UserRow({
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
-    setError("");
     try {
       const res = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
@@ -243,7 +242,7 @@ function UserRow({
       }
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Update failed");
+      toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
@@ -258,7 +257,6 @@ function UserRow({
   async function remove() {
     setConfirmDelete(false);
     setBusy(true);
-    setError("");
     try {
       const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -267,7 +265,7 @@ function UserRow({
       }
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed");
+      toast.error(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
@@ -277,7 +275,6 @@ function UserRow({
       <td className="px-4 py-2 font-medium text-gray-800">
         {user.email}
         {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
-        {error && <div className="text-[11px] text-red-600">{error}</div>}
       </td>
       <td className="px-4 py-2">
         <Select

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, Plus, Save, UserPlus, Users, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
@@ -77,9 +78,12 @@ export function StaffDirectory({
         </div>
 
         {employees.length === 0 ? (
-          <p className="p-8 text-center text-sm text-gray-500">
-            No employees yet.{canEdit ? " Use “Add employee” above to create one." : ""}
-          </p>
+          <EmptyState
+            bare
+            icon={Users}
+            title="No employees yet"
+            body={canEdit ? "Use “Add employee” above to create one." : undefined}
+          />
         ) : (
           <>
             <TableToolbar>
@@ -278,6 +282,7 @@ function DirectoryRow({
 
 function AddEmployee({ centers }: { centers: string[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [jobRole, setJobRole] = useState<EmployeeRole>("instructor");
@@ -285,7 +290,6 @@ function AddEmployee({ centers }: { centers: string[] }) {
   const [center, setCenter] = useState("");
   const [tier, setTier] = useState<AllowanceTier | "">("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
   function reset() {
     setName("");
@@ -293,16 +297,14 @@ function AddEmployee({ centers }: { centers: string[] }) {
     setEmploymentType("full_time");
     setCenter("");
     setTier("");
-    setError("");
   }
 
   async function submit() {
     if (!name.trim()) {
-      setError("Name required");
+      toast.error("Name required.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       const res = await fetch("/api/coaches", {
         method: "POST",
@@ -315,12 +317,16 @@ function AddEmployee({ centers }: { centers: string[] }) {
           allowanceTier: tier || null,
         }),
       });
-      if (!res.ok) throw new Error("Create failed");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Create failed");
+      }
+      toast.success("Employee created.");
       reset();
       setOpen(false);
       router.refresh();
-    } catch {
-      setError("Create failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Create failed");
     } finally {
       setBusy(false);
     }
@@ -413,7 +419,6 @@ function AddEmployee({ centers }: { centers: string[] }) {
           </Select>
         </div>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3 flex items-center gap-2">
         <Button onClick={submit} disabled={busy || !name.trim()}>
           {busy ? <Spinner /> : <Plus className="h-4 w-4" />} Create
