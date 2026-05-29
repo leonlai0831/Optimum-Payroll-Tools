@@ -100,6 +100,12 @@ export default function LoginPage() {
               "Sign In"
             )}
           </Button>
+          <p className="text-center text-xs text-gray-400">
+            Trouble signing in?{" "}
+            <a href="/setup" className="font-medium text-gray-500 hover:text-brand hover:underline">
+              Check setup status
+            </a>
+          </p>
         </form>
       </Card>
     </div>
