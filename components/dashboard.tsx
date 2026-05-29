@@ -6,6 +6,7 @@ import { Download, FileUp, Save, Sparkles, TriangleAlert } from "lucide-react";
 import { Drawer } from "@/components/drawer";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { Skeleton } from "@/components/skeleton";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
@@ -116,11 +117,9 @@ export function Dashboard({
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [savedId, setSavedId] = useState<number | null>(null);
-  const [error, setError] = useState("");
 
   async function onFile(file: File) {
     setParsing(true);
-    setError("");
     Papa.parse<Record<string, unknown>>(file, {
       header: true,
       skipEmptyLines: true,
@@ -211,13 +210,13 @@ export function Dashboard({
           setPhase("working");
           await applyAllowanceForPeriod(derivedPeriod);
         } catch (e) {
-          setError(e instanceof Error ? e.message : "Failed to process file");
+          toast.error(e instanceof Error ? e.message : "Failed to process file");
         } finally {
           setParsing(false);
         }
       },
       error: (err) => {
-        setError(err.message);
+        toast.error(err.message);
         setParsing(false);
       },
     });
@@ -448,7 +447,6 @@ export function Dashboard({
               onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
             />
           </label>
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </Card>
       </div>
     );
@@ -802,9 +800,11 @@ function CoachDetail(props: DetailProps) {
             <Sparkles className="h-4 w-4 text-accent" /> AI Insight
           </p>
           {loading ? (
-            <p className="flex items-center gap-2 text-sm text-indigo-700">
-              <Spinner className="text-indigo-500" /> Analyzing…
-            </p>
+            <div className="space-y-2" role="status" aria-label="Analyzing">
+              <Skeleton className="h-3.5 w-full bg-indigo-100" />
+              <Skeleton className="h-3.5 w-[92%] bg-indigo-100" />
+              <Skeleton className="h-3.5 w-3/4 bg-indigo-100" />
+            </div>
           ) : (
             <p className="text-sm leading-relaxed text-gray-800">{insight}</p>
           )}
