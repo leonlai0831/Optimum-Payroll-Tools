@@ -1,9 +1,12 @@
-# Optimum Swim School — KPI & Bonus Dashboard
+# Optimum Payroll Tools
 
-A rebuild of the original single-file `KPI_Calculator_v11.1.html` as a deployable
-Next.js app with cloud-saved monthly history, AI-assisted instructor-name merging,
-per-coach manual inputs with a readiness checklist, month-over-month trends, and
-real Claude performance analysis.
+Optimum Swim School's payroll calculators. The post-login hub lists the tools — **Staff
+Allowance** and **Instructor KPI Bonus** today, with **Admin KPI Bonus** planned.
+
+The **Instructor KPI Bonus** tool (documented below) is a rebuild of the original single-file
+`KPI_Calculator_v11.1.html` as a deployable Next.js app with cloud-saved monthly history,
+AI-assisted instructor-name merging, per-coach manual inputs with a readiness checklist,
+month-over-month trends, and real Claude performance analysis.
 
 ## What it does
 
@@ -70,6 +73,9 @@ npm run build
    ```
    (or `npm run db:push`). Re-run after future schema changes.
 5. Deploy. The app is gated by the shared password on every route.
+
+> The Vercel **project name** (and its default `*.vercel.app` URL) is set in the dashboard under
+> **Settings → General** — it's independent of the in-app product name and isn't stored in this repo.
 
 > `.npmrc` sets `legacy-peer-deps=true` so installs succeed on the Next 16 / React 19
 > peer ranges — keep it for Vercel's install step.

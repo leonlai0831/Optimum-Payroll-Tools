@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
 import { deleteRun, getRun } from "@/lib/db/queries";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
@@ -11,7 +12,8 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
 }
 
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = await requireCapability("run_kpi");
+  if (denied) return denied;
   const { id } = await ctx.params;
   await deleteRun(Number(id));
   return NextResponse.json({ ok: true });

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
-import { Download, FileUp, Save, Sparkles, TriangleAlert, X } from "lucide-react";
+import { Download, FileUp, Save, Sparkles, TriangleAlert } from "lucide-react";
+import { Drawer } from "@/components/drawer";
+import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
@@ -11,6 +13,9 @@ import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
 import { cn, rm } from "@/lib/utils";
+import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
+
+const GRADE_RANK: Record<string, number> = { S: 4, A: 3, B: 2, C: 1 };
 
 interface CoachProfile {
   id: number;
@@ -34,10 +39,35 @@ interface GroupInputs {
   canonicalName: string;
   position: Position;
   allowance: number | null;
+  /** Where the active allowance came from (drives the badge + re-fetch behavior). */
+  allowanceSource: "auto" | "carryover" | "manual" | null;
+  /** Profile carry-over (last month's allowance), used as a fallback. */
+  carryAllowance: number | null;
   mgmt: number | null;
+  /** Where the active mgmt assessment came from (drives the hint). */
+  mgmtSource: "appraisal" | "carryover" | "manual" | null;
   lastMgmtAt: string | null;
   coachId: number | null;
   groupConfig: GroupConfig | null;
+}
+
+/** A coach's saved teaching allowance for the selected period (from /api/allowance/runs). */
+interface AllowanceRec {
+  coachId: number | null;
+  canonicalName: string;
+  teaching: number;
+}
+
+/** Match a merged coach to a period's allowance record: prefer coachId, else canonical name. */
+function matchAllowance(
+  list: AllowanceRec[],
+  coachId: number | null,
+  canonicalName: string,
+): number | null {
+  const rec =
+    (coachId != null ? list.find((r) => r.coachId === coachId) : undefined) ??
+    list.find((r) => r.canonicalName === canonicalName);
+  return rec ? rec.teaching : null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -67,7 +97,12 @@ function monthsAgo(iso: string | null): string {
   return `${Math.floor(days / 30)} mo ago`;
 }
 
-export function Dashboard() {
+export function Dashboard({
+  appraisalOverall = {},
+}: {
+  /** Latest appraisal overall (0–100) keyed by coachId, to prefill the mgmt assessment. */
+  appraisalOverall?: Record<string, number>;
+}) {
   const [phase, setPhase] = useState<"upload" | "working">("upload");
   const [fileName, setFileName] = useState("");
   const [period, setPeriod] = useState("");
@@ -79,6 +114,7 @@ export function Dashboard() {
   const [parsing, setParsing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [savedId, setSavedId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
@@ -93,7 +129,8 @@ export function Dashboard() {
           const parsed = mapCsvRows(res.data);
           setRows(parsed);
           setFileName(file.name);
-          setPeriod(derivePeriod(file.name));
+          const derivedPeriod = derivePeriod(file.name);
+          setPeriod(derivedPeriod);
 
           const [cfg, coachList] = await Promise.all([
             fetchJson<AppConfig>("/api/config"),
@@ -149,11 +186,21 @@ export function Dashboard() {
                 c.canonicalName === g.canonicalName ||
                 (c.aliases ?? []).some((al) => g.accounts.includes(al)),
             );
+            const appraisalMgmt =
+              profile?.id != null ? appraisalOverall[String(profile.id)] : undefined;
             nextMeta[id] = {
               canonicalName: g.canonicalName,
               position: profile?.defaultPosition ?? "Instructor",
               allowance: profile?.lastAllowance ?? null,
-              mgmt: profile?.lastMgmtAssessment ?? null,
+              allowanceSource: profile?.lastAllowance != null ? "carryover" : null,
+              carryAllowance: profile?.lastAllowance ?? null,
+              mgmt: appraisalMgmt ?? profile?.lastMgmtAssessment ?? null,
+              mgmtSource:
+                appraisalMgmt != null
+                  ? "appraisal"
+                  : profile?.lastMgmtAssessment != null
+                    ? "carryover"
+                    : null,
               lastMgmtAt: profile?.lastMgmtAssessmentAt ?? null,
               coachId: profile?.id ?? null,
               groupConfig: null,
@@ -162,6 +209,7 @@ export function Dashboard() {
           setAccts(nextAccts);
           setMeta(nextMeta);
           setPhase("working");
+          await applyAllowanceForPeriod(derivedPeriod);
         } catch (e) {
           setError(e instanceof Error ? e.message : "Failed to process file");
         } finally {
@@ -172,6 +220,40 @@ export function Dashboard() {
         setError(err.message);
         setParsing(false);
       },
+    });
+  }
+
+  /** Fetch the period's saved allowances and overlay them onto each coach's teaching allowance. */
+  async function applyAllowanceForPeriod(p: string) {
+    if (!p) return;
+    let list: AllowanceRec[];
+    try {
+      list = await fetchJson<AllowanceRec[]>(`/api/allowance/runs?period=${encodeURIComponent(p)}`);
+    } catch {
+      return; // no allowances saved for this period — keep carry-over values
+    }
+    setMeta((prev) => {
+      const next: Record<string, GroupInputs> = {};
+      for (const [id, m] of Object.entries(prev)) {
+        if (m.allowanceSource === "manual") {
+          next[id] = m; // never clobber a manual override
+          continue;
+        }
+        const auto = matchAllowance(list, m.coachId, m.canonicalName);
+        if (auto != null) {
+          next[id] = { ...m, allowance: auto, allowanceSource: "auto" };
+        } else if (m.allowanceSource === "auto") {
+          // an auto value from a different period no longer applies — fall back to carry-over
+          next[id] = {
+            ...m,
+            allowance: m.carryAllowance,
+            allowanceSource: m.carryAllowance != null ? "carryover" : null,
+          };
+        } else {
+          next[id] = m;
+        }
+      }
+      return next;
     });
   }
 
@@ -203,7 +285,41 @@ export function Dashboard() {
     return list.sort((a, b) => b.comp.finalScore - a.comp.finalScore);
   }, [accts, meta, rows, config]);
 
-  const incompleteCount = groups.filter((g) => !g.comp.isComplete).length;
+  // Only coaches with a teaching allowance (auto-linked or manual) appear in the leaderboard.
+  const ranked = useMemo(() => groups.filter((g) => (g.meta.allowance ?? 0) > 0), [groups]);
+  const hiddenCount = groups.length - ranked.length;
+  const incompleteCount = ranked.filter((g) => !g.comp.isComplete).length;
+
+  // Display-only sort/filter — save() and exportCsv() always use the full `ranked` list.
+  const [q, setQ] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const filtered = useMemo(
+    () =>
+      ranked.filter((g) => {
+        if (!includesText(`${g.meta.canonicalName} ${g.center}`, q)) return false;
+        if (positionFilter && g.meta.position !== positionFilter) return false;
+        if (gradeFilter && !(g.comp.isComplete && g.comp.grade === gradeFilter)) return false;
+        return true;
+      }),
+    [ranked, q, positionFilter, gradeFilter],
+  );
+  const {
+    sorted: visible,
+    sort,
+    toggleSort,
+  } = useTableSort(
+    filtered,
+    {
+      name: (g) => g.meta.canonicalName,
+      students: (g) => g.comp.students,
+      position: (g) => g.meta.position,
+      score: (g) => (g.comp.isComplete ? g.comp.finalScore : null),
+      grade: (g) => (g.comp.isComplete ? (GRADE_RANK[g.comp.grade] ?? 0) : null),
+      payout: (g) => (g.comp.isComplete ? g.comp.payout : null),
+    },
+    { key: "score", dir: "desc" },
+  );
 
   function updateMeta(id: string, patch: Partial<GroupInputs>) {
     setMeta((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -220,7 +336,10 @@ export function Dashboard() {
           canonicalName: getCleanName(name),
           position: "Instructor",
           allowance: null,
+          allowanceSource: null,
+          carryAllowance: null,
           mgmt: null,
+          mgmtSource: null,
           lastMgmtAt: null,
           coachId: null,
           groupConfig: null,
@@ -234,8 +353,7 @@ export function Dashboard() {
   async function save() {
     if (!config) return;
     setSaving(true);
-    setError("");
-    const coachResults: RunCoach[] = groups.map((g) => ({
+    const coachResults: RunCoach[] = ranked.map((g) => ({
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
       accounts: g.names,
@@ -268,8 +386,9 @@ export function Dashboard() {
       if (!res.ok) throw new Error((await res.json()).error || "Save failed");
       const { id } = (await res.json()) as { id: number };
       setSavedId(id);
+      toast.success("Month saved.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -287,7 +406,7 @@ export function Dashboard() {
       "Payout (RM)",
       "Complete",
     ];
-    const lines = groups.map((g) =>
+    const lines = ranked.map((g) =>
       [
         `"${g.meta.canonicalName}"`,
         `"${g.center}"`,
@@ -315,8 +434,8 @@ export function Dashboard() {
           <FileUp className="mx-auto mb-3 h-10 w-10 text-indigo-500" />
           <h2 className="text-lg font-bold text-gray-900">Upload monthly KPI CSV</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Names are auto-merged with AI; you&apos;ll then fill in each coach&apos;s allowance and
-            management assessment.
+            Names are auto-merged with AI. Each coach&apos;s teaching allowance auto-links from the
+            Allowance Calculator (override anytime); just fill in the management assessment.
           </p>
           <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
             {parsing ? <Spinner /> : <FileUp className="h-4 w-4" />}
@@ -346,9 +465,13 @@ export function Dashboard() {
             <Label htmlFor="period">Period</Label>
             <Input
               id="period"
+              type="month"
               value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="mt-1 w-32"
+              onChange={(e) => {
+                setPeriod(e.target.value);
+                void applyAllowanceForPeriod(e.target.value);
+              }}
+              className="mt-1 w-40"
             />
           </div>
           <div className="text-xs text-gray-500">
@@ -372,16 +495,14 @@ export function Dashboard() {
             <Download className="h-4 w-4" /> Export
           </Button>
           <Button onClick={save} disabled={saving}>
-            {saving ? <Spinner /> : <Save className="h-4 w-4" />}
-            {savedId ? "Saved ✓" : "Save month"}
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save month
           </Button>
         </div>
       </Card>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
       {savedId && (
         <p className="text-sm text-green-700">
-          Saved to history. <a className="underline" href={`/history/${savedId}`}>View record →</a>
+          Saved to history. <a className="underline" href={`/kpi/history/${savedId}`}>View record →</a>
         </p>
       )}
 
@@ -390,32 +511,76 @@ export function Dashboard() {
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>{incompleteCount}</strong> coach(es) still need manual data (teaching allowance
-            / management assessment). They&apos;re highlighted below.
+            <strong>{incompleteCount}</strong> coach(es) still need management data (assessment /
+            group hours). They&apos;re highlighted below.
           </span>
         </div>
+      )}
+      {hiddenCount > 0 && (
+        <p className="text-xs text-gray-500">
+          {hiddenCount} coach(es) hidden from the leaderboard — no teaching allowance for {period}.
+          Save it in the Allowance Calculator for the same month to include them.
+        </p>
       )}
 
       {/* Coaches table */}
       <Card className="overflow-hidden">
+        <TableToolbar>
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search coach…"
+            className="w-44 py-1.5 text-xs"
+          />
+          <Select
+            value={positionFilter}
+            onChange={(e) => setPositionFilter(e.target.value)}
+            className="w-auto py-1.5 text-xs"
+          >
+            <option value="">All positions</option>
+            <option value="Instructor">Instructor</option>
+            <option value="Pool Supervisor">Supervisor</option>
+          </Select>
+          <Select
+            value={gradeFilter}
+            onChange={(e) => setGradeFilter(e.target.value)}
+            className="w-auto py-1.5 text-xs"
+          >
+            <option value="">All grades</option>
+            <option value="S">S</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </Select>
+          <span className="ml-auto text-xs text-gray-500">
+            {visible.length} of {ranked.length}
+          </span>
+        </TableToolbar>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Coach</th>
-                <th className="px-3 py-2 text-center">Students</th>
-                <th className="px-3 py-2 text-left">Position</th>
+                <SortTh label="Coach" sortKey="name" sort={sort} onSort={toggleSort} className="px-3" />
+                <SortTh label="Students" sortKey="students" sort={sort} onSort={toggleSort} align="center" className="px-3" />
+                <SortTh label="Position" sortKey="position" sort={sort} onSort={toggleSort} className="px-3" />
                 <th className="px-3 py-2 text-left">Allowance (RM)</th>
                 <th className="px-3 py-2 text-left">Mgmt&nbsp;%</th>
-                <th className="px-3 py-2 text-center">Score</th>
-                <th className="px-3 py-2 text-center">Grade</th>
-                <th className="px-3 py-2 text-right">Payout</th>
+                <SortTh label="Score" sortKey="score" sort={sort} onSort={toggleSort} align="center" className="px-3" />
+                <SortTh label="Grade" sortKey="grade" sort={sort} onSort={toggleSort} align="center" className="px-3" />
+                <SortTh label="Payout" sortKey="payout" sort={sort} onSort={toggleSort} align="right" className="px-3" />
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {groups.map((g, idx) => (
+              {visible.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-gray-500">
+                    No coaches match the current filters.
+                  </td>
+                </tr>
+              ) : (
+                visible.map((g, idx) => (
                 <tr
                   key={g.id}
                   className={cn(
@@ -454,10 +619,17 @@ export function Dashboard() {
                       onChange={(e) =>
                         updateMeta(g.id, {
                           allowance: e.target.value === "" ? null : Number(e.target.value),
+                          allowanceSource: "manual",
                         })
                       }
                       className="w-24 py-1 text-xs"
                     />
+                    {g.meta.allowanceSource === "auto" && (
+                      <div className="text-[10px] font-medium text-brand">auto-linked</div>
+                    )}
+                    {g.meta.allowanceSource === "carryover" && (
+                      <div className="text-[10px] text-gray-400">last month</div>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <Input
@@ -467,15 +639,18 @@ export function Dashboard() {
                       onChange={(e) =>
                         updateMeta(g.id, {
                           mgmt: e.target.value === "" ? null : Number(e.target.value),
+                          mgmtSource: "manual",
                         })
                       }
                       className="w-20 py-1 text-xs"
                     />
-                    {g.meta.lastMgmtAt && (
+                    {g.meta.mgmtSource === "appraisal" ? (
+                      <div className="text-[10px] font-medium text-brand">from latest appraisal</div>
+                    ) : g.meta.lastMgmtAt ? (
                       <div className="text-[10px] text-gray-400">
                         last {monthsAgo(g.meta.lastMgmtAt)}
                       </div>
-                    )}
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 text-center font-bold text-indigo-600">
                     {g.comp.isComplete ? g.comp.finalScore.toFixed(2) : "—"}
@@ -499,7 +674,8 @@ export function Dashboard() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -588,23 +764,18 @@ function CoachDetail(props: DetailProps) {
   const radarData = props.breakdown.map((b) => ({ metric: b.name, score: b.score }));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={props.onClose}>
-      <div
-        className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">{props.name}</h3>
-            <p className="text-xs text-gray-500">
-              {props.position} · {props.students} students
-            </p>
-          </div>
-          <button onClick={props.onClose} className="text-gray-400 hover:text-gray-700">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Drawer
+      open
+      onClose={props.onClose}
+      header={
+        <>
+          <h3 className="text-h2 text-gray-900">{props.name}</h3>
+          <p className="text-caption text-muted">
+            {props.position} · {props.students} students
+          </p>
+        </>
+      }
+    >
         <div className="grid grid-cols-3 gap-2">
           <Card className="p-3">
             <p className="text-[11px] text-gray-500">Final Score</p>
@@ -751,7 +922,6 @@ function CoachDetail(props: DetailProps) {
             Close
           </Button>
         </div>
-      </div>
-    </div>
+    </Drawer>
   );
 }

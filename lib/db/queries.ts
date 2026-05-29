@@ -1,15 +1,53 @@
-import { desc, eq } from "drizzle-orm";
+import { cache } from "react";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "./index";
-import { coaches, config, runs, type CoachRecord, type RunRecord } from "./schema";
+import {
+  allowanceConfig,
+  allowanceRuns,
+  appraisals,
+  coaches,
+  config,
+  notes,
+  performanceConfig,
+  permissionConfig,
+  runs,
+  users,
+  type AllowanceRunRecord,
+  type AppraisalRecord,
+  type CoachRecord,
+  type NoteRecord,
+  type RunRecord,
+  type UserRecord,
+} from "./schema";
+import { hashPassword } from "@/lib/auth/password";
+import { DEFAULT_PERMISSION_CONFIG, type PermissionConfig, type Role } from "@/lib/auth/types";
+import { DEFAULT_PERFORMANCE_CONFIG } from "@/lib/performance/defaults";
+import type {
+  AppraisalRating,
+  EmployeeRole,
+  EmploymentType,
+  NoteSeverity,
+  NoteType,
+  PerformanceConfig,
+} from "@/lib/performance/types";
 import {
   DEFAULT_CENTER_KPI,
   DEFAULT_CENTER_TARGETS,
   DEFAULT_GRADE_THRESHOLDS,
   DEFAULT_PERSONAL_KPI,
 } from "@/lib/kpi/metrics";
+import { DEFAULT_ALLOWANCE_CONFIG } from "@/lib/allowance/defaults";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
 import type { RunCoach } from "@/lib/types";
+import {
+  CENTERS,
+  type AllowanceConfig,
+  type AllowanceInput,
+  type AllowanceResult,
+  type AllowanceTier,
+  type OtherAllowanceItem,
+} from "@/lib/allowance/types";
 
 export function defaultConfig(): AppConfig {
   return {
@@ -21,14 +59,14 @@ export function defaultConfig(): AppConfig {
 }
 
 /** Read the singleton config, seeding defaults on first use. */
-export async function getConfig(): Promise<AppConfig> {
+export const getConfig = cache(async (): Promise<AppConfig> => {
   const db = await getDb();
   const rows = await db.select().from(config).where(eq(config.id, 1)).limit(1);
   if (rows[0]) return rows[0].data;
   const data = defaultConfig();
   await db.insert(config).values({ id: 1, data }).onConflictDoNothing();
   return data;
-}
+});
 
 export async function saveConfig(data: AppConfig): Promise<void> {
   const db = await getDb();
@@ -49,6 +87,111 @@ export async function getKnownCoaches(): Promise<KnownCoach[]> {
   return all
     .filter((c) => c.active)
     .map((c) => ({ canonicalName: c.canonicalName, aliases: c.aliases ?? [] }));
+}
+
+export async function getCoach(id: number): Promise<CoachRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(coaches).where(eq(coaches.id, id)).limit(1);
+  return rows[0];
+}
+
+export interface CoachKpiPoint {
+  period: string;
+  finalScore: number;
+  grade: string;
+  payout: number;
+  students: number;
+}
+
+export interface CoachProfileData {
+  coach: CoachRecord;
+  kpi: CoachKpiPoint[];
+  allowance: AllowanceRunSummary[];
+}
+
+/**
+ * Aggregate one coach's record: identity + KPI history (from saved runs) +
+ * allowance history. KPI rows are matched by coachId, canonical name, or any
+ * merged account/alias — mirroring `upsertCoachesFromRun`'s precedence.
+ */
+export async function getCoachProfile(coachId: number): Promise<CoachProfileData | null> {
+  const coach = await getCoach(coachId);
+  if (!coach) return null;
+  const db = await getDb();
+  const runRows = await db
+    .select({ periodLabel: runs.periodLabel, coachResults: runs.coachResults })
+    .from(runs)
+    .orderBy(runs.createdAt);
+
+  const names = new Set([coach.canonicalName, ...(coach.aliases ?? [])]);
+  const kpi: CoachKpiPoint[] = [];
+  for (const r of runRows) {
+    const rc = r.coachResults.find(
+      (c) =>
+        c.coachId === coachId ||
+        c.canonicalName === coach.canonicalName ||
+        c.accounts.some((a) => names.has(a)),
+    );
+    if (rc) {
+      kpi.push({
+        period: r.periodLabel,
+        finalScore: rc.finalScore,
+        grade: rc.grade,
+        payout: rc.payout,
+        students: rc.students,
+      });
+    }
+  }
+
+  const allowance = (await listAllowanceRuns()).filter(
+    (a) => a.coachId === coachId || a.canonicalName === coach.canonicalName,
+  );
+  return { coach, kpi, allowance };
+}
+
+/** Manually add an employee (distinct from the auto-create on a saved run). */
+export async function createCoach(input: {
+  canonicalName: string;
+  jobRole?: EmployeeRole;
+  employmentType?: EmploymentType;
+  center?: string;
+  allowanceTier?: AllowanceTier | null;
+}): Promise<CoachRecord> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(coaches)
+    .values({
+      canonicalName: input.canonicalName.trim(),
+      jobRole: input.jobRole ?? "instructor",
+      employmentType: input.employmentType ?? "full_time",
+      center: input.center?.trim() ?? "",
+      allowanceTier: input.allowanceTier ?? null,
+    })
+    .returning();
+  return row;
+}
+
+/** Update editable staff profile fields. */
+export async function updateCoach(
+  id: number,
+  patch: Partial<
+    Pick<
+      CoachRecord,
+      "canonicalName" | "center" | "allowanceTier" | "active" | "jobRole" | "employmentType"
+    >
+  >,
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(coaches)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(coaches.id, id));
+}
+
+/** Permanently remove a staff profile. Saved allowance/KPI records are kept. */
+export async function deleteCoach(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(coaches).where(eq(coaches.id, id));
 }
 
 /**
@@ -188,4 +331,432 @@ export async function createRun(input: {
 export async function deleteRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(runs).where(eq(runs.id, id));
+}
+
+// ── Allowance ────────────────────────────────────────────────────────────────
+
+/** Read the singleton allowance rate tables, seeding defaults on first use. */
+export const getAllowanceConfig = cache(async (): Promise<AllowanceConfig> => {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(allowanceConfig)
+    .where(eq(allowanceConfig.id, 1))
+    .limit(1);
+  if (rows[0]) {
+    const data = rows[0].data;
+    // Backfill the center list for configs saved before centers were configurable.
+    if (!Array.isArray(data.centers) || data.centers.length === 0) {
+      data.centers = [...CENTERS];
+    }
+    return data;
+  }
+  const data = structuredClone(DEFAULT_ALLOWANCE_CONFIG);
+  await db.insert(allowanceConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+});
+
+export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(allowanceConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: allowanceConfig.id, set: { data, updatedAt: new Date() } });
+}
+
+/**
+ * Save the allowance rate tables while preserving the stored centers list.
+ * Centers are managed via Staff -> Settings; the rates form must never overwrite
+ * them, even if the payload carries a stale or empty `centers` array.
+ */
+export async function saveAllowanceRates(payload: AllowanceConfig): Promise<void> {
+  const current = await getAllowanceConfig();
+  await saveAllowanceConfig({ ...payload, centers: current.centers });
+}
+
+/**
+ * Replace the centers list while preserving the allowance rate tables.
+ * Trims, drops blanks, and dedupes (order-preserving).
+ */
+export async function saveCenters(centers: readonly unknown[]): Promise<void> {
+  const normalized = [...new Set(centers.map((c) => String(c).trim()).filter(Boolean))];
+  const current = await getAllowanceConfig();
+  await saveAllowanceConfig({ ...current, centers: normalized });
+}
+
+/**
+ * Resolve (or create) the coach profile an allowance record belongs to, and
+ * remember the pay tier for next month. Returns the coach id. Mirrors the
+ * matching in `upsertCoachesFromRun`, but only touches `allowanceTier`/`center`
+ * — never the KPI carry-over fields (`lastAllowance` / `lastMgmtAssessment`).
+ */
+export async function ensureCoachForAllowance(opts: {
+  coachId: number | null;
+  canonicalName: string;
+  center: string;
+  tier: AllowanceTier;
+}): Promise<number> {
+  const db = await getDb();
+  const existing = await listCoaches();
+  const match =
+    (opts.coachId ? existing.find((c) => c.id === opts.coachId) : undefined) ||
+    existing.find((c) => c.canonicalName === opts.canonicalName);
+
+  if (match) {
+    await db
+      .update(coaches)
+      .set({ allowanceTier: opts.tier, center: match.center || opts.center, updatedAt: new Date() })
+      .where(eq(coaches.id, match.id));
+    return match.id;
+  }
+
+  const [row] = await db
+    .insert(coaches)
+    .values({ canonicalName: opts.canonicalName, center: opts.center, allowanceTier: opts.tier })
+    .returning({ id: coaches.id });
+  return row.id;
+}
+
+/**
+ * Save one coach's month. One record per coach per period: any existing
+ * (periodLabel, canonicalName) entry is replaced so re-saving is idempotent.
+ */
+export async function createAllowanceRun(data: {
+  periodLabel: string;
+  input: AllowanceInput;
+  result: AllowanceResult;
+  configSnapshot: AllowanceConfig;
+}): Promise<number> {
+  const db = await getDb();
+  const coachId = await ensureCoachForAllowance({
+    coachId: data.input.coachId,
+    canonicalName: data.input.name,
+    center: data.input.center,
+    tier: data.input.tier,
+  });
+
+  await db
+    .delete(allowanceRuns)
+    .where(
+      and(
+        eq(allowanceRuns.periodLabel, data.periodLabel),
+        eq(allowanceRuns.canonicalName, data.input.name),
+      ),
+    );
+
+  const [row] = await db
+    .insert(allowanceRuns)
+    .values({
+      periodLabel: data.periodLabel,
+      coachId,
+      canonicalName: data.input.name,
+      tier: data.input.tier,
+      center: data.input.center,
+      input: { ...data.input, coachId },
+      result: data.result,
+      configSnapshot: data.configSnapshot,
+    })
+    .returning({ id: allowanceRuns.id });
+  return row.id;
+}
+
+export interface AllowanceRunSummary {
+  id: number;
+  periodLabel: string;
+  coachId: number | null;
+  canonicalName: string;
+  tier: AllowanceTier;
+  center: string;
+  opHours: number;
+  leaveHours: number;
+  attendancePct: number;
+  attendance: number;
+  teaching: number;
+  other: number;
+  otherItems: OtherAllowanceItem[];
+  grandTotal: number;
+  createdAt: Date;
+}
+
+/** List allowance records (optionally one month), with the full breakdown for export. */
+export async function listAllowanceRuns(period?: string): Promise<AllowanceRunSummary[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: allowanceRuns.id,
+      periodLabel: allowanceRuns.periodLabel,
+      coachId: allowanceRuns.coachId,
+      canonicalName: allowanceRuns.canonicalName,
+      tier: allowanceRuns.tier,
+      center: allowanceRuns.center,
+      input: allowanceRuns.input,
+      result: allowanceRuns.result,
+      createdAt: allowanceRuns.createdAt,
+    })
+    .from(allowanceRuns)
+    .where(period ? eq(allowanceRuns.periodLabel, period) : undefined)
+    .orderBy(desc(allowanceRuns.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    periodLabel: r.periodLabel,
+    coachId: r.coachId,
+    canonicalName: r.canonicalName,
+    tier: r.tier,
+    center: r.center,
+    opHours: r.input.opHours,
+    leaveHours: r.input.leaveHours,
+    attendancePct: r.result.attendancePct,
+    attendance: r.result.attendance,
+    teaching: r.result.teaching,
+    other: r.result.other,
+    otherItems: r.input.otherItems ?? [],
+    grandTotal: r.result.grandTotal,
+    createdAt: r.createdAt,
+  }));
+}
+
+export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(allowanceRuns).where(eq(allowanceRuns.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function deleteAllowanceRun(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(allowanceRuns).where(eq(allowanceRuns.id, id));
+}
+
+// ── Users / auth ───────────────────────────────────────────────────────────
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+export async function listUsers(): Promise<UserRecord[]> {
+  const db = await getDb();
+  return db.select().from(users).orderBy(users.email);
+}
+
+export const getUserById = cache(async (id: number): Promise<UserRecord | undefined> => {
+  const db = await getDb();
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return rows[0];
+});
+
+export async function getUserByEmail(email: string): Promise<UserRecord | undefined> {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizeEmail(email)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function countUsers(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select({ id: users.id }).from(users);
+  return rows.length;
+}
+
+export async function createUser(input: {
+  email: string;
+  password: string;
+  role: Role;
+  coachId?: number | null;
+}): Promise<UserRecord> {
+  const db = await getDb();
+  const email = normalizeEmail(input.email);
+  if (await getUserByEmail(email)) {
+    throw new Error("A user with that email already exists.");
+  }
+  const [row] = await db
+    .insert(users)
+    .values({
+      email,
+      passwordHash: hashPassword(input.password),
+      role: input.role,
+      coachId: input.coachId ?? null,
+    })
+    .returning();
+  return row;
+}
+
+export async function updateUser(
+  id: number,
+  patch: {
+    email?: string;
+    role?: Role;
+    active?: boolean;
+    coachId?: number | null;
+    password?: string;
+  },
+): Promise<void> {
+  const db = await getDb();
+  const set: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
+  if (patch.email !== undefined) {
+    const email = normalizeEmail(patch.email);
+    const existing = await getUserByEmail(email);
+    if (existing && existing.id !== id) {
+      throw new Error("A user with that email already exists.");
+    }
+    set.email = email;
+  }
+  if (patch.role !== undefined) set.role = patch.role;
+  if (patch.active !== undefined) set.active = patch.active;
+  if (patch.coachId !== undefined) set.coachId = patch.coachId;
+  if (patch.password) set.passwordHash = hashPassword(patch.password);
+  await db.update(users).set(set).where(eq(users.id, id));
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(users).where(eq(users.id, id));
+}
+
+/** Read the singleton permission matrix, seeding defaults on first use. */
+export const getPermissionConfig = cache(async (): Promise<PermissionConfig> => {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(permissionConfig)
+    .where(eq(permissionConfig.id, 1))
+    .limit(1);
+  if (rows[0]) return rows[0].data;
+  const data = structuredClone(DEFAULT_PERMISSION_CONFIG);
+  await db.insert(permissionConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+});
+
+export async function savePermissionConfig(data: PermissionConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(permissionConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: permissionConfig.id, set: { data, updatedAt: new Date() } });
+}
+
+// ── Performance / appraisals ─────────────────────────────────────────────────
+
+/** Read the singleton appraisal config, seeding defaults on first use. */
+export const getPerformanceConfig = cache(async (): Promise<PerformanceConfig> => {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(performanceConfig)
+    .where(eq(performanceConfig.id, 1))
+    .limit(1);
+  if (rows[0]) return rows[0].data;
+  const data = structuredClone(DEFAULT_PERFORMANCE_CONFIG);
+  await db.insert(performanceConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+});
+
+export async function savePerformanceConfig(data: PerformanceConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(performanceConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: performanceConfig.id, set: { data, updatedAt: new Date() } });
+}
+
+export async function listAppraisalsForCoach(coachId: number): Promise<AppraisalRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(appraisals)
+    .where(eq(appraisals.coachId, coachId))
+    .orderBy(desc(appraisals.reviewDate));
+}
+
+export async function createAppraisal(input: {
+  coachId: number;
+  periodLabel: string;
+  reviewDate: Date;
+  reviewedBy: string;
+  ratings: AppraisalRating[];
+  overallScore: number;
+  comments: string;
+}): Promise<AppraisalRecord> {
+  const db = await getDb();
+  const [row] = await db.insert(appraisals).values(input).returning();
+  return row;
+}
+
+export async function updateAppraisal(
+  id: number,
+  patch: Partial<
+    Pick<AppraisalRecord, "periodLabel" | "reviewDate" | "ratings" | "overallScore" | "comments">
+  >,
+): Promise<void> {
+  const db = await getDb();
+  await db.update(appraisals).set(patch).where(eq(appraisals.id, id));
+}
+
+export async function deleteAppraisal(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(appraisals).where(eq(appraisals.id, id));
+}
+
+export async function listNotesForCoach(coachId: number): Promise<NoteRecord[]> {
+  const db = await getDb();
+  return db.select().from(notes).where(eq(notes.coachId, coachId)).orderBy(desc(notes.noteDate));
+}
+
+export async function createNote(input: {
+  coachId: number;
+  noteDate: Date;
+  type: NoteType;
+  title: string;
+  body: string;
+  severity: NoteSeverity | null;
+  followUp: boolean;
+  authoredBy: string;
+}): Promise<NoteRecord> {
+  const db = await getDb();
+  const [row] = await db.insert(notes).values(input).returning();
+  return row;
+}
+
+export async function deleteNote(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(notes).where(eq(notes.id, id));
+}
+
+/** Latest appraisal overall (0–100) per coach, for prefilling the KPI mgmt assessment. */
+export async function getLatestAppraisalOverallByCoach(): Promise<Map<number, number>> {
+  const db = await getDb();
+  const rows = await db
+    .select({ coachId: appraisals.coachId, overallScore: appraisals.overallScore })
+    .from(appraisals)
+    .orderBy(desc(appraisals.reviewDate));
+  const map = new Map<number, number>();
+  for (const r of rows) {
+    if (!map.has(r.coachId)) map.set(r.coachId, r.overallScore); // desc order ⇒ first seen is latest
+  }
+  return map;
+}
+
+/**
+ * Seed the first super_admin so a fresh deployment is loginable. No-op once any
+ * user exists. In production both env vars are required; locally they fall back
+ * to admin@local / swim123 so dev works with no setup.
+ */
+export async function ensureSuperAdmin(): Promise<void> {
+  const db = await getDb();
+  const existing = await db.select({ id: users.id }).from(users).limit(1);
+  if (existing.length > 0) return;
+
+  const isProd = process.env.NODE_ENV === "production";
+  const email = process.env.SUPER_ADMIN_EMAIL || (isProd ? undefined : "admin@local");
+  const password = process.env.SUPER_ADMIN_PASSWORD || (isProd ? undefined : "swim123");
+  if (!email || !password) return; // prod without creds: cannot seed (login route surfaces this)
+
+  await db
+    .insert(users)
+    .values({
+      email: normalizeEmail(email),
+      passwordHash: hashPassword(password),
+      role: "super_admin",
+      active: true,
+    })
+    .onConflictDoNothing();
 }

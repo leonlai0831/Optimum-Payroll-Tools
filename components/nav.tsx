@@ -2,19 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, History, LayoutDashboard, LogOut, Settings } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { LogOut, UserCog } from "lucide-react";
+import { ROLE_LABELS, type Role } from "@/lib/auth/types";
 
-const links = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/history", label: "History", icon: History },
-  { href: "/trends", label: "Trends", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
-
-export function Nav() {
-  const pathname = usePathname();
+export function Nav({ email, role }: { email: string; role: Role }) {
   const router = useRouter();
 
   async function logout() {
@@ -26,42 +18,39 @@ export function Nav() {
   return (
     <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur no-print">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3">
-        <div className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <Image
-            src="/logo-mark.png"
+            src="/logo-full.png"
             alt="Optimum Swim School"
-            width={240}
-            height={140}
+            width={1080}
+            height={350}
             priority
-            className="h-9 w-auto"
+            className="h-8 w-auto sm:h-9"
           />
-          <div className="hidden sm:block">
-            <p className="text-sm font-bold leading-tight text-gray-900">KPI Dashboard</p>
-            <p className="text-[11px] text-gray-500">Optimum Swim School</p>
-          </div>
-        </div>
+          <span className="hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
+          <span className="hidden text-sm font-semibold text-gray-500 sm:inline">Payroll Tools</span>
+        </Link>
 
-        <div className="flex items-center gap-1">
-          {links.map(({ href, label, icon: Icon }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition sm:px-3",
-                  active ? "bg-brand-light text-brand" : "text-gray-600 hover:bg-gray-100",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{label}</span>
-              </Link>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/account"
+            title="My account"
+            className="hidden text-right leading-tight sm:block rounded-md px-2 py-1 transition hover:bg-gray-100"
+          >
+            <div className="text-xs font-medium text-gray-700">{email}</div>
+            <div className="text-[11px] text-gray-400">{ROLE_LABELS[role]}</div>
+          </Link>
+          <Link
+            href="/account"
+            title="My account"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-indigo-600 sm:hidden"
+          >
+            <UserCog className="h-4 w-4" />
+          </Link>
           <button
             onClick={logout}
             title="Log out"
-            className="ml-1 flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-red-600"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-red-600"
           >
             <LogOut className="h-4 w-4" />
           </button>

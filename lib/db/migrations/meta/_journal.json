@@ -8,6 +8,48 @@
       "when": 1779636060285,
       "tag": "0000_perpetual_justice",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779682647877,
+      "tag": "0001_rare_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779905224571,
+      "tag": "0002_vengeful_agent_zero",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779906049545,
+      "tag": "0003_many_morbius",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779906812106,
+      "tag": "0004_bizarre_centennial",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779907847548,
+      "tag": "0005_outgoing_mandroid",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779908135447,
+      "tag": "0006_nervous_nick_fury",
+      "breakpoints": true
     }
   ]
 }

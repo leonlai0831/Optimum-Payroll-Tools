@@ -32,6 +32,40 @@
   --color-indigo-800: #0a3d99;
   --color-indigo-900: #082e73;
   --color-indigo-950: #051e4d;
+
+  /* Semantic colors (Phase 1 design tokens).
+     Use these instead of ad-hoc red-/green-/amber- shades so success / warning /
+     danger / info / muted are always the same value across the app. Pair `*` with
+     `*-bg` for tinted-background callouts. */
+  --color-success: #16a34a;
+  --color-success-bg: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-bg: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-info: #0061ff;
+  --color-info-bg: #eaf1ff;
+  --color-muted: #6b7280;
+  --color-muted-bg: #f3f4f6;
+}
+
+/* Typography composites (Phase 1 design tokens).
+   Single-class shortcuts that bundle font-size + line-height + weight for each
+   role. Color is intentionally NOT included — pair with `text-gray-900` for
+   headings, `text-muted` for metadata, etc. */
+.text-display { font-size: 1.875rem; line-height: 1.25; font-weight: 700; }
+.text-h1 { font-size: 1.5rem; line-height: 1.25; font-weight: 700; }
+.text-h2 { font-size: 1.125rem; line-height: 1.375; font-weight: 700; }
+.text-h3 { font-size: 1rem; line-height: 1.375; font-weight: 600; }
+.text-body-lg { font-size: 1rem; line-height: 1.5; font-weight: 400; }
+.text-body { font-size: 0.875rem; line-height: 1.5; font-weight: 400; }
+.text-caption { font-size: 0.75rem; line-height: 1.25; font-weight: 500; }
+.text-overline {
+  font-size: 0.75rem;
+  line-height: 1.25;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 body {

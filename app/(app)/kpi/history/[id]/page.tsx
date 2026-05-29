@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getRun } from "@/lib/db/queries";
 import { Badge, Card } from "@/components/ui";
+import { SectionNav } from "@/components/section-nav";
 import { DeleteRunButton } from "@/components/delete-run-button";
 import { rm } from "@/lib/utils";
 
@@ -22,9 +23,10 @@ export default async function RunDetailPage({
 
   return (
     <div className="fade-in space-y-4">
+      <SectionNav section="kpi" />
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/history" className="flex items-center gap-1 text-xs text-indigo-600">
+          <Link href="/kpi/history" className="flex items-center gap-1 text-xs text-indigo-600">
             <ArrowLeft className="h-3 w-3" /> Back to history
           </Link>
           <h1 className="mt-1 text-lg font-bold text-gray-900">{run.periodLabel}</h1>

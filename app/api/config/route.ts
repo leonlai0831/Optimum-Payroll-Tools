@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
 import { getConfig, saveConfig } from "@/lib/db/queries";
 import type { AppConfig } from "@/lib/kpi/types";
 
@@ -9,7 +10,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const denied = await requireCapability("edit_settings");
+  if (denied) return denied;
   const data = (await req.json()) as AppConfig;
   await saveConfig(data);
   return NextResponse.json({ ok: true });
