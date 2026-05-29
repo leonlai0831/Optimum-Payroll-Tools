@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Plus, Save, UserPlus, Users, X } from "lucide-react";
+import { ChevronRight, Plus, Save, UserPlus, Users, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { useToast } from "@/components/toast";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import {
@@ -177,6 +178,7 @@ function DirectoryRow({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const initial = splitCenters(employee.center);
   const [rowCenters, setRowCenters] = useState<string[]>([
     initial[0] ?? "",
@@ -184,8 +186,6 @@ function DirectoryRow({
     initial[2] ?? "",
   ]);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   const joinedCenters = rowCenters
     .map((c) => c.trim())
@@ -195,24 +195,24 @@ function DirectoryRow({
 
   function setCenter(i: number, value: string) {
     setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
-    setSaved(false);
-    setError("");
   }
 
   async function save() {
     setBusy(true);
-    setError("");
     try {
       const res = await fetch(`/api/coaches/${employee.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ center: joinedCenters }),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
-      setSaved(true);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
+      toast.success("Centers updated.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -253,7 +253,6 @@ function DirectoryRow({
       </td>
       <td className="px-4 py-2">
         <div className="flex items-center justify-end gap-2">
-          {error && <span className="text-[11px] text-red-600">{error}</span>}
           {canEdit && (
             <Button
               variant="outline"
@@ -261,14 +260,7 @@ function DirectoryRow({
               onClick={save}
               disabled={busy || !dirty}
             >
-              {busy ? (
-                <Spinner />
-              ) : saved && !dirty ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {saved && !dirty ? "Saved" : "Save"}
+              {busy ? <Spinner /> : <Save className="h-3.5 w-3.5" />} Save
             </Button>
           )}
           <Link

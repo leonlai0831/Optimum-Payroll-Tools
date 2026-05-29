@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { useToast } from "@/components/toast";
 import {
   CartesianGrid,
   Line,
@@ -218,6 +219,7 @@ function DetailsCard({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState(coach.name);
   const [jobRole, setJobRole] = useState<EmployeeRole>(coach.jobRole);
   const [employmentType, setEmploymentType] = useState<EmploymentType>(coach.employmentType);
@@ -230,8 +232,6 @@ function DetailsCard({
   const [tier, setTier] = useState<AllowanceTier | "">(coach.allowanceTier ?? "");
   const [active, setActive] = useState(coach.active);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   const joinedCenters = rowCenters
     .map((c) => c.trim())
@@ -247,23 +247,16 @@ function DetailsCard({
     (tier || null) !== (coach.allowanceTier ?? null) ||
     active !== coach.active;
 
-  function touch() {
-    setSaved(false);
-    setError("");
-  }
-
   function setCenter(i: number, value: string) {
     setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
-    touch();
   }
 
   async function save() {
     if (!name.trim()) {
-      setError("Name required");
+      toast.error("Name required.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       const res = await fetch(`/api/coaches/${coach.id}`, {
         method: "PATCH",
@@ -277,11 +270,14 @@ function DetailsCard({
           active,
         }),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
-      setSaved(true);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
+      toast.success("Profile saved.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -296,7 +292,7 @@ function DetailsCard({
       router.push("/staff");
       router.refresh();
     } catch {
-      setError("Delete failed");
+      toast.error("Delete failed.");
       setBusy(false);
     }
   }
@@ -314,7 +310,6 @@ function DetailsCard({
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
-                touch();
               }}
             />
           </div>
@@ -326,7 +321,6 @@ function DetailsCard({
               value={jobRole}
               onChange={(e) => {
                 setJobRole(e.target.value as EmployeeRole);
-                touch();
               }}
             >
               {EMPLOYEE_ROLES.map((r) => (
@@ -344,7 +338,6 @@ function DetailsCard({
               value={employmentType}
               onChange={(e) => {
                 setEmploymentType(e.target.value as EmploymentType);
-                touch();
               }}
             >
               {EMPLOYMENT_TYPES.map((t) => (
@@ -394,7 +387,6 @@ function DetailsCard({
               value={tier}
               onChange={(e) => {
                 setTier(e.target.value as AllowanceTier | "");
-                touch();
               }}
             >
               <option value="">—</option>
@@ -413,7 +405,6 @@ function DetailsCard({
                 checked={active}
                 onChange={(e) => {
                   setActive(e.target.checked);
-                  touch();
                 }}
               />
               Active
@@ -425,13 +416,11 @@ function DetailsCard({
       {canEdit && (
         <div className="mt-4 flex items-center gap-2">
           <Button onClick={save} disabled={busy || !dirty}>
-            {busy ? <Spinner /> : saved && !dirty ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-            {saved && !dirty ? "Saved" : "Save"}
+            {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save
           </Button>
           <Button variant="outline" onClick={remove} disabled={busy} className="text-red-600">
             <Trash2 className="h-4 w-4" /> Delete
           </Button>
-          {error && <span className="text-sm text-red-600">{error}</span>}
         </div>
       )}
     </Card>
