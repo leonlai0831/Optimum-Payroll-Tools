@@ -1,12 +1,11 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@local";
 const PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "swim123";
-const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "kpi-sample.csv");
+// Relative to the project root (Playwright resolves setInputFiles against cwd).
+const FIXTURE = "e2e/fixtures/kpi-sample.csv";
 
-async function login(page: import("@playwright/test").Page) {
+async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
