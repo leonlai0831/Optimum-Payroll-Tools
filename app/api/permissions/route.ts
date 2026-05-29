@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getPermissionConfig, savePermissionConfig } from "@/lib/db/queries";
+import { getPermissionConfig, recordAudit, savePermissionConfig } from "@/lib/db/queries";
 import {
   CAPABILITIES,
   CONFIGURABLE_ROLES,
@@ -39,5 +39,12 @@ export async function PUT(req: Request) {
     ];
   }
   await savePermissionConfig(clean);
+  await recordAudit({
+    actorId: gate.user.id,
+    actorEmail: gate.user.email,
+    action: "permissions.update",
+    entity: "permission_config",
+    summary: "Updated the role → capability matrix",
+  });
   return NextResponse.json({ ok: true });
 }

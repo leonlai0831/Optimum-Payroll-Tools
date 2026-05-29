@@ -5,6 +5,7 @@ import {
   allowanceConfig,
   allowanceRuns,
   appraisals,
+  auditLog,
   coaches,
   config,
   notes,
@@ -14,6 +15,7 @@ import {
   users,
   type AllowanceRunRecord,
   type AppraisalRecord,
+  type AuditLogRecord,
   type CoachRecord,
   type NoteRecord,
   type RunRecord,
@@ -759,4 +761,41 @@ export async function ensureSuperAdmin(): Promise<void> {
       active: true,
     })
     .onConflictDoNothing();
+}
+
+/* ----------------------------------- audit log ---------------------------------- */
+
+export interface AuditEntry {
+  actorId: number | null;
+  actorEmail: string;
+  action: string;
+  entity: string;
+  entityId?: string | number | null;
+  summary: string;
+}
+
+/**
+ * Append one audit record. Deliberately swallows its own errors — an audit-write
+ * failure must never break (or roll back) the user action that triggered it.
+ */
+export async function recordAudit(entry: AuditEntry): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.insert(auditLog).values({
+      actorId: entry.actorId ?? null,
+      actorEmail: entry.actorEmail,
+      action: entry.action,
+      entity: entry.entity,
+      entityId: entry.entityId == null ? null : String(entry.entityId),
+      summary: entry.summary,
+    });
+  } catch (err) {
+    console.error("recordAudit failed", err);
+  }
+}
+
+/** Most recent audit entries first. */
+export async function listAuditLog(limit = 200): Promise<AuditLogRecord[]> {
+  const db = await getDb();
+  return db.select().from(auditLog).orderBy(desc(auditLog.createdAt), desc(auditLog.id)).limit(limit);
 }

@@ -139,6 +139,24 @@ export const notes = pgTable("notes", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Append-only audit trail of sensitive mutations (who changed what, when).
+ * `actorId` is nullable + has no FK so a later account deletion never erases
+ * history; `actorEmail` snapshots the actor for display. `entityId` is text so
+ * any id (or none) fits.
+ */
+export const auditLog = pgTable("audit_log", {
+  id: serial("id").primaryKey(),
+  actorId: integer("actor_id"),
+  actorEmail: text("actor_email").default("").notNull(),
+  action: text("action").notNull(),
+  entity: text("entity").default("").notNull(),
+  entityId: text("entity_id"),
+  summary: text("summary").default("").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type AuditLogRecord = typeof auditLog.$inferSelect;
 export type UserRecord = typeof users.$inferSelect;
 export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;
 export type PerformanceConfigRecord = typeof performanceConfig.$inferSelect;

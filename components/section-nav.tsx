@@ -8,6 +8,7 @@ import {
   History,
   Home,
   LayoutDashboard,
+  ScrollText,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -63,6 +64,12 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
         requires: { cap: "view_all_staff" },
       },
       { href: "/staff/users", label: "Users", icon: UserCog, requires: { cap: "manage_users" } },
+      {
+        href: "/staff/audit",
+        label: "Audit log",
+        icon: ScrollText,
+        requires: { cap: "view_audit" },
+      },
       {
         href: "/staff/permissions",
         label: "Permissions",
