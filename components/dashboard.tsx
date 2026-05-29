@@ -465,12 +465,13 @@ export function Dashboard({
             <Label htmlFor="period">Period</Label>
             <Input
               id="period"
+              type="month"
               value={period}
               onChange={(e) => {
                 setPeriod(e.target.value);
                 void applyAllowanceForPeriod(e.target.value);
               }}
-              className="mt-1 w-32"
+              className="mt-1 w-40"
             />
           </div>
           <div className="text-xs text-gray-500">
