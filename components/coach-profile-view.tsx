@@ -107,7 +107,12 @@ export function CoachProfileView({
         )}
       </div>
 
-      <DetailsCard coach={coach} centers={centers} canEdit={canEdit} />
+      <DetailsCard
+        key={`${coach.id}-${coach.name}-${coach.center}-${coach.jobRole}-${coach.employmentType}-${coach.allowanceTier ?? ""}-${coach.active}`}
+        coach={coach}
+        centers={centers}
+        canEdit={canEdit}
+      />
       <AppraisalsSection
         coachId={coach.id}
         appraisals={appraisals}
@@ -272,11 +277,11 @@ function DetailsCard({
           active,
         }),
       });
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
       setSaved(true);
       router.refresh();
-    } catch {
-      setError("Save failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }

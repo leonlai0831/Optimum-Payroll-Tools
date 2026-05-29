@@ -107,7 +107,7 @@ function AddAppraisal({
           ratings: ratings.map((r) => ({ key: r.key, score: r.score })),
         }),
       });
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
       reset();
       setOpen(false);
       router.refresh();

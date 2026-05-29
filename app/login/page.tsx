@@ -43,7 +43,8 @@ export default function LoginPage() {
               muted
               playsInline
               preload="auto"
-              aria-label="Signing in…"
+              poster="/logo.png"
+              aria-hidden="true"
             >
               <source src="/logo-animation.mp4" type="video/mp4" />
             </video>

@@ -56,6 +56,38 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(verifyPassword("new", reread!.passwordHash)).toBe(true);
     expect(verifyPassword("old", reread!.passwordHash)).toBe(false);
   });
+
+  it("updateUser changes a user's email and normalizes the new value", async () => {
+    const u = await queries.createUser({ email: "old@x.io", password: "pw", role: "staff" });
+    await queries.updateUser(u.id, { email: "  NEW@X.IO  " });
+    const reread = await queries.getUserById(u.id);
+    expect(reread!.email).toBe("new@x.io");
+  });
+
+  it("updateUser rejects an email already taken by another user", async () => {
+    await queries.createUser({ email: "taken@x.io", password: "pw", role: "staff" });
+    const u = await queries.createUser({ email: "mine@x.io", password: "pw", role: "staff" });
+    await expect(queries.updateUser(u.id, { email: "TAKEN@X.IO" })).rejects.toThrow(
+      /already exists/i,
+    );
+  });
+
+  it("updateUser lets a user keep their own email (no false collision)", async () => {
+    const u = await queries.createUser({ email: "self@x.io", password: "pw", role: "staff" });
+    // Setting to the same address (any casing) must not raise "already exists".
+    await queries.updateUser(u.id, { email: "SELF@X.IO" });
+    const reread = await queries.getUserById(u.id);
+    expect(reread!.email).toBe("self@x.io");
+  });
+
+  it("updateUser can change email and password in one call without clobbering either", async () => {
+    const u = await queries.createUser({ email: "both@x.io", password: "old-pw", role: "staff" });
+    await queries.updateUser(u.id, { email: "both-new@x.io", password: "new-pw" });
+    const reread = await queries.getUserById(u.id);
+    expect(reread!.email).toBe("both-new@x.io");
+    expect(verifyPassword("new-pw", reread!.passwordHash)).toBe(true);
+    expect(verifyPassword("old-pw", reread!.passwordHash)).toBe(false);
+  });
 });
 
 describe("capability matrix (default permission config)", () => {

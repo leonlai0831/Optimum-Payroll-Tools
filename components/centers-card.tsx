@@ -35,7 +35,7 @@ export function CentersCard({ initial, canEdit = true }: { initial: string[]; ca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ centers: payload }),
       });
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
       setCenters(payload);
       setSaved(true);
       router.refresh();

@@ -46,7 +46,7 @@ export function PerformanceOptionsForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dimensions }),
       });
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
       setSaved(true);
       router.refresh();
     } catch (e) {

@@ -149,7 +149,12 @@ export function StaffDirectory({
                     </tr>
                   ) : (
                     sorted.map((e) => (
-                      <DirectoryRow key={e.id} employee={e} centers={centers} canEdit={canEdit} />
+                      <DirectoryRow
+                        key={`${e.id}-${e.center}`}
+                        employee={e}
+                        centers={centers}
+                        canEdit={canEdit}
+                      />
                     ))
                   )}
                 </tbody>
@@ -203,11 +208,11 @@ function DirectoryRow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ center: joinedCenters }),
       });
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
       setSaved(true);
       router.refresh();
-    } catch {
-      setError("Save failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
