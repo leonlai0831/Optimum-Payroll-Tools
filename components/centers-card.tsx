@@ -4,30 +4,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Plus, Save, Trash2 } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 export function CentersCard({ initial, canEdit = true }: { initial: string[]; canEdit?: boolean }) {
   const router = useRouter();
+  const toast = useToast();
   const [centers, setCenters] = useState<string[]>(() => [...initial]);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   function patch(i: number, val: string) {
     setCenters((c) => c.map((x, idx) => (idx === i ? val : x)));
-    setSaved(false);
   }
   function add() {
     setCenters((c) => [...c, ""]);
-    setSaved(false);
   }
   function remove(i: number) {
     setCenters((c) => c.filter((_, idx) => idx !== i));
-    setSaved(false);
   }
 
   async function save() {
     setBusy(true);
-    setError("");
     try {
       const payload = [...new Set(centers.map((c) => c.trim()).filter(Boolean))];
       const res = await fetch("/api/allowance/centers", {
@@ -35,12 +31,15 @@ export function CentersCard({ initial, canEdit = true }: { initial: string[]; ca
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ centers: payload }),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
       setCenters(payload);
-      setSaved(true);
+      toast.success("Centers saved.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -54,7 +53,7 @@ export function CentersCard({ initial, canEdit = true }: { initial: string[]; ca
         </h2>
         {canEdit ? (
           <Button onClick={save} disabled={busy}>
-            {busy ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save centers"}
+            {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save centers
           </Button>
         ) : (
           <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
@@ -62,7 +61,6 @@ export function CentersCard({ initial, canEdit = true }: { initial: string[]; ca
           </span>
         )}
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
         <Card className="p-4">

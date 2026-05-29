@@ -4,16 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { Button, Card, Input, Label, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
 
 export function AccountForm({ email, role }: { email: string; role: Role }) {
   const router = useRouter();
+  const toast = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newEmail, setNewEmail] = useState(email);
   const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   const dirty =
     newEmail.trim().toLowerCase() !== email.toLowerCase() || newPassword.length > 0;
@@ -21,8 +21,6 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError("");
-    setSaved(false);
     try {
       const res = await fetch("/api/users/me", {
         method: "PATCH",
@@ -38,12 +36,12 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error || "Save failed");
       }
-      setSaved(true);
+      toast.success("Account updated.");
       setCurrentPassword("");
       setNewPassword("");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -63,10 +61,7 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
             type="email"
             autoComplete="email"
             value={newEmail}
-            onChange={(e) => {
-              setNewEmail(e.target.value);
-              setSaved(false);
-            }}
+            onChange={(e) => setNewEmail(e.target.value)}
             className="mt-1"
             required
           />
@@ -78,10 +73,7 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
             type="password"
             autoComplete="new-password"
             value={newPassword}
-            onChange={(e) => {
-              setNewPassword(e.target.value);
-              setSaved(false);
-            }}
+            onChange={(e) => setNewPassword(e.target.value)}
             placeholder="Leave blank to keep current password"
             className="mt-1"
           />
@@ -98,10 +90,6 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
             required
           />
         </div>
-        {error && <p className="text-body text-danger">{error}</p>}
-        {saved && !error && (
-          <p className="text-body text-success">Saved ✓ Your changes are in effect.</p>
-        )}
         <div className="flex justify-end">
           <Button type="submit" disabled={busy || !dirty || !currentPassword}>
             {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save changes
