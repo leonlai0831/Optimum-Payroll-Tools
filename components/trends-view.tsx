@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { BarChart3 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import type { TrendData } from "@/lib/db/queries";
 
@@ -29,9 +30,11 @@ export function TrendsView({ data }: { data: TrendData }) {
 
   if (data.periods.length === 0) {
     return (
-      <Card className="p-8 text-center text-sm text-gray-500">
-        No saved months yet — save at least one month to see trends.
-      </Card>
+      <EmptyState
+        icon={BarChart3}
+        title="No saved months yet"
+        body="Save at least one month on the Dashboard to start seeing month-over-month trends."
+      />
     );
   }
 

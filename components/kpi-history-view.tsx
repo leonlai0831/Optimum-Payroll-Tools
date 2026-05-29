@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { History } from "lucide-react";
 import { Card, Input } from "@/components/ui";
+import { EmptyState } from "@/components/empty-state";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import type { RunSummary } from "@/lib/db/queries";
 import { rm } from "@/lib/utils";
@@ -25,9 +27,11 @@ export function KpiHistoryView({ runs }: { runs: RunSummary[] }) {
 
   if (runs.length === 0) {
     return (
-      <Card className="p-8 text-center text-sm text-gray-500">
-        No saved months yet. Upload a CSV on the Dashboard and click “Save month”.
-      </Card>
+      <EmptyState
+        icon={History}
+        title="No saved months yet"
+        body="Upload a CSV on the Dashboard and click “Save month” to start building your history."
+      />
     );
   }
 

@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { History, Search } from "lucide-react";
 import { Card, Input, Select } from "@/components/ui";
+import { EmptyState } from "@/components/empty-state";
 import { AllowanceExportButton } from "@/components/allowance-export-button";
 import {
   SortTh,
@@ -65,9 +67,11 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
 
   if (rows.length === 0) {
     return (
-      <Card className="p-8 text-center text-sm text-gray-500">
-        No allowances saved yet. Compute one on the Calculator tab and click “Save”.
-      </Card>
+      <EmptyState
+        icon={History}
+        title="No allowances saved yet"
+        body="Compute one on the Calculator tab and click “Save” to start the history."
+      />
     );
   }
 
@@ -109,9 +113,11 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
       </Card>
 
       {groups.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-gray-500">
-          No records match the current filters.
-        </Card>
+        <EmptyState
+          icon={Search}
+          title="No records match the current filters"
+          body="Try clearing a filter or widening the search."
+        />
       ) : (
         groups.map((list) => {
           const period = list[0].periodLabel;
