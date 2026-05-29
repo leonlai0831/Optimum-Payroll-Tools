@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { useToast } from "@/components/toast";
+import { ConfirmModal } from "@/components/modal";
 import {
   CartesianGrid,
   Line,
@@ -232,6 +233,7 @@ function DetailsCard({
   const [tier, setTier] = useState<AllowanceTier | "">(coach.allowanceTier ?? "");
   const [active, setActive] = useState(coach.active);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const joinedCenters = rowCenters
     .map((c) => c.trim())
@@ -284,7 +286,7 @@ function DetailsCard({
   }
 
   async function remove() {
-    if (!confirm(`Delete ${coach.name}? Saved KPI/allowance records are kept.`)) return;
+    setConfirmDelete(false);
     setBusy(true);
     try {
       const res = await fetch(`/api/coaches/${coach.id}`, { method: "DELETE" });
@@ -418,11 +420,25 @@ function DetailsCard({
           <Button onClick={save} disabled={busy || !dirty}>
             {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save
           </Button>
-          <Button variant="outline" onClick={remove} disabled={busy} className="text-red-600">
+          <Button
+            variant="outline"
+            onClick={() => setConfirmDelete(true)}
+            disabled={busy}
+            className="text-red-600"
+          >
             <Trash2 className="h-4 w-4" /> Delete
           </Button>
         </div>
       )}
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        title={`Delete ${coach.name}?`}
+        message="Saved KPI and allowance records are kept. This profile and its appraisals/notes will be removed."
+        confirmLabel="Delete profile"
+        busy={busy}
+      />
     </Card>
   );
 }

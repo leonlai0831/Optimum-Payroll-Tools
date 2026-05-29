@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/types";
 
 export interface SafeUser {
@@ -223,6 +224,7 @@ function UserRow({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // A non-super admin cannot change the super_admin role on a row.
   const roleLocked = user.role === "super_admin" && !actorIsSuperAdmin;
@@ -255,7 +257,7 @@ function UserRow({
   }
 
   async function remove() {
-    if (!confirm(`Delete ${user.email}? This cannot be undone.`)) return;
+    setConfirmDelete(false);
     setBusy(true);
     setError("");
     try {
@@ -330,7 +332,7 @@ function UserRow({
           </button>
           {!isSelf && (
             <button
-              onClick={remove}
+              onClick={() => setConfirmDelete(true)}
               disabled={busy}
               className="text-gray-300 transition hover:text-red-500 disabled:opacity-40"
               title="Delete user"
@@ -340,6 +342,15 @@ function UserRow({
           )}
         </div>
       </td>
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        title={`Delete ${user.email}?`}
+        message="This cannot be undone. The account loses access immediately; any linked employee record stays."
+        confirmLabel="Delete user"
+        busy={busy}
+      />
     </tr>
   );
 }

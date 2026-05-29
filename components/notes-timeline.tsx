@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flag, MessageSquare, Plus, Save, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
+import { useToast } from "@/components/toast";
 import {
   NOTE_SEVERITIES,
   NOTE_SEVERITY_LABELS,
@@ -229,16 +231,19 @@ function AddNote({ coachId }: { coachId: number }) {
 
 function NoteCard({ note, canEdit }: { note: NoteView; canEdit: boolean }) {
   const router = useRouter();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function remove() {
-    if (!confirm("Delete this note?")) return;
+    setConfirmDelete(false);
     setBusy(true);
     try {
       const res = await fetch(`/api/staff/notes/${note.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       router.refresh();
     } catch {
+      toast.error("Delete failed.");
       setBusy(false);
     }
   }
@@ -275,7 +280,7 @@ function NoteCard({ note, canEdit }: { note: NoteView; canEdit: boolean }) {
         </div>
         {canEdit && (
           <button
-            onClick={remove}
+            onClick={() => setConfirmDelete(true)}
             disabled={busy}
             className="text-gray-300 transition hover:text-red-500 disabled:opacity-40"
             title="Delete note"
@@ -285,6 +290,15 @@ function NoteCard({ note, canEdit }: { note: NoteView; canEdit: boolean }) {
         )}
       </div>
       {note.body && <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">{note.body}</p>}
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        title="Delete this note?"
+        message="This cannot be undone."
+        confirmLabel="Delete note"
+        busy={busy}
+      />
     </div>
   );
 }

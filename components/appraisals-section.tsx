@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Plus, Save, Star, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
+import { useToast } from "@/components/toast";
 import {
   RATING_MAX,
   RATING_MIN,
@@ -210,16 +212,19 @@ function AddAppraisal({
 
 function AppraisalCard({ appraisal, canEdit }: { appraisal: AppraisalView; canEdit: boolean }) {
   const router = useRouter();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function remove() {
-    if (!confirm("Delete this appraisal?")) return;
+    setConfirmDelete(false);
     setBusy(true);
     try {
       const res = await fetch(`/api/staff/appraisals/${appraisal.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       router.refresh();
     } catch {
+      toast.error("Delete failed.");
       setBusy(false);
     }
   }
@@ -244,7 +249,7 @@ function AppraisalCard({ appraisal, canEdit }: { appraisal: AppraisalView; canEd
         </div>
         {canEdit && (
           <button
-            onClick={remove}
+            onClick={() => setConfirmDelete(true)}
             disabled={busy}
             className="text-gray-300 transition hover:text-red-500 disabled:opacity-40"
             title="Delete appraisal"
@@ -272,6 +277,15 @@ function AppraisalCard({ appraisal, canEdit }: { appraisal: AppraisalView; canEd
       {appraisal.comments && (
         <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">{appraisal.comments}</p>
       )}
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        title="Delete this appraisal?"
+        message="This cannot be undone. The ratings snapshot will be gone."
+        confirmLabel="Delete appraisal"
+        busy={busy}
+      />
     </div>
   );
 }
