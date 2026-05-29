@@ -6,6 +6,7 @@ import { FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { StaffCombobox } from "@/components/staff-combobox";
+import { useToast } from "@/components/toast";
 import { attendanceBracket, calcAllowance } from "@/lib/allowance/calc";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type {
@@ -49,8 +50,8 @@ export function AllowanceCalculator({
   const [teachingRows, setTeachingRows] = useState<TeachingHoursRow[]>([]);
   const [otherItems, setOtherItems] = useState<OtherAllowanceItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [savedId, setSavedId] = useState<number | null>(null);
-  const [error, setError] = useState("");
   const [showReport, setShowReport] = useState(false);
 
   function dirty() {
@@ -134,11 +135,10 @@ export function AllowanceCalculator({
 
   async function save() {
     if (!input.name) {
-      setError("Pick or name a staff member first.");
+      toast.error("Pick or name a staff member first.");
       return;
     }
     setSaving(true);
-    setError("");
     try {
       const res = await fetch("/api/allowance/runs", {
         method: "POST",
@@ -148,8 +148,9 @@ export function AllowanceCalculator({
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error || "Save failed");
       const { id } = (await res.json()) as { id: number };
       setSavedId(id);
+      toast.success("Allowance saved.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -207,8 +208,7 @@ export function AllowanceCalculator({
                 <FileText className="h-4 w-4" /> PDF report
               </Button>
               <Button onClick={save} disabled={saving}>
-                {saving ? <Spinner /> : <Save className="h-4 w-4" />}
-                {savedId ? "Saved ✓" : "Save"}
+                {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save
               </Button>
             </div>
           </div>
@@ -230,7 +230,6 @@ export function AllowanceCalculator({
               </p>
             </div>
           )}
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
           {savedId && (
             <p className="mt-2 text-sm text-green-700">
               Saved.{" "}

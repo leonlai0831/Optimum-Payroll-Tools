@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
 import { Download, FileUp, Save, Sparkles, TriangleAlert } from "lucide-react";
 import { Drawer } from "@/components/drawer";
+import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
@@ -113,6 +114,7 @@ export function Dashboard({
   const [parsing, setParsing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [savedId, setSavedId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
@@ -351,7 +353,6 @@ export function Dashboard({
   async function save() {
     if (!config) return;
     setSaving(true);
-    setError("");
     const coachResults: RunCoach[] = ranked.map((g) => ({
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
@@ -385,8 +386,9 @@ export function Dashboard({
       if (!res.ok) throw new Error((await res.json()).error || "Save failed");
       const { id } = (await res.json()) as { id: number };
       setSavedId(id);
+      toast.success("Month saved.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -492,13 +494,11 @@ export function Dashboard({
             <Download className="h-4 w-4" /> Export
           </Button>
           <Button onClick={save} disabled={saving}>
-            {saving ? <Spinner /> : <Save className="h-4 w-4" />}
-            {savedId ? "Saved ✓" : "Save month"}
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save month
           </Button>
         </div>
       </Card>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
       {savedId && (
         <p className="text-sm text-green-700">
           Saved to history. <a className="underline" href={`/kpi/history/${savedId}`}>View record →</a>
