@@ -20,3 +20,30 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E (Playwright manages its own dev server)
+        run: npm run test:e2e
+      - name: HTTP integration smoke
+        run: |
+          npm run dev > dev.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/login >/dev/null 2>&1 && break; sleep 1; done
+          npm run test:smoke
+          pkill -f "next dev" || true
+          pkill -f next-server || true
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
