@@ -20,6 +20,7 @@ export const CAPABILITIES = [
   "edit_notes",
   "run_kpi",
   "run_allowance",
+  "view_audit",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -34,6 +35,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   edit_notes: "Create/edit notes",
   run_kpi: "Run KPI bonus",
   run_allowance: "Run allowance",
+  view_audit: "View audit log",
 };
 
 /** Roles whose capabilities are configurable (super_admin is always all-access). */
@@ -53,6 +55,7 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "edit_notes",
     "run_kpi",
     "run_allowance",
+    "view_audit",
   ],
   staff: ["view_own"],
 };

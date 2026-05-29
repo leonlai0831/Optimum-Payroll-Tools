@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createUser, listUsers } from "@/lib/db/queries";
+import { createUser, listUsers, recordAudit } from "@/lib/db/queries";
 import { ROLES, type Role } from "@/lib/auth/types";
 import type { UserRecord } from "@/lib/db/schema";
 
@@ -48,6 +48,14 @@ export async function POST(req: Request) {
       password,
       role,
       coachId: body.coachId == null ? null : Number(body.coachId),
+    });
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "user.create",
+      entity: "user",
+      entityId: created.id,
+      summary: `Created user ${created.email} (${role})`,
     });
     return NextResponse.json({ ok: true, id: created.id });
   } catch (e) {

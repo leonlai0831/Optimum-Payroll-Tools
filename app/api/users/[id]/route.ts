@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { deleteUser, getUserById, listUsers, updateUser } from "@/lib/db/queries";
+import { deleteUser, getUserById, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
 import { ROLES, type Role } from "@/lib/auth/types";
 
 async function otherActiveSuperAdmins(exceptId: number) {
@@ -58,6 +58,20 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   }
 
   await updateUser(userId, patch);
+  const changed = [
+    patch.role !== undefined && `role→${patch.role}`,
+    patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
+    patch.coachId !== undefined && "linked employee",
+    patch.password !== undefined && "password reset",
+  ].filter(Boolean);
+  await recordAudit({
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: "user.update",
+    entity: "user",
+    entityId: userId,
+    summary: `Updated ${target.email}${changed.length ? `: ${changed.join(", ")}` : ""}`,
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -88,5 +102,13 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/users/[id]">
   }
 
   await deleteUser(userId);
+  await recordAudit({
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: "user.delete",
+    entity: "user",
+    entityId: userId,
+    summary: `Deleted user ${target.email}`,
+  });
   return NextResponse.json({ ok: true });
 }

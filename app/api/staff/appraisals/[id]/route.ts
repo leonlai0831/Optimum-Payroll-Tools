@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { deleteAppraisal, updateAppraisal } from "@/lib/db/queries";
+import { deleteAppraisal, recordAudit, updateAppraisal } from "@/lib/db/queries";
 import {
   RATING_MAX,
   RATING_MIN,
@@ -48,7 +49,18 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/staff/appraisa
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/staff/appraisals/[id]">) {
   const denied = await requireCapability("edit_appraisals");
   if (denied) return denied;
+  const actor = await getCurrentUser();
   const { id } = await ctx.params;
   await deleteAppraisal(Number(id));
+  if (actor) {
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "appraisal.delete",
+      entity: "appraisal",
+      entityId: id,
+      summary: `Deleted appraisal #${id}`,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createAppraisal, getPerformanceConfig } from "@/lib/db/queries";
+import { createAppraisal, getPerformanceConfig, recordAudit } from "@/lib/db/queries";
 import {
   RATING_MAX,
   RATING_MIN,
@@ -42,14 +42,23 @@ export async function POST(req: Request, ctx: RouteContext<"/api/staff/[id]/appr
   }));
 
   const parsedDate = body.reviewDate ? new Date(body.reviewDate) : new Date();
+  const overallScore = overallFromRatings(ratings);
   await createAppraisal({
     coachId,
     periodLabel: String(body.periodLabel ?? "").trim(),
     reviewDate: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
     reviewedBy: actor.email,
     ratings,
-    overallScore: overallFromRatings(ratings),
+    overallScore,
     comments: String(body.comments ?? "").trim(),
+  });
+  await recordAudit({
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: "appraisal.create",
+    entity: "coach",
+    entityId: coachId,
+    summary: `Added appraisal (overall ${overallScore}) for employee #${coachId}`,
   });
   return NextResponse.json({ ok: true });
 }

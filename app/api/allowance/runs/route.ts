@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
+import { getCurrentUser, isAuthed } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createAllowanceRun, getAllowanceConfig, listAllowanceRuns } from "@/lib/db/queries";
+import {
+  createAllowanceRun,
+  getAllowanceConfig,
+  listAllowanceRuns,
+  recordAudit,
+} from "@/lib/db/queries";
 import { calcAllowance } from "@/lib/allowance/calc";
 import type { AllowanceInput } from "@/lib/allowance/types";
 
@@ -14,6 +19,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const denied = await requireCapability("run_allowance");
   if (denied) return denied;
+  const actor = await getCurrentUser();
   const body = (await req.json()) as { periodLabel: string; input: AllowanceInput };
   if (!body.periodLabel) {
     return NextResponse.json({ error: "periodLabel is required" }, { status: 400 });
@@ -31,5 +37,15 @@ export async function POST(req: Request) {
     result,
     configSnapshot,
   });
+  if (actor) {
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "allowance.save",
+      entity: "allowance_run",
+      entityId: id,
+      summary: `Saved allowance for ${body.input.name.trim()} (${body.periodLabel})`,
+    });
+  }
   return NextResponse.json({ ok: true, id });
 }
