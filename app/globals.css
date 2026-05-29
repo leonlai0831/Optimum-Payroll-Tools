@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f7fb;
+  --foreground: #312b29;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-nunito);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Optimum Swim School brand palette. */
+@theme {
+  --color-brand: #0061ff;
+  --color-brand-dark: #0b4fcc;
+  --color-brand-light: #eaf1ff;
+  --color-accent: #fcb731;
+  --color-accent-bright: #ffca30;
+
+  /* Remap the indigo scale to Brand Blue so the app's existing indigo-* classes adopt the brand. */
+  --color-indigo-50: #eaf1ff;
+  --color-indigo-100: #d6e4ff;
+  --color-indigo-200: #adc8ff;
+  --color-indigo-300: #84a9ff;
+  --color-indigo-400: #4d8bff;
+  --color-indigo-500: #1a75ff;
+  --color-indigo-600: #0061ff;
+  --color-indigo-700: #0b4fcc;
+  --color-indigo-800: #0a3d99;
+  --color-indigo-900: #082e73;
+  --color-indigo-950: #051e4d;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c4d4ee;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9fb8e0;
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-in-out;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
