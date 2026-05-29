@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { KeyRound, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal } from "@/components/modal";
+import { useToast } from "@/components/toast";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/types";
 
 export interface SafeUser {
@@ -70,29 +71,27 @@ export function UserManager({
 
 function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions: Role[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("staff");
   const [coachId, setCoachId] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
   function reset() {
     setEmail("");
     setPassword("");
     setRole("staff");
     setCoachId("");
-    setError("");
   }
 
   async function submit() {
     if (!email.trim() || !password) {
-      setError("Email and password required");
+      toast.error("Email and password required.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       const res = await fetch("/api/users", {
         method: "POST",
@@ -108,11 +107,12 @@ function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions
         const d = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(d.error || "Create failed");
       }
+      toast.success("User created.");
       reset();
       setOpen(false);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Create failed");
+      toast.error(e instanceof Error ? e.message : "Create failed");
     } finally {
       setBusy(false);
     }
@@ -198,7 +198,6 @@ function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions
           </Select>
         </div>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3">
         <Button onClick={submit} disabled={busy || !email.trim() || !password}>
           {busy ? <Spinner /> : <Plus className="h-4 w-4" />} Create
