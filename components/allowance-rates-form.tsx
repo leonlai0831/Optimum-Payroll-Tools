@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, SlidersHorizontal } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type { AllowanceConfig, AllowanceTier } from "@/lib/allowance/types";
 
@@ -15,17 +16,15 @@ export function AllowanceRatesForm({
   canEdit?: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [cfg, setCfg] = useState<AllowanceConfig>(() => structuredClone(initial));
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   function patchAttendance(tier: AllowanceTier, key: "met" | "perfect", val: number) {
     setCfg((c) => ({
       ...c,
       attendance: { ...c.attendance, [tier]: { ...c.attendance[tier], [key]: val } },
     }));
-    setSaved(false);
   }
   function patchTeaching(
     tier: AllowanceTier,
@@ -36,23 +35,24 @@ export function AllowanceRatesForm({
       ...c,
       teaching: { ...c.teaching, [tier]: { ...c.teaching[tier], [key]: val } },
     }));
-    setSaved(false);
   }
 
   async function save() {
     setSaving(true);
-    setError("");
     try {
       const res = await fetch("/api/allowance/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cfg),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
-      setSaved(true);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
+      toast.success("Allowance rates saved.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -66,7 +66,7 @@ export function AllowanceRatesForm({
         </h1>
         {canEdit ? (
           <Button onClick={save} disabled={saving}>
-            {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save settings"}
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save settings
           </Button>
         ) : (
           <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
@@ -77,7 +77,6 @@ export function AllowanceRatesForm({
       {!canEdit && (
         <p className="text-sm text-gray-500">You have read-only access to these settings.</p>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
       <Card className="overflow-x-auto p-4">

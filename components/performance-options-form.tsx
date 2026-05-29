@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Save, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import type { AppraisalDimension, PerformanceConfig } from "@/lib/performance/types";
 
 export function PerformanceOptionsForm({
@@ -14,29 +15,24 @@ export function PerformanceOptionsForm({
   canEdit?: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [dims, setDims] = useState<AppraisalDimension[]>(() =>
     structuredClone(initial.dimensions),
   );
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   function setLabel(i: number, label: string) {
     setDims((d) => d.map((x, idx) => (idx === i ? { ...x, label } : x)));
-    setSaved(false);
   }
   function remove(i: number) {
     setDims((d) => d.filter((_, idx) => idx !== i));
-    setSaved(false);
   }
   function add() {
     setDims((d) => [...d, { key: "", label: "" }]);
-    setSaved(false);
   }
 
   async function save() {
     setBusy(true);
-    setError("");
     try {
       const dimensions = dims
         .map((d) => ({ key: d.key, label: d.label.trim() }))
@@ -46,11 +42,14 @@ export function PerformanceOptionsForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dimensions }),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
-      setSaved(true);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
+      toast.success("Appraisal options saved.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -64,7 +63,7 @@ export function PerformanceOptionsForm({
         </h2>
         {canEdit ? (
           <Button onClick={save} disabled={busy}>
-            {busy ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save options"}
+            {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save options
           </Button>
         ) : (
           <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
@@ -75,7 +74,6 @@ export function PerformanceOptionsForm({
       {!canEdit && (
         <p className="text-sm text-gray-500">You have read-only access to these settings.</p>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
         <Card className="p-4">

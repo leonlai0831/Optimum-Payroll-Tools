@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, ShieldCheck } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import {
   CAPABILITY_LABELS,
   CONFIGURABLE_ROLES,
@@ -22,33 +23,33 @@ const GROUPS: { title: string; caps: Capability[] }[] = [
 
 export function PermissionsForm({ initial }: { initial: PermissionConfig }) {
   const router = useRouter();
+  const toast = useToast();
   const [cfg, setCfg] = useState<PermissionConfig>(() => structuredClone(initial));
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
 
   function toggle(role: (typeof CONFIGURABLE_ROLES)[number], cap: Capability) {
     setCfg((c) => {
       const has = c[role].includes(cap);
       return { ...c, [role]: has ? c[role].filter((x) => x !== cap) : [...c[role], cap] };
     });
-    setSaved(false);
   }
 
   async function save() {
     setBusy(true);
-    setError("");
     try {
       const res = await fetch("/api/permissions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cfg),
       });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
-      setSaved(true);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
+      toast.success("Permissions saved.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -61,14 +62,13 @@ export function PermissionsForm({ initial }: { initial: PermissionConfig }) {
           <ShieldCheck className="h-5 w-5 text-indigo-500" /> Permissions
         </h1>
         <Button onClick={save} disabled={busy}>
-          {busy ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save"}
+          {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save
         </Button>
       </div>
       <p className="text-sm text-gray-500">
         Choose which capabilities each role has. Super Admin always has full access and cannot be
         changed.
       </p>
-      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <Card className="overflow-x-auto p-0">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
