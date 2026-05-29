@@ -17,7 +17,7 @@ import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { AppraisalsSection, type AppraisalView } from "@/components/appraisals-section";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
-import { rm } from "@/lib/utils";
+import { rm, splitCenters } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import {
   EMPLOYEE_ROLES,
@@ -201,14 +201,6 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
       </div>
     </Card>
   );
-}
-
-/** Centers are stored as one comma-joined string; edited here as up to 3 slots. */
-function splitCenters(center: string): string[] {
-  return center
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean);
 }
 
 function DetailsCard({

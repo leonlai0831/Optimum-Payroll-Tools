@@ -12,15 +12,7 @@ import {
   useSortState,
 } from "@/components/table-controls";
 import type { AllowanceRunSummary } from "@/lib/db/queries";
-import { rm } from "@/lib/utils";
-
-/** Centers are stored as one comma-joined string; the history table shows them in up to 3 columns. */
-function splitCenters(center: string | null | undefined): string[] {
-  return (center ?? "")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean);
-}
+import { rm, splitCenters } from "@/lib/utils";
 
 const ACCESSORS = {
   staff: (r: AllowanceRunSummary) => r.canonicalName,

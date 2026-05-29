@@ -16,7 +16,7 @@ import {
   type EmployeeRole,
   type EmploymentType,
 } from "@/lib/performance/types";
-import { cn } from "@/lib/utils";
+import { cn, splitCenters } from "@/lib/utils";
 
 export interface EmployeeRow {
   id: number;
@@ -25,14 +25,6 @@ export interface EmployeeRow {
   employmentType: EmploymentType;
   center: string;
   active: boolean;
-}
-
-/** Centers are stored as one comma-joined string; the directory shows them in up to 3 columns. */
-function splitCenters(center: string): string[] {
-  return center
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean);
 }
 
 export function StaffDirectory({

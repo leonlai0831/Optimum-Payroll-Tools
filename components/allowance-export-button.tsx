@@ -3,16 +3,9 @@
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { AllowanceRunSummary } from "@/lib/db/queries";
+import { splitCenters } from "@/lib/utils";
 
 const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
-
-/** Centers are stored as one comma-joined string; the CSV breaks them into up to 3 columns. */
-function splitCenters(center: string | null | undefined): string[] {
-  return (center ?? "")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean);
-}
 
 /** Download a whole month's allowance breakdown as a CSV (opens in Excel) for HR. */
 export function AllowanceExportButton({
