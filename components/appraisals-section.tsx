@@ -68,13 +68,13 @@ function AddAppraisal({
   dimensions: AppraisalDimension[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [periodLabel, setPeriodLabel] = useState("");
   const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [scores, setScores] = useState<Record<string, number>>({});
   const [comments, setComments] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
   const ratings: AppraisalRating[] = dimensions.map((d) => ({
     key: d.key,
@@ -88,16 +88,14 @@ function AddAppraisal({
     setReviewDate(new Date().toISOString().slice(0, 10));
     setScores({});
     setComments("");
-    setError("");
   }
 
   async function submit() {
     if (dimensions.length === 0) {
-      setError("Add appraisal dimensions in Options first.");
+      toast.error("Add appraisal dimensions in Settings first.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       const res = await fetch(`/api/staff/${coachId}/appraisals`, {
         method: "POST",
@@ -110,11 +108,12 @@ function AddAppraisal({
         }),
       });
       if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Save failed");
+      toast.success("Appraisal saved.");
       reset();
       setOpen(false);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -197,7 +196,6 @@ function AddAppraisal({
         />
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       <div className="mt-3 flex items-center gap-3">
         <Button onClick={submit} disabled={busy}>
           {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save appraisal

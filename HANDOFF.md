@@ -1,10 +1,12 @@
 # UX Rebuild — Phase 3 Handoff
 
-PR #2 (`claude/laughing-wright-Zj9Ri`) is partway through a UX blueprint
-rollout. Phases 1, 2, and 4 are landed. Phase 3 (the pattern rollout) is
-mostly done; a handful of inline-error → Toast migrations remain. This
-file is the contract between the session that started the work and the
-session that finishes it — read it before opening Phase 3 again.
+PR #2 (`claude/laughing-wright-Zj9Ri`) carried a UX blueprint rollout.
+Phases 1, 2, and 4 are landed. **Phase 3 (the pattern rollout) is now
+DONE** — the remaining 3f inline-error → Toast migrations and the 3g
+nested empty state were finished on `claude/phase-3-continuation-DAy4I`
+(this branch fast-forwarded over the PR #2 tip, so it contains all prior
+phases). This file is the contract between the session that started the
+work and the session that finished it — read it before reopening Phase 3.
 
 The full blueprint was authored in `/root/.claude/plans/async-bubbling-canyon.md`
 but that path is in an ephemeral container and is gone on a fresh
@@ -54,7 +56,7 @@ Each primitive lives at `components/<name>.tsx`. All use Phase 1 tokens.
 | --- | --- | --- |
 | `Toast` + `useToast` | `toast.tsx` | Bottom-right viewport, stack-3 FIFO, success/info auto-dismiss 4s, error sticky with X. `<ToastProvider>` mounted in `app/(app)/layout.tsx`. |
 | `Modal` + `ConfirmModal` | `modal.tsx` | Centered, Esc/backdrop close, body scroll lock, **renders via `createPortal` to `document.body`** (required for inside `<tr>`). SSR-safe via `typeof document` guard. |
-| `EmptyState` | `empty-state.tsx` | Card variant: icon + h2 + body + action slot. **Does not yet support a "bare" / "no Card" variant** — see Phase 3g below. |
+| `EmptyState` | `empty-state.tsx` | Card variant: icon + h2 + body + action slot. Pass `bare` to drop the wrapping Card (for empty states already inside a Card — e.g. an empty table body). |
 | `Skeleton` | `skeleton.tsx` | Animated rectangle sized by caller. **Built but not yet applied anywhere** — Phase 3 didn't need it. Drop into table / chart loading states when you do. |
 | `Drawer` | `drawer.tsx` | Side-anchored panel with header slot + built-in close button. Same Esc/backdrop/scroll-lock semantics as Modal. Already migrated the dashboard Coach detail drawer. |
 
@@ -78,8 +80,8 @@ action goes through `ConfirmModal`; no inline `{error && ...}` or
 | **3c** 4 remaining `confirm()` → `ConfirmModal` (coach / note / appraisal / user delete) + Modal becomes a portal | DONE | `6e869b5` |
 | **3d** Main calculators (Dashboard `saveMonth` + Allowance Calculator `save`) → Toast (kept `savedId` + "Saved to history → View record →" link as a useful nav shortcut) | DONE | `87b7d88` |
 | **3e** KPI period field → native `<input type="month">` | DONE | `153836d` |
-| **3f** Remaining inline-error → Toast across the create / edit forms | **PARTIAL** — AddUser done in `2d66683`. **Still pending:** `UserRow` patch / delete error display; `AddEmployee` (`staff-directory.tsx`); `NoteForm` (`notes-timeline.tsx`); `AppraisalForm` (`appraisals-section.tsx`) | partial: `2d66683` |
-| **3g** `staff-directory.tsx` line ~79 nested empty state → `EmptyState` | PENDING. Blocked on: it sits inside a wrapping `<Card>`, so plain `<EmptyState/>` would render a Card-in-Card. Decide either to add a `variant="bare"` (no wrapping Card) prop to `EmptyState`, or just leave the inline `<p>` and document that this site is a deliberate exception. | — |
+| **3f** Remaining inline-error → Toast across the create / edit forms | **DONE.** AddUser in `2d66683`; the rest (`UserRow` patch + delete; `AddEmployee` in `staff-directory.tsx`; `NoteForm` in `notes-timeline.tsx`; `AppraisalForm` in `appraisals-section.tsx`) migrated here. All four lost `[error, setError]` + inline `<p>` and route success/failure through `useToast`. (`AppraisalForm`'s validation copy moved "Options" → "Settings" per the Phase 4 IA rule.) | DONE |
+| **3g** `staff-directory.tsx` line ~79 nested empty state → `EmptyState` | **DONE.** Resolved by adding a `bare` prop to `EmptyState` (same content, no wrapping `Card`) and using it inside the existing directory Card. | DONE |
 
 ### Phase 4 — IA tidy · DONE (`cac6553`)
 
@@ -129,28 +131,31 @@ action goes through `ConfirmModal`; no inline `{error && ...}` or
 
 ## What's left in Phase 3
 
-In ROI order — pick the next batch and ship it:
+**Nothing — Phase 3 is complete.** 3f and 3g (below) were the final
+batches; both shipped on `claude/phase-3-continuation-DAy4I`. The
+pattern target now holds across the app: every save flow goes through
+Toast, every destructive action through `ConfirmModal`, and no inline
+`{error && ...}` / `{saved && "Saved ✓"}` remains on any form Phase 3
+touched. Kept the Toast pattern below for reference / future forms.
 
-### 3f — finish the inline-error → Toast sweep · S
+### 3f — inline-error → Toast sweep · DONE
 
-Four sites, all the same shape:
+The four remaining create/edit forms were migrated (AddUser was already
+done in `2d66683`):
 
-- `components/user-manager.tsx` → `UserRow`: `patch()` and the
-  delete-error display next to the email. Remove `[error, setError]`,
-  the inline `<div className="text-[11px] text-red-600">{error}</div>`
-  on line ~279, and route both `patch` + `remove` failures through
-  `toast.error`.
-- `components/staff-directory.tsx` → `AddEmployee`: same as AddUser
-  was. Remove `[error, setError]`, validation `setError("Name required")`
-  → `toast.error`, server failure → `toast.error`, drop the inline
-  `{error && <p>}` on line ~416.
-- `components/notes-timeline.tsx` → `NoteForm`: same. Validation
-  "A title is required." → `toast.error`. Drop inline error render.
-- `components/appraisals-section.tsx` → `AppraisalForm`: same.
-  "Add appraisal dimensions in Options first." → `toast.error`. Drop
-  inline.
+- `components/user-manager.tsx` → `UserRow`: dropped `[error, setError]`
+  and the inline `<div className="text-[11px] text-red-600">{error}</div>`;
+  `patch` + `remove` failures now `toast.error`.
+- `components/staff-directory.tsx` → `AddEmployee`: dropped state +
+  inline `{error && <p>}`; "Name required." + server failure → `toast`;
+  success → `toast.success("Employee created.")`.
+- `components/notes-timeline.tsx` → `NoteForm`: "A title is required." →
+  `toast.error`; success → `toast.success("Note saved.")`.
+- `components/appraisals-section.tsx` → `AppraisalForm`: dimension-guard
+  message → `toast.error` (and reworded "Options" → "Settings" per the
+  Phase 4 IA rule); success → `toast.success("Appraisal saved.")`.
 
-Pattern (already proven 6 times in PR #2):
+Pattern (proven across the app — use it for any new form):
 
 ```tsx
 const toast = useToast();
@@ -178,16 +183,14 @@ async function submit() {
 // ...drop {error && <p>...} from render
 ```
 
-### 3g — staff-directory nested empty state · S
+### 3g — staff-directory nested empty state · DONE
 
-Choose one:
+Resolved via option 1: `EmptyState` gained a `bare` prop (same content,
+no wrapping `Card`), and the directory's empty-table state now renders
+`<EmptyState bare icon={Users} title="No employees yet" … />` inside the
+existing Card — no more Card-in-Card.
 
-- Add a `bare` / `noCard` variant to `EmptyState` and use it inside the
-  existing Card.
-- Leave the `<p>` and add a `// intentionally bare — nested inside a
-  Card` comment.
-
-### Optional polish (not strictly Phase 3, but in scope)
+### Optional polish (not strictly Phase 3, but in scope — still open)
 
 - Apply `Skeleton` to table loading states (KPI history, allowance
   history, staff directory). Requires wrapping the lists in `<Suspense>`
