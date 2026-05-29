@@ -36,14 +36,15 @@ Anthropic SDK · Recharts · Vitest.
 
 ```bash
 npm install
-cp .env.example .env.local   # set APP_PASSWORD + SESSION_SECRET (>=32 chars)
+cp .env.example .env.local   # set SESSION_SECRET (>=32 chars); see the table below
 npm run dev
 ```
 
 With no `POSTGRES_URL`, local dev uses an in-process **PGlite** database persisted to
 `./.pglite` (gitignored) — no cloud DB needed to try it. With no `ANTHROPIC_API_KEY`,
 AI name-merging is skipped (deterministic merge still works) and analysis falls back to
-a template. Default login password in dev is `swim123`.
+a template. In dev, the first sign-in is bootstrapped to `admin@local` / `swim123`
+(override with `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`).
 
 ```bash
 npm test         # KPI engine + DB integration tests (Vitest)
@@ -55,24 +56,32 @@ npm run build
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `APP_PASSWORD` | yes (prod) | Single shared login password. |
+| `POSTGRES_URL` (or `DATABASE_URL`) | yes (prod) | Postgres connection string (Neon/Vercel pooled URL). Unset → PGlite locally. |
 | `SESSION_SECRET` | yes | ≥32 random chars; encrypts the session cookie. |
-| `POSTGRES_URL` | yes (prod) | Postgres connection string (Neon/Vercel pooled URL). Unset → PGlite locally. |
+| `SUPER_ADMIN_EMAIL` | yes (prod, first run) | Email of the first super admin, seeded on the first sign-in. |
+| `SUPER_ADMIN_PASSWORD` | yes (prod, first run) | Password for that first super admin. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
+
+> Auth is **per-user** (email + password, roles). The first super admin is bootstrapped
+> from `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`; after that, manage accounts in-app.
 
 ## Deploy to Vercel
 
-1. Push this repo to GitHub and **Import** it into Vercel (framework auto-detected as Next.js).
-2. In the project's **Storage** tab, add a **Postgres** database (Neon). Vercel injects
-   `POSTGRES_URL` (use the pooled connection string).
-3. In **Settings → Environment Variables**, add `APP_PASSWORD`, `SESSION_SECRET`
-   (e.g. `openssl rand -base64 32`), and optionally `ANTHROPIC_API_KEY`.
-4. Create the tables once against the production database:
+See **[DEPLOY.md](./DEPLOY.md)** for the full step-by-step checklist. In short:
+
+1. **Import** the repo into Vercel (Next.js auto-detected).
+2. Add a **Postgres** database (Storage tab → Neon) so `POSTGRES_URL` is injected for
+   **Production and Preview**.
+3. Set `SESSION_SECRET` (`openssl rand -base64 32`), `SUPER_ADMIN_EMAIL`,
+   `SUPER_ADMIN_PASSWORD`, and optionally `ANTHROPIC_API_KEY`.
+4. Migrations auto-apply on first connect; you can also run them explicitly:
    ```bash
    POSTGRES_URL="<your prod url>" npm run db:migrate
    ```
-   (or `npm run db:push`). Re-run after future schema changes.
-5. Deploy. The app is gated by the shared password on every route.
+5. Deploy, then open **`/setup`** to confirm every check is green before signing in.
+
+> **`/setup`** (and the JSON at **`/api/health`**) are public, no-auth diagnostics that
+> report what a deploy is still missing — without ever exposing secret values.
 
 > The Vercel **project name** (and its default `*.vercel.app` URL) is set in the dashboard under
 > **Settings → General** — it's independent of the in-app product name and isn't stored in this repo.
