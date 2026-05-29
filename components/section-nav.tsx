@@ -58,7 +58,7 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
       },
       {
         href: "/staff/settings",
-        label: "Options",
+        label: "Settings",
         icon: SlidersHorizontal,
         requires: { cap: "view_all_staff" },
       },
