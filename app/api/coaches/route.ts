@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
+import { getCurrentUser, isAuthed } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createCoach, listCoaches } from "@/lib/db/queries";
+import { createCoach, listCoaches, recordAudit } from "@/lib/db/queries";
 import {
   EMPLOYEE_ROLES,
   EMPLOYMENT_TYPES,
@@ -47,5 +47,16 @@ export async function POST(req: Request) {
     center: body.center,
     allowanceTier,
   });
+  const actor = await getCurrentUser();
+  if (actor) {
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "coach.create",
+      entity: "coach",
+      entityId: coach.id,
+      summary: `Created employee "${name}" (${jobRole})`,
+    });
+  }
   return NextResponse.json({ ok: true, id: coach.id });
 }

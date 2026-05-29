@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { deleteCoach, updateCoach } from "@/lib/db/queries";
+import { deleteCoach, getCoach, recordAudit, updateCoach } from "@/lib/db/queries";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import {
   EMPLOYEE_ROLES,
@@ -43,14 +44,50 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
     patch.employmentType = body.employmentType as EmploymentType;
   }
 
+  const before = await getCoach(Number(id));
   await updateCoach(Number(id), patch);
+  const actor = await getCurrentUser();
+  if (actor) {
+    const changed = [
+      patch.canonicalName !== undefined &&
+        (!before || patch.canonicalName !== before.canonicalName) &&
+        `name→"${patch.canonicalName}"`,
+      patch.center !== undefined && `center→"${patch.center}"`,
+      patch.allowanceTier !== undefined && `tier→${patch.allowanceTier ?? "none"}`,
+      patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
+      patch.jobRole !== undefined && `role→${patch.jobRole}`,
+      patch.employmentType !== undefined && `type→${patch.employmentType}`,
+    ].filter(Boolean);
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "coach.update",
+      entity: "coach",
+      entityId: id,
+      summary: `Updated employee ${before ? `"${before.canonicalName}"` : `#${id}`}${
+        changed.length ? `: ${changed.join(", ")}` : ""
+      }`,
+    });
+  }
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/coaches/[id]">) {
   const denied = await requireCapability("edit_staff");
   if (denied) return denied;
+  const actor = await getCurrentUser();
   const { id } = await ctx.params;
+  const before = await getCoach(Number(id));
   await deleteCoach(Number(id));
+  if (actor) {
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "coach.delete",
+      entity: "coach",
+      entityId: id,
+      summary: `Deleted employee ${before ? `"${before.canonicalName}"` : `#${id}`}`,
+    });
+  }
   return NextResponse.json({ ok: true });
 }
