@@ -582,10 +582,24 @@ export async function createUser(input: {
 
 export async function updateUser(
   id: number,
-  patch: { role?: Role; active?: boolean; coachId?: number | null; password?: string },
+  patch: {
+    email?: string;
+    role?: Role;
+    active?: boolean;
+    coachId?: number | null;
+    password?: string;
+  },
 ): Promise<void> {
   const db = await getDb();
   const set: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
+  if (patch.email !== undefined) {
+    const email = normalizeEmail(patch.email);
+    const existing = await getUserByEmail(email);
+    if (existing && existing.id !== id) {
+      throw new Error("A user with that email already exists.");
+    }
+    set.email = email;
+  }
   if (patch.role !== undefined) set.role = patch.role;
   if (patch.active !== undefined) set.active = patch.active;
   if (patch.coachId !== undefined) set.coachId = patch.coachId;
