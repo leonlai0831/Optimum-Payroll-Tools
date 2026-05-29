@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
-import { Download, FileUp, Save, Sparkles, TriangleAlert, X } from "lucide-react";
+import { Download, FileUp, Save, Sparkles, TriangleAlert } from "lucide-react";
+import { Drawer } from "@/components/drawer";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
@@ -762,23 +763,18 @@ function CoachDetail(props: DetailProps) {
   const radarData = props.breakdown.map((b) => ({ metric: b.name, score: b.score }));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={props.onClose}>
-      <div
-        className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">{props.name}</h3>
-            <p className="text-xs text-gray-500">
-              {props.position} · {props.students} students
-            </p>
-          </div>
-          <button onClick={props.onClose} className="text-gray-400 hover:text-gray-700">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Drawer
+      open
+      onClose={props.onClose}
+      header={
+        <>
+          <h3 className="text-h2 text-gray-900">{props.name}</h3>
+          <p className="text-caption text-muted">
+            {props.position} · {props.students} students
+          </p>
+        </>
+      }
+    >
         <div className="grid grid-cols-3 gap-2">
           <Card className="p-3">
             <p className="text-[11px] text-gray-500">Final Score</p>
@@ -925,7 +921,6 @@ function CoachDetail(props: DetailProps) {
             Close
           </Button>
         </div>
-      </div>
-    </div>
+    </Drawer>
   );
 }
