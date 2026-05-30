@@ -539,6 +539,85 @@ export async function getAllowanceInputsForPeriod(
   return map;
 }
 
+export interface AllowanceTrendData {
+  periods: string[];
+  byStaff: { name: string; points: { period: string; total: number }[] }[];
+  byCenter: { name: string; points: { period: string; total: number }[] }[];
+}
+
+/**
+ * Month-over-month allowance totals for the Trends page: each staff member's
+ * grand total per period, and each center's summed total per period.
+ *
+ * Center attribution for a multi-center month splits the record's totals by
+ * teaching hours: a center gets its hours-proportional slice of the teaching
+ * subtotal, plus an even share of attendance+other across the distinct centers
+ * taught that month. A record with no teaching rows is attributed whole to its
+ * center label. Per-period center slices therefore sum back to the staff total.
+ */
+export async function getAllowanceTrendData(): Promise<AllowanceTrendData> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      periodLabel: allowanceRuns.periodLabel,
+      canonicalName: allowanceRuns.canonicalName,
+      input: allowanceRuns.input,
+      result: allowanceRuns.result,
+    })
+    .from(allowanceRuns)
+    .orderBy(allowanceRuns.periodLabel);
+
+  const periods: string[] = [];
+  const staff = new Map<string, Map<string, number>>();
+  const center = new Map<string, Map<string, number>>();
+
+  const add = (map: Map<string, Map<string, number>>, key: string, period: string, v: number) => {
+    const byPeriod = map.get(key) ?? new Map<string, number>();
+    byPeriod.set(period, (byPeriod.get(period) ?? 0) + v);
+    map.set(key, byPeriod);
+  };
+
+  for (const r of rows) {
+    if (!periods.includes(r.periodLabel)) periods.push(r.periodLabel);
+    add(staff, r.canonicalName, r.periodLabel, r.result.grandTotal);
+
+    // Hours per center (sum of all class types), to weight the teaching subtotal.
+    const hoursByCenter = new Map<string, number>();
+    for (const t of r.input.teachingRows) {
+      const c = t.center.trim();
+      if (!c) continue;
+      hoursByCenter.set(c, (hoursByCenter.get(c) ?? 0) + t.normalH + t.ysH + t.precompH);
+    }
+    const centers = [...hoursByCenter.keys()];
+    const totalHours = [...hoursByCenter.values()].reduce((s, h) => s + h, 0);
+
+    if (centers.length === 0) {
+      add(center, r.input.center.trim() || "—", r.periodLabel, r.result.grandTotal);
+      continue;
+    }
+    const evenShare = (r.result.attendance + r.result.other) / centers.length;
+    for (const c of centers) {
+      const teachSlice =
+        totalHours > 0
+          ? (r.result.teaching * (hoursByCenter.get(c) ?? 0)) / totalHours
+          : r.result.teaching / centers.length;
+      add(center, c, r.periodLabel, teachSlice + evenShare);
+    }
+  }
+
+  const toSeries = (map: Map<string, Map<string, number>>) =>
+    [...map.entries()]
+      .map(([name, byPeriod]) => ({
+        name,
+        points: periods
+          .filter((p) => byPeriod.has(p))
+          .map((p) => ({ period: p, total: Math.round(byPeriod.get(p) ?? 0) })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+  return { periods, byStaff: toSeries(staff), byCenter: toSeries(center) };
+}
+
 export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | undefined> {
   const db = await getDb();
   const rows = await db.select().from(allowanceRuns).where(eq(allowanceRuns.id, id)).limit(1);

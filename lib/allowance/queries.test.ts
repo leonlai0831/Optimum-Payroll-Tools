@@ -134,6 +134,46 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     expect(await queries.isPeriodLocked("2026-08")).toBe(false);
   });
 
+  it("builds allowance trend data; center slices sum back to the staff total", async () => {
+    const cfg = await queries.getAllowanceConfig();
+    // A two-center month: teaching split across HQ and BK.
+    await queries.createAllowanceRun({
+      periodLabel: "2026-09",
+      input: {
+        coachId: null,
+        name: "MULTI MIA",
+        tier: "T2",
+        center: "HQ, BK",
+        opHours: 160,
+        leaveHours: 0,
+        teachingRows: [
+          { center: "HQ", normalH: 10, ysH: 0, precompH: 0 },
+          { center: "BK", normalH: 30, ysH: 0, precompH: 0 },
+        ],
+        otherItems: [],
+      },
+      result: { attendancePct: 1, attendance: 300, teaching: 200, other: 0, grandTotal: 500 },
+      configSnapshot: cfg,
+    });
+
+    const trend = await queries.getAllowanceTrendData();
+    expect(trend.periods).toContain("2026-09");
+
+    const mia = trend.byStaff.find((s) => s.name === "MULTI MIA");
+    expect(mia?.points.find((p) => p.period === "2026-09")?.total).toBe(500);
+
+    const hq = trend.byCenter
+      .find((c) => c.name === "HQ")
+      ?.points.find((p) => p.period === "2026-09")?.total;
+    const bk = trend.byCenter
+      .find((c) => c.name === "BK")
+      ?.points.find((p) => p.period === "2026-09")?.total;
+    // Teaching 200 split 10:30 → HQ 50, BK 150; attendance 300 split evenly → +150 each.
+    expect(hq).toBe(200);
+    expect(bk).toBe(300);
+    expect((hq ?? 0) + (bk ?? 0)).toBe(500); // slices reconcile to the staff total
+  });
+
   it("gets and deletes a saved allowance", async () => {
     const cfg = await queries.getAllowanceConfig();
     const id = await queries.createAllowanceRun({
