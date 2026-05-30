@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createNote } from "@/lib/db/queries";
+import { createNote, recordAudit } from "@/lib/db/queries";
 import {
   NOTE_SEVERITIES,
   NOTE_TYPES,
@@ -47,6 +47,14 @@ export async function POST(req: Request, ctx: RouteContext<"/api/staff/[id]/note
     severity,
     followUp: !!body.followUp,
     authoredBy: actor.email,
+  });
+  await recordAudit({
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: "note.create",
+    entity: "coach",
+    entityId: coachId,
+    summary: `Added ${type} note "${title}" for employee #${coachId}`,
   });
   return NextResponse.json({ ok: true });
 }

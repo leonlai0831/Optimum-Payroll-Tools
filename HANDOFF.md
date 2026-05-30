@@ -49,8 +49,11 @@ The app is feature-complete for a first production rollout:
   --delete` is rejected by this git proxy): `claude/brave-hopper-Ld9GO`,
   `claude/laughing-wright-Zj9Ri`, `claude/phase-3-continuation-DAy4I`. Delete
   them from the GitHub Branches UI — all merged, safe.
-- **Audit coverage** is the sensitive surface only; notes + coach-profile edits
-  aren't audited yet (easy follow-up via the same `recordAudit` helper).
+- **Audit coverage** now also records performance **notes** (create/delete) and
+  **staff-profile** edits (create/update/delete), alongside the existing
+  settings, permissions, users, appraisals, and saved-run coverage. Remaining
+  gap: appraisal **edits** (the PATCH on `/api/staff/appraisals/[id]`) still
+  aren't recorded — only create/delete are.
 
 ## Verify / run
 
@@ -78,12 +81,11 @@ check is green → sign in. Migrations auto-apply on first DB connect.
 
 1. **Finish browser E2E** — make the Playwright suite green (debug locally), then
    re-gate it. Small, finishes in-flight work.
-2. **Complete audit coverage** — add notes + coach-profile edits to the audit log.
-3. **Reporting & exports** *(highest net-new value)* — per-coach PDF payslip
+2. **Reporting & exports** *(highest net-new value)* — per-coach PDF payslip
    (bonus + allowance) and a monthly all-coach summary export for finance.
-4. **Supervisor role** — the RBAC matrix reserves it and the KPI engine already
+3. **Supervisor role** — the RBAC matrix reserves it and the KPI engine already
    models pool-supervisor group scores; wire a real `supervisor` role end-to-end.
-5. **Observability** — error monitoring (e.g. Sentry) + structured logs.
+4. **Observability** — error monitoring (e.g. Sentry) + structured logs.
 
 ## Environment notes (Claude Code on the web)
 
