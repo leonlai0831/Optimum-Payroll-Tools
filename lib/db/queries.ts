@@ -4,6 +4,7 @@ import { getDb } from "./index";
 import { logger } from "@/lib/log";
 import {
   allowanceConfig,
+  allowancePeriodLocks,
   allowanceRuns,
   appraisals,
   auditLog,
@@ -14,6 +15,7 @@ import {
   permissionConfig,
   runs,
   users,
+  type AllowancePeriodLockRecord,
   type AllowanceRunRecord,
   type AppraisalRecord,
   type AuditLogRecord,
@@ -527,6 +529,49 @@ export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | 
 export async function deleteAllowanceRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(allowanceRuns).where(eq(allowanceRuns.id, id));
+}
+
+// ── Allowance period locks ─────────────────────────────────────────────────────
+
+/** All locked allowance months, newest first. */
+export async function listAllowanceLocks(): Promise<AllowancePeriodLockRecord[]> {
+  const db = await getDb();
+  return db.select().from(allowancePeriodLocks).orderBy(desc(allowancePeriodLocks.periodLabel));
+}
+
+/** The set of locked period labels (for cheap membership checks in the UI). */
+export async function getLockedPeriods(): Promise<Set<string>> {
+  const rows = await listAllowanceLocks();
+  return new Set(rows.map((r) => r.periodLabel));
+}
+
+/** True when `period` is locked (closed for edits). */
+export async function isPeriodLocked(period: string): Promise<boolean> {
+  const db = await getDb();
+  const rows = await db
+    .select({ periodLabel: allowancePeriodLocks.periodLabel })
+    .from(allowancePeriodLocks)
+    .where(eq(allowancePeriodLocks.periodLabel, period))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Close a month: idempotent (re-locking just refreshes who/when). */
+export async function lockPeriod(period: string, lockedBy: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(allowancePeriodLocks)
+    .values({ periodLabel: period, lockedBy })
+    .onConflictDoUpdate({
+      target: allowancePeriodLocks.periodLabel,
+      set: { lockedBy, lockedAt: new Date() },
+    });
+}
+
+/** Re-open a month. No-op if it wasn't locked. */
+export async function unlockPeriod(period: string): Promise<void> {
+  const db = await getDb();
+  await db.delete(allowancePeriodLocks).where(eq(allowancePeriodLocks.periodLabel, period));
 }
 
 /**

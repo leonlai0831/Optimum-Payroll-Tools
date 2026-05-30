@@ -1,4 +1,5 @@
-import { getAllowanceConfig, getAllowanceRun, listCoaches } from "@/lib/db/queries";
+import { redirect } from "next/navigation";
+import { getAllowanceConfig, getAllowanceRun, isPeriodLocked, listCoaches } from "@/lib/db/queries";
 import { SectionNav } from "@/components/section-nav";
 import { AllowanceCalculator, type AllowanceEditTarget } from "@/components/allowance-calculator";
 
@@ -27,6 +28,9 @@ export default async function AllowancePage({
   let initial: AllowanceEditTarget | undefined;
   if (edit) {
     const run = await getAllowanceRun(Number(edit));
+    // A locked month can't be edited — send back to history rather than open a
+    // form whose save the server would reject.
+    if (run && (await isPeriodLocked(run.periodLabel))) redirect("/allowance/history");
     if (run) initial = { runId: run.id, periodLabel: run.periodLabel, input: run.input };
   }
 

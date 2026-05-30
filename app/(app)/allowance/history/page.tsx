@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
 import { Coins } from "lucide-react";
-import { getAllowanceSavers, listAllowanceRuns, listCoaches } from "@/lib/db/queries";
+import {
+  getAllowanceSavers,
+  listAllowanceLocks,
+  listAllowanceRuns,
+  listCoaches,
+} from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
@@ -19,12 +24,16 @@ export default async function AllowanceHistoryPage() {
   if (!user) redirect("/login");
   // Edit attribution ("edited by …") is visible to admins + super admins only.
   const canSeeEditors = user.role === "admin" || user.role === "super_admin";
-  const [rows, caps, savers, coaches] = await Promise.all([
+  // Closing/reopening a month is an admin/super_admin action.
+  const canLock = user.role === "admin" || user.role === "super_admin";
+  const [rows, caps, savers, coaches, locks] = await Promise.all([
     listAllowanceRuns(),
     getCapabilities(user),
     canSeeEditors ? getAllowanceSavers() : Promise.resolve(null),
     listCoaches(),
+    listAllowanceLocks(),
   ]);
+  const lockedPeriods = locks.map((l) => l.periodLabel);
 
   const period = currentPeriod();
   const roster: RosterEntry[] = coaches
@@ -41,7 +50,13 @@ export default async function AllowanceHistoryPage() {
       {roster.length > 0 && (
         <AllowanceCompleteness period={period} roster={roster} savedNames={savedNames} />
       )}
-      <AllowanceHistoryView rows={rows} canEdit={caps.has("run_allowance")} savers={savers} />
+      <AllowanceHistoryView
+        rows={rows}
+        canEdit={caps.has("run_allowance")}
+        savers={savers}
+        lockedPeriods={lockedPeriods}
+        canLock={canLock}
+      />
     </div>
   );
 }

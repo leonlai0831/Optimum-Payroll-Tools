@@ -114,6 +114,26 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     expect(after.attendance.T0).toEqual({ met: 999, perfect: 999 });
   });
 
+  it("locks and unlocks a period (idempotent, membership checks)", async () => {
+    expect(await queries.isPeriodLocked("2026-08")).toBe(false);
+
+    await queries.lockPeriod("2026-08", "boss@opt.page");
+    expect(await queries.isPeriodLocked("2026-08")).toBe(true);
+    expect(await queries.getLockedPeriods()).toContain("2026-08");
+
+    // Re-locking is idempotent (no duplicate-key error, refreshes who/when).
+    await queries.lockPeriod("2026-08", "boss2@opt.page");
+    const locks = await queries.listAllowanceLocks();
+    expect(locks.filter((l) => l.periodLabel === "2026-08").length).toBe(1);
+    expect(locks.find((l) => l.periodLabel === "2026-08")?.lockedBy).toBe("boss2@opt.page");
+
+    await queries.unlockPeriod("2026-08");
+    expect(await queries.isPeriodLocked("2026-08")).toBe(false);
+    // Unlocking again is a harmless no-op.
+    await queries.unlockPeriod("2026-08");
+    expect(await queries.isPeriodLocked("2026-08")).toBe(false);
+  });
+
   it("gets and deletes a saved allowance", async () => {
     const cfg = await queries.getAllowanceConfig();
     const id = await queries.createAllowanceRun({

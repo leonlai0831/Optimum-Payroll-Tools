@@ -156,7 +156,20 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * A finalized (locked) allowance month. One row per locked `periodLabel`; the
+ * row's presence means the month is closed — saves/edits/deletes of that
+ * month's allowance records are rejected until it's unlocked (row removed).
+ * `lockedBy` snapshots who closed it, for display.
+ */
+export const allowancePeriodLocks = pgTable("allowance_period_locks", {
+  periodLabel: text("period_label").primaryKey(),
+  lockedBy: text("locked_by").default("").notNull(),
+  lockedAt: timestamp("locked_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type AuditLogRecord = typeof auditLog.$inferSelect;
+export type AllowancePeriodLockRecord = typeof allowancePeriodLocks.$inferSelect;
 export type UserRecord = typeof users.$inferSelect;
 export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;
 export type PerformanceConfigRecord = typeof performanceConfig.$inferSelect;
