@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logger } from "./log";
+import { logger, setErrorSink } from "./log";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  setErrorSink(null);
   delete process.env.LOG_LEVEL;
 });
 
@@ -55,5 +56,28 @@ describe("structured logger", () => {
     circular.self = circular;
     expect(() => logger.info("circ", { circular })).not.toThrow();
     expect(log).toHaveBeenCalled();
+  });
+
+  it("forwards only error-level records to a registered sink", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.LOG_LEVEL = "debug";
+    const sink = vi.fn();
+    setErrorSink(sink);
+    logger.error("bad", { code: 1 });
+    logger.warn("meh");
+    logger.info("fine");
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledWith("bad", expect.objectContaining({ code: 1 }));
+  });
+
+  it("keeps logging even if the sink throws", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    process.env.LOG_LEVEL = "debug";
+    setErrorSink(() => {
+      throw new Error("sink boom");
+    });
+    expect(() => logger.error("still logs")).not.toThrow();
+    expect(err).toHaveBeenCalled();
   });
 });

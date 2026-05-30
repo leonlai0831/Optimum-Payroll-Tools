@@ -27,6 +27,15 @@ function expand(value: unknown): unknown {
   return value;
 }
 
+/** Optional sink invoked for every `error`-level record — used to forward to Sentry. */
+type ErrorSink = (msg: string, fields?: Record<string, unknown>) => void;
+let errorSink: ErrorSink | null = null;
+
+/** Register (or clear with `null`) a sink that receives every `error`-level log. */
+export function setErrorSink(sink: ErrorSink | null): void {
+  errorSink = sink;
+}
+
 export interface Logger {
   debug(msg: string, fields?: Record<string, unknown>): void;
   info(msg: string, fields?: Record<string, unknown>): void;
@@ -51,6 +60,14 @@ function create(bindings: Record<string, unknown>): Logger {
       line = JSON.stringify({ level, time: record.time, msg });
     }
     (level === "warn" || level === "error" ? console.error : console.log)(line);
+
+    if (level === "error" && errorSink) {
+      try {
+        errorSink(msg, { ...bindings, ...fields });
+      } catch {
+        // A failing sink must never break logging.
+      }
+    }
   }
   return {
     debug: (m, f) => write("debug", m, f),

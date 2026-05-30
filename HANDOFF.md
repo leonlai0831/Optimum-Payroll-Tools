@@ -94,12 +94,15 @@ check is green → sign in. Migrations auto-apply on first DB connect.
    matrices backfill the new role's defaults on read. *Deliberately not done:*
    center-scoped visibility — supervisors still see all staff via `view_all_staff`
    like admins; per-center scoping is a larger follow-up.
-4. **Observability** — **structured logs done in PR #9**: `lib/log.ts` emits one
-   JSON record per line (`level`/`time`/`msg` + fields; `LOG_LEVEL` env, default
-   `info` in prod, `debug` otherwise), adopted in the AI fallbacks, the
-   audit-write failure, and DB-init failure. *Remaining:* external error
-   monitoring (e.g. Sentry) — needs an account + DSN, so it wasn't set up here.
-   A request-level access log (method/path/status/duration) is a natural next add.
+4. **Observability** — **done in PR #9**: structured logs (`lib/log.ts`, one JSON
+   record per line; `LOG_LEVEL` env, default `info` in prod) **and** Sentry error
+   monitoring (`lib/observability.ts` + root `instrumentation.ts`): initialized
+   from `SENTRY_DSN` in the Node runtime only, a graceful no-op when unset;
+   captures unhandled server errors via Next's `onRequestError` and auto-forwards
+   every `logger.error`. Set `SENTRY_DSN` (+ optional `SENTRY_ENVIRONMENT`,
+   `SENTRY_TRACES_SAMPLE_RATE`) in the deploy env to activate. *Couldn't be
+   live-verified here* (no DSN / outbound Sentry); build + unit tests cover the
+   wiring and the no-op path. A request-level access log is a natural next add.
 
 ## Environment notes (Claude Code on the web)
 
