@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { ConfirmModal } from "@/components/modal";
 import {
@@ -124,6 +124,7 @@ export function CoachProfileView({
       <NotesTimeline coachId={coach.id} notes={notes} canEdit={canEditNotes} />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
+      <PayslipsCard coachId={coach.id} kpi={kpi} allowance={allowance} />
     </div>
   );
 }
@@ -206,6 +207,45 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+function PayslipsCard({
+  coachId,
+  kpi,
+  allowance,
+}: {
+  coachId: number;
+  kpi: KpiPoint[];
+  allowance: AllowancePoint[];
+}) {
+  const periods = [
+    ...new Set([...kpi.map((k) => k.period), ...allowance.map((a) => a.period)]),
+  ].sort((a, b) => b.localeCompare(a));
+  if (periods.length === 0) return null;
+
+  return (
+    <Card className="p-4">
+      <h3 className="mb-1 flex items-center gap-2 text-h3 text-gray-900">
+        <FileText className="h-4 w-4" /> Payslips
+      </h3>
+      <p className="mb-3 text-sm text-gray-500">
+        A one-page PDF combining the KPI bonus and teaching allowance for the month.
+      </p>
+      <ul className="divide-y divide-gray-100">
+        {periods.map((period) => (
+          <li key={period} className="flex items-center justify-between py-2">
+            <span className="text-sm font-medium text-gray-700">{period}</span>
+            <a
+              href={`/api/coaches/${coachId}/payslip?period=${encodeURIComponent(period)}`}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+            >
+              <Download className="h-4 w-4" /> Payslip
+            </a>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }

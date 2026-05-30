@@ -81,8 +81,11 @@ check is green → sign in. Migrations auto-apply on first DB connect.
 
 1. **Finish browser E2E** — make the Playwright suite green (debug locally), then
    re-gate it. Small, finishes in-flight work.
-2. **Reporting & exports** *(highest net-new value)* — per-coach PDF payslip
-   (bonus + allowance) and a monthly all-coach summary export for finance.
+2. **Reporting & exports** *(highest net-new value)* — **done in PR #9** (pending
+   merge): per-coach PDF payslip (`GET /api/coaches/[id]/payslip?period=…` via
+   `pdf-lib` + a "Payslips" card on the staff profile) **and** the monthly
+   all-coach summary CSV (`GET /api/runs/[id]/summary` + a "CSV" action per month
+   on `/kpi/history`, gated by `view_all_staff`, audited as `summary.export`).
 3. **Supervisor role** — the RBAC matrix reserves it and the KPI engine already
    models pool-supervisor group scores; wire a real `supervisor` role end-to-end.
 4. **Observability** — error monitoring (e.g. Sentry) + structured logs.
