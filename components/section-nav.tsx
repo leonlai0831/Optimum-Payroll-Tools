@@ -37,6 +37,7 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
       { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
       { href: "/allowance/bulk", label: "Bulk entry", icon: Layers },
       { href: "/allowance/history", label: "History", icon: History },
+      { href: "/allowance/trends", label: "Trends", icon: BarChart3 },
       { href: "/allowance/settings", label: "Settings", icon: SlidersHorizontal },
     ],
   },
