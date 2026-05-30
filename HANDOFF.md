@@ -94,7 +94,12 @@ check is green → sign in. Migrations auto-apply on first DB connect.
    matrices backfill the new role's defaults on read. *Deliberately not done:*
    center-scoped visibility — supervisors still see all staff via `view_all_staff`
    like admins; per-center scoping is a larger follow-up.
-4. **Observability** — error monitoring (e.g. Sentry) + structured logs.
+4. **Observability** — **structured logs done in PR #9**: `lib/log.ts` emits one
+   JSON record per line (`level`/`time`/`msg` + fields; `LOG_LEVEL` env, default
+   `info` in prod, `debug` otherwise), adopted in the AI fallbacks, the
+   audit-write failure, and DB-init failure. *Remaining:* external error
+   monitoring (e.g. Sentry) — needs an account + DSN, so it wasn't set up here.
+   A request-level access log (method/path/status/duration) is a natural next add.
 
 ## Environment notes (Claude Code on the web)
 

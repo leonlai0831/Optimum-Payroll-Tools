@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { BreakdownItem } from "@/lib/kpi/types";
+import { logger } from "@/lib/log";
 
 // Model chosen in the approved plan for these lightweight tasks.
 const MODEL = "claude-sonnet-4-6";
@@ -82,7 +83,7 @@ export async function matchInstructorNames(
       .map((c) => c.accounts.filter((n) => typeof n === "string"))
       .filter((g) => g.length >= 2);
   } catch (err) {
-    console.error("matchInstructorNames failed:", err);
+    logger.warn("matchInstructorNames failed; using deterministic merge only", { err });
     return [];
   }
 }
@@ -133,7 +134,7 @@ export async function analyzePerformance(input: AnalyzeInput): Promise<string> {
     const text = res.content.find((b) => b.type === "text");
     return text && text.type === "text" ? text.text.trim() : fallbackAnalysis(input);
   } catch (err) {
-    console.error("analyzePerformance failed:", err);
+    logger.warn("analyzePerformance failed; using template fallback", { err });
     return fallbackAnalysis(input);
   }
 }

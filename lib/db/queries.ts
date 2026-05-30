@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "./index";
+import { logger } from "@/lib/log";
 import {
   allowanceConfig,
   allowanceRuns,
@@ -803,7 +804,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
       summary: entry.summary,
     });
   } catch (err) {
-    console.error("recordAudit failed", err);
+    logger.error("recordAudit failed", { err });
   }
 }
 
