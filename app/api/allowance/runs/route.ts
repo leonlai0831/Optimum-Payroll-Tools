@@ -4,6 +4,7 @@ import { requireCapability } from "@/lib/auth/permissions";
 import {
   createAllowanceRun,
   getAllowanceConfig,
+  isPeriodLocked,
   listAllowanceRuns,
   recordAudit,
 } from "@/lib/db/queries";
@@ -26,6 +27,12 @@ export async function POST(req: Request) {
   }
   if (!body.input?.name?.trim()) {
     return NextResponse.json({ error: "coach name is required" }, { status: 400 });
+  }
+  if (await isPeriodLocked(body.periodLabel)) {
+    return NextResponse.json(
+      { error: `${body.periodLabel} is locked. Unlock the month to make changes.` },
+      { status: 409 },
+    );
   }
   // Recompute server-side from the live config (ignore any client-sent result),
   // and snapshot that config so the saved record stays reproducible.

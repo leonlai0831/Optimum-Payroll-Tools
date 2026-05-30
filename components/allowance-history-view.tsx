@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { History, Search } from "lucide-react";
-import { Card, Input, Select } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { History, Lock, LockOpen, Search } from "lucide-react";
+import { Button, Card, Input, Select, Spinner } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
+import { useToast } from "@/components/toast";
+import { ConfirmModal } from "@/components/modal";
 import { AllowanceExportButton } from "@/components/allowance-export-button";
 import {
   SortTh,
@@ -15,6 +18,63 @@ import {
 } from "@/components/table-controls";
 import type { AllowanceRunSummary } from "@/lib/db/queries";
 import { rm, splitCenters } from "@/lib/utils";
+
+function LockButton({ period, locked }: { period: string; locked: boolean }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+
+  async function apply() {
+    setConfirm(false);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/allowance/locks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period, locked: !locked }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Failed");
+      }
+      toast.success(locked ? `${period} unlocked.` : `${period} locked.`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="px-2.5 py-1 text-xs"
+        onClick={() => setConfirm(true)}
+        disabled={busy}
+        title={locked ? "Reopen this month for edits" : "Close this month (no more edits)"}
+      >
+        {busy ? <Spinner /> : locked ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+        {locked ? "Unlock" : "Lock"}
+      </Button>
+      <ConfirmModal
+        open={confirm}
+        onClose={() => setConfirm(false)}
+        onConfirm={apply}
+        title={locked ? `Unlock ${period}?` : `Lock ${period}?`}
+        message={
+          locked
+            ? "Reopening lets managers add or edit this month's allowances again."
+            : "Locking closes this month — allowances can't be added, edited, or deleted until it's unlocked."
+        }
+        confirmLabel={locked ? "Unlock" : "Lock month"}
+        busy={busy}
+      />
+    </>
+  );
+}
 
 const ACCESSORS = {
   staff: (r: AllowanceRunSummary) => r.canonicalName,
@@ -32,12 +92,19 @@ export function AllowanceHistoryView({
   rows,
   canEdit,
   savers,
+  lockedPeriods = [],
+  canLock = false,
 }: {
   rows: AllowanceRunSummary[];
   canEdit: boolean;
   /** run id → last editor email, for admins/super admins; null hides attribution. */
   savers: Record<number, string> | null;
+  /** Period labels that are locked (closed for edits). */
+  lockedPeriods?: string[];
+  /** Whether the current user may lock/unlock a month. */
+  canLock?: boolean;
 }) {
+  const lockedSet = useMemo(() => new Set(lockedPeriods), [lockedPeriods]);
   const [q, setQ] = useState("");
   const [centerFilter, setCenterFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
@@ -131,16 +198,25 @@ export function AllowanceHistoryView({
         groups.map((list) => {
           const period = list[0].periodLabel;
           const total = list.reduce((s, r) => s + r.grandTotal, 0);
+          const locked = lockedSet.has(period);
           return (
             <Card key={period} className="overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
-                <div>
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-gray-900">{period}</span>
-                  <span className="ml-2 text-xs text-gray-500">
+                  {locked && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                      <Lock className="h-3 w-3" /> Locked
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-500">
                     {list.length} coach(es) · total {rm(total)}
                   </span>
                 </div>
-                <AllowanceExportButton period={period} rows={list} />
+                <div className="flex items-center gap-2">
+                  {canLock && <LockButton period={period} locked={locked} />}
+                  <AllowanceExportButton period={period} rows={list} />
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -207,7 +283,7 @@ export function AllowanceHistoryView({
                         </td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex items-center justify-end gap-3">
-                            {canEdit && (
+                            {canEdit && !locked && (
                               <Link
                                 href={`/allowance?edit=${r.id}`}
                                 className="text-xs font-medium text-indigo-600 hover:text-indigo-800"

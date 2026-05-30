@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
-import { getAllowanceRun, getAllowanceSavers } from "@/lib/db/queries";
+import { getAllowanceRun, getAllowanceSavers, isPeriodLocked } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
@@ -21,7 +21,9 @@ export default async function AllowanceRunDetailPage({
   const run = await getAllowanceRun(Number(id));
   if (!run) notFound();
   const user = await getCurrentUser();
-  const canEdit = !!user && (await getCapabilities(user)).has("run_allowance");
+  const locked = await isPeriodLocked(run.periodLabel);
+  // A locked month is read-only; the Edit affordance disappears.
+  const canEdit = !locked && !!user && (await getCapabilities(user)).has("run_allowance");
   // Edit attribution is visible to admins + super admins only.
   const canSeeEditor = user?.role === "admin" || user?.role === "super_admin";
   const editedBy = canSeeEditor ? (await getAllowanceSavers())[run.id] : undefined;
