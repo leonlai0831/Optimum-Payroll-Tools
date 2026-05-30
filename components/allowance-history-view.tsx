@@ -28,7 +28,13 @@ const ACCESSORS = {
   total: (r: AllowanceRunSummary) => r.grandTotal,
 } as const;
 
-export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) {
+export function AllowanceHistoryView({
+  rows,
+  canEdit,
+}: {
+  rows: AllowanceRunSummary[];
+  canEdit: boolean;
+}) {
   const [q, setQ] = useState("");
   const [centerFilter, setCenterFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
@@ -190,12 +196,22 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
                           {rm(r.grandTotal)}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <Link
-                            href={`/allowance/history/${r.id}`}
-                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                          >
-                            View
-                          </Link>
+                          <div className="flex items-center justify-end gap-3">
+                            {canEdit && (
+                              <Link
+                                href={`/allowance?edit=${r.id}`}
+                                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                              >
+                                Edit
+                              </Link>
+                            )}
+                            <Link
+                              href={`/allowance/history/${r.id}`}
+                              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                            >
+                              View
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     ))}
