@@ -520,6 +520,25 @@ export async function listAllowanceRuns(period?: string): Promise<AllowanceRunSu
   }));
 }
 
+/**
+ * Full saved `AllowanceInput` per coach for one month, keyed by canonical name.
+ * Used by the bulk-by-center entry screen to prefill and — crucially — to merge
+ * a new center's hours into an existing multi-center record without clobbering
+ * the other center's data.
+ */
+export async function getAllowanceInputsForPeriod(
+  period: string,
+): Promise<Map<string, AllowanceInput>> {
+  const db = await getDb();
+  const rows = await db
+    .select({ canonicalName: allowanceRuns.canonicalName, input: allowanceRuns.input })
+    .from(allowanceRuns)
+    .where(eq(allowanceRuns.periodLabel, period));
+  const map = new Map<string, AllowanceInput>();
+  for (const r of rows) map.set(r.canonicalName, r.input);
+  return map;
+}
+
 export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | undefined> {
   const db = await getDb();
   const rows = await db.select().from(allowanceRuns).where(eq(allowanceRuns.id, id)).limit(1);
