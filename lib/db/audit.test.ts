@@ -44,4 +44,38 @@ describe("audit log queries (PGlite in-memory)", () => {
     expect(one.length).toBe(1);
     expect(one[0].action).toBe("settings.update");
   });
+
+  it("getAllowanceSavers maps each allowance run to its last saver's email", async () => {
+    await queries.recordAudit({
+      actorId: 2,
+      actorEmail: "m1@opt.page",
+      action: "allowance.save",
+      entity: "allowance_run",
+      entityId: 10,
+      summary: "Saved allowance for X",
+    });
+    await queries.recordAudit({
+      actorId: 3,
+      actorEmail: "m2@opt.page",
+      action: "allowance.save",
+      entity: "allowance_run",
+      entityId: 11,
+      summary: "Saved allowance for Y",
+    });
+    // A later save of run 10 by a second manager — latest wins.
+    await queries.recordAudit({
+      actorId: 4,
+      actorEmail: "m3@opt.page",
+      action: "allowance.save",
+      entity: "allowance_run",
+      entityId: 10,
+      summary: "Edited allowance for X",
+    });
+
+    const savers = await queries.getAllowanceSavers();
+    expect(savers[10]).toBe("m3@opt.page"); // last editor, not the first
+    expect(savers[11]).toBe("m2@opt.page");
+    // Non-allowance audit rows (e.g. the user.create above) are excluded.
+    expect(savers[7]).toBeUndefined();
+  });
 });

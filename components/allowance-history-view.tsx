@@ -31,9 +31,12 @@ const ACCESSORS = {
 export function AllowanceHistoryView({
   rows,
   canEdit,
+  savers,
 }: {
   rows: AllowanceRunSummary[];
   canEdit: boolean;
+  /** run id → last editor email, for admins/super admins; null hides attribution. */
+  savers: Record<number, string> | null;
 }) {
   const [q, setQ] = useState("");
   const [centerFilter, setCenterFilter] = useState("");
@@ -182,7 +185,14 @@ export function AllowanceHistoryView({
                   <tbody className="divide-y divide-gray-100">
                     {list.map((r) => (
                       <tr key={r.id} className="hover:bg-indigo-50/40">
-                        <td className="px-4 py-2 font-medium text-gray-900">{r.canonicalName}</td>
+                        <td className="px-4 py-2 font-medium text-gray-900">
+                          {r.canonicalName}
+                          {savers?.[r.id] && (
+                            <span className="block text-[11px] font-normal text-gray-400">
+                              edited by {savers[r.id]}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-gray-600">{r.tier}</td>
                         {[0, 1, 2].map((i) => (
                           <td key={i} className="px-4 py-2 text-gray-500">

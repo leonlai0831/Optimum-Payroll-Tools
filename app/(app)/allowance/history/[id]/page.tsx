@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
-import { getAllowanceRun } from "@/lib/db/queries";
+import { getAllowanceRun, getAllowanceSavers } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
@@ -22,6 +22,9 @@ export default async function AllowanceRunDetailPage({
   if (!run) notFound();
   const user = await getCurrentUser();
   const canEdit = !!user && (await getCapabilities(user)).has("run_allowance");
+  // Edit attribution is visible to admins + super admins only.
+  const canSeeEditor = user?.role === "admin" || user?.role === "super_admin";
+  const editedBy = canSeeEditor ? (await getAllowanceSavers())[run.id] : undefined;
 
   const { input, result } = run;
   const rates = run.configSnapshot.teaching[run.tier];
@@ -43,6 +46,7 @@ export default async function AllowanceRunDetailPage({
           <p className="text-xs text-gray-500">
             {run.periodLabel} · {run.tier} · {run.center || "—"} · saved{" "}
             {new Date(run.createdAt).toLocaleString()}
+            {editedBy ? ` by ${editedBy}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
