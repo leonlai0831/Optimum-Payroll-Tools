@@ -9,7 +9,13 @@ import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/t
 import type { RunSummary } from "@/lib/db/queries";
 import { rm } from "@/lib/utils";
 
-export function KpiHistoryView({ runs }: { runs: RunSummary[] }) {
+export function KpiHistoryView({
+  runs,
+  canExport,
+}: {
+  runs: RunSummary[];
+  canExport: boolean;
+}) {
   const [q, setQ] = useState("");
 
   const filtered = useMemo(
@@ -80,12 +86,23 @@ export function KpiHistoryView({ runs }: { runs: RunSummary[] }) {
                     {new Date(r.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <Link
-                      href={`/kpi/history/${r.id}`}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                    >
-                      View
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      {canExport && (
+                        <a
+                          href={`/api/runs/${r.id}/summary`}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                          title="Download all-coach summary CSV"
+                        >
+                          CSV
+                        </a>
+                      )}
+                      <Link
+                        href={`/kpi/history/${r.id}`}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                      >
+                        View
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))
