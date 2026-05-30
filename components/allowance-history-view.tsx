@@ -28,7 +28,16 @@ const ACCESSORS = {
   total: (r: AllowanceRunSummary) => r.grandTotal,
 } as const;
 
-export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) {
+export function AllowanceHistoryView({
+  rows,
+  canEdit,
+  savers,
+}: {
+  rows: AllowanceRunSummary[];
+  canEdit: boolean;
+  /** run id → last editor email, for admins/super admins; null hides attribution. */
+  savers: Record<number, string> | null;
+}) {
   const [q, setQ] = useState("");
   const [centerFilter, setCenterFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
@@ -176,7 +185,14 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
                   <tbody className="divide-y divide-gray-100">
                     {list.map((r) => (
                       <tr key={r.id} className="hover:bg-indigo-50/40">
-                        <td className="px-4 py-2 font-medium text-gray-900">{r.canonicalName}</td>
+                        <td className="px-4 py-2 font-medium text-gray-900">
+                          {r.canonicalName}
+                          {savers?.[r.id] && (
+                            <span className="block text-[11px] font-normal text-gray-400">
+                              edited by {savers[r.id]}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-gray-600">{r.tier}</td>
                         {[0, 1, 2].map((i) => (
                           <td key={i} className="px-4 py-2 text-gray-500">
@@ -190,12 +206,22 @@ export function AllowanceHistoryView({ rows }: { rows: AllowanceRunSummary[] }) 
                           {rm(r.grandTotal)}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <Link
-                            href={`/allowance/history/${r.id}`}
-                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                          >
-                            View
-                          </Link>
+                          <div className="flex items-center justify-end gap-3">
+                            {canEdit && (
+                              <Link
+                                href={`/allowance?edit=${r.id}`}
+                                className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                              >
+                                Edit
+                              </Link>
+                            )}
+                            <Link
+                              href={`/allowance/history/${r.id}`}
+                              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                            >
+                              View
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     ))}

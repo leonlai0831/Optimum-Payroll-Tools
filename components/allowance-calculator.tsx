@@ -33,22 +33,35 @@ function currentPeriod(): string {
 
 const num = (v: string) => (v === "" ? 0 : Number(v) || 0);
 
+export interface AllowanceEditTarget {
+  runId: number;
+  periodLabel: string;
+  input: AllowanceInput;
+}
+
 export function AllowanceCalculator({
   config,
   coaches,
+  initial,
 }: {
   config: AllowanceConfig;
   coaches: RosterCoach[];
+  initial?: AllowanceEditTarget;
 }) {
-  const [period, setPeriod] = useState(currentPeriod());
-  const [coachId, setCoachId] = useState<number | null>(null);
+  const editing = !!initial;
+  const [period, setPeriod] = useState(initial?.periodLabel ?? currentPeriod());
+  const [coachId, setCoachId] = useState<number | null>(initial?.input.coachId ?? null);
   const [isNew, setIsNew] = useState(false);
-  const [name, setName] = useState("");
-  const [tier, setTier] = useState<AllowanceTier>("T1");
-  const [opHours, setOpHours] = useState(0);
-  const [leaveHours, setLeaveHours] = useState(0);
-  const [teachingRows, setTeachingRows] = useState<TeachingHoursRow[]>([]);
-  const [otherItems, setOtherItems] = useState<OtherAllowanceItem[]>([]);
+  const [name, setName] = useState(initial?.input.name ?? "");
+  const [tier, setTier] = useState<AllowanceTier>(initial?.input.tier ?? "T1");
+  const [opHours, setOpHours] = useState(initial?.input.opHours ?? 0);
+  const [leaveHours, setLeaveHours] = useState(initial?.input.leaveHours ?? 0);
+  const [teachingRows, setTeachingRows] = useState<TeachingHoursRow[]>(
+    initial?.input.teachingRows ?? [],
+  );
+  const [otherItems, setOtherItems] = useState<OtherAllowanceItem[]>(
+    initial?.input.otherItems ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [savedId, setSavedId] = useState<number | null>(null);
@@ -148,7 +161,7 @@ export function AllowanceCalculator({
       if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error || "Save failed");
       const { id } = (await res.json()) as { id: number };
       setSavedId(id);
-      toast.success("Allowance saved.");
+      toast.success(editing ? "Allowance updated." : "Allowance saved.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -159,31 +172,49 @@ export function AllowanceCalculator({
   return (
     <>
       <div className={cn("space-y-4", showReport && "no-print")}>
+        {editing && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm">
+            <span className="text-amber-800">
+              Editing <strong>{name}</strong> · {period} — saving replaces this record.
+            </span>
+            <Link href="/allowance" className="font-medium text-indigo-600 hover:text-indigo-800">
+              Start a new entry →
+            </Link>
+          </div>
+        )}
         {/* Coach + period + actions */}
         <Card className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
                 <Label htmlFor="period">Period</Label>
-                <Input
-                  id="period"
-                  type="month"
-                  value={period}
-                  onChange={(e) => {
-                    setPeriod(e.target.value);
-                    dirty();
-                  }}
-                  className="mt-1"
-                />
+                {editing ? (
+                  <p className="mt-1 py-2 text-sm font-medium text-gray-900">{period}</p>
+                ) : (
+                  <Input
+                    id="period"
+                    type="month"
+                    value={period}
+                    onChange={(e) => {
+                      setPeriod(e.target.value);
+                      dirty();
+                    }}
+                    className="mt-1"
+                  />
+                )}
               </div>
               <div className="col-span-2 sm:col-span-1">
                 <Label>Staff</Label>
-                <StaffCombobox
-                  className="mt-1"
-                  options={coaches}
-                  value={isNew ? "__new__" : coachId === null ? "" : String(coachId)}
-                  onChange={onPickCoach}
-                />
+                {editing ? (
+                  <p className="mt-1 py-2 text-sm font-medium text-gray-900">{name}</p>
+                ) : (
+                  <StaffCombobox
+                    className="mt-1"
+                    options={coaches}
+                    value={isNew ? "__new__" : coachId === null ? "" : String(coachId)}
+                    onChange={onPickCoach}
+                  />
+                )}
               </div>
               <div>
                 <Label>Position</Label>
@@ -208,7 +239,7 @@ export function AllowanceCalculator({
                 <FileText className="h-4 w-4" /> PDF report
               </Button>
               <Button onClick={save} disabled={saving}>
-                {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save
+                {saving ? <Spinner /> : <Save className="h-4 w-4" />} {editing ? "Update" : "Save"}
               </Button>
             </div>
           </div>
@@ -232,7 +263,7 @@ export function AllowanceCalculator({
           )}
           {savedId && (
             <p className="mt-2 text-sm text-green-700">
-              Saved.{" "}
+              {editing ? "Updated." : "Saved."}{" "}
               <Link className="underline" href="/allowance/history">
                 View in history →
               </Link>

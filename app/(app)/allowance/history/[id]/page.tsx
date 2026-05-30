@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { getAllowanceRun } from "@/lib/db/queries";
+import { ArrowLeft, Pencil } from "lucide-react";
+import { getAllowanceRun, getAllowanceSavers } from "@/lib/db/queries";
+import { getCurrentUser } from "@/lib/auth/session";
+import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
 import { DeleteAllowanceRunButton } from "@/components/delete-allowance-run-button";
 import { Card } from "@/components/ui";
@@ -18,6 +20,11 @@ export default async function AllowanceRunDetailPage({
   const { id } = await params;
   const run = await getAllowanceRun(Number(id));
   if (!run) notFound();
+  const user = await getCurrentUser();
+  const canEdit = !!user && (await getCapabilities(user)).has("run_allowance");
+  // Edit attribution is visible to admins + super admins only.
+  const canSeeEditor = user?.role === "admin" || user?.role === "super_admin";
+  const editedBy = canSeeEditor ? (await getAllowanceSavers())[run.id] : undefined;
 
   const { input, result } = run;
   const rates = run.configSnapshot.teaching[run.tier];
@@ -39,9 +46,20 @@ export default async function AllowanceRunDetailPage({
           <p className="text-xs text-gray-500">
             {run.periodLabel} · {run.tier} · {run.center || "—"} · saved{" "}
             {new Date(run.createdAt).toLocaleString()}
+            {editedBy ? ` by ${editedBy}` : ""}
           </p>
         </div>
-        <DeleteAllowanceRunButton id={run.id} />
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <Link
+              href={`/allowance?edit=${run.id}`}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Link>
+          )}
+          <DeleteAllowanceRunButton id={run.id} />
+        </div>
       </div>
 
       <Card className="p-5">

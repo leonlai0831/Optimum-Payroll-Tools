@@ -529,6 +529,27 @@ export async function deleteAllowanceRun(id: number): Promise<void> {
   await db.delete(allowanceRuns).where(eq(allowanceRuns.id, id));
 }
 
+/**
+ * Map of allowance-run id → the email of whoever last saved (i.e. last edited)
+ * it, read from the audit log's `allowance.save` entries. Powers the edit
+ * attribution shown to admins. Only covers saves recorded since the audit log
+ * existed; older runs map to nothing.
+ */
+export async function getAllowanceSavers(): Promise<Record<number, string>> {
+  const db = await getDb();
+  const rows = await db
+    .select({ entityId: auditLog.entityId, actorEmail: auditLog.actorEmail })
+    .from(auditLog)
+    .where(and(eq(auditLog.entity, "allowance_run"), eq(auditLog.action, "allowance.save")))
+    .orderBy(auditLog.createdAt, auditLog.id);
+  const byRun: Record<number, string> = {};
+  for (const r of rows) {
+    const id = Number(r.entityId);
+    if (Number.isFinite(id) && r.actorEmail) byRun[id] = r.actorEmail; // ascending ⇒ latest wins
+  }
+  return byRun;
+}
+
 // ── Users / auth ───────────────────────────────────────────────────────────
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();

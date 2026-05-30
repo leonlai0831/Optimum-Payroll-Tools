@@ -1,10 +1,16 @@
-import { getAllowanceConfig, listCoaches } from "@/lib/db/queries";
+import { getAllowanceConfig, getAllowanceRun, listCoaches } from "@/lib/db/queries";
 import { SectionNav } from "@/components/section-nav";
-import { AllowanceCalculator } from "@/components/allowance-calculator";
+import { AllowanceCalculator, type AllowanceEditTarget } from "@/components/allowance-calculator";
 
 export const dynamic = "force-dynamic";
 
-export default async function AllowancePage() {
+export default async function AllowancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sp = await searchParams;
+  const edit = typeof sp.edit === "string" ? sp.edit : undefined;
   const [config, coaches] = await Promise.all([getAllowanceConfig(), listCoaches()]);
   const roster = coaches
     .filter((c) => c.active)
@@ -14,10 +20,25 @@ export default async function AllowancePage() {
       center: c.center,
       allowanceTier: c.allowanceTier,
     }));
+
+  // ?edit=<runId> loads a saved record back into the calculator. Re-saving the
+  // same staff + period replaces that record (createAllowanceRun is idempotent),
+  // so a second center's manager can add their hours without clobbering the first.
+  let initial: AllowanceEditTarget | undefined;
+  if (edit) {
+    const run = await getAllowanceRun(Number(edit));
+    if (run) initial = { runId: run.id, periodLabel: run.periodLabel, input: run.input };
+  }
+
   return (
     <div className="fade-in space-y-4">
       <SectionNav section="allowance" />
-      <AllowanceCalculator config={config} coaches={roster} />
+      <AllowanceCalculator
+        key={initial?.runId ?? "new"}
+        config={config}
+        coaches={roster}
+        initial={initial}
+      />
     </div>
   );
 }
