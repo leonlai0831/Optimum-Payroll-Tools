@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { StaffCombobox } from "@/components/staff-combobox";
 import { useToast } from "@/components/toast";
 import { attendanceBracket, calcAllowance } from "@/lib/allowance/calc";
+import { validateAllowanceInput } from "@/lib/allowance/validate";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type {
   AllowanceConfig,
@@ -86,6 +87,7 @@ export function AllowanceCalculator({
     otherItems,
   };
   const result = calcAllowance(input, config);
+  const warnings = validateAllowanceInput(input);
   const rates = config.teaching[tier];
   const noTeaching = rates.normal === 0 && rates.youngSwimmer === 0 && rates.precompLifesaving === 0;
   const bracket = attendanceBracket(result.attendancePct);
@@ -439,6 +441,20 @@ export function AllowanceCalculator({
             <Plus className="h-3.5 w-3.5" /> Add item
           </Button>
         </Card>
+
+        {/* Non-blocking data-entry warnings */}
+        {warnings.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+              <AlertTriangle className="h-3.5 w-3.5" /> Check your entry
+            </p>
+            <ul className="mt-1 list-inside list-disc text-xs text-amber-700">
+              {warnings.map((w) => (
+                <li key={w.code}>{w.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Grand total */}
         <Card className="flex flex-col gap-1 bg-brand-light p-4 sm:flex-row sm:items-center sm:justify-between">

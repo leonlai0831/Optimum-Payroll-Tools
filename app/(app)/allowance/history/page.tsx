@@ -1,23 +1,36 @@
 import { redirect } from "next/navigation";
 import { Coins } from "lucide-react";
-import { getAllowanceSavers, listAllowanceRuns } from "@/lib/db/queries";
+import { getAllowanceSavers, listAllowanceRuns, listCoaches } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
 import { AllowanceHistoryView } from "@/components/allowance-history-view";
+import { AllowanceCompleteness, type RosterEntry } from "@/components/allowance-completeness";
 
 export const dynamic = "force-dynamic";
+
+function currentPeriod(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export default async function AllowanceHistoryPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   // Edit attribution ("edited by …") is visible to admins + super admins only.
   const canSeeEditors = user.role === "admin" || user.role === "super_admin";
-  const [rows, caps, savers] = await Promise.all([
+  const [rows, caps, savers, coaches] = await Promise.all([
     listAllowanceRuns(),
     getCapabilities(user),
     canSeeEditors ? getAllowanceSavers() : Promise.resolve(null),
+    listCoaches(),
   ]);
+
+  const period = currentPeriod();
+  const roster: RosterEntry[] = coaches
+    .filter((c) => c.active)
+    .map((c) => ({ id: c.id, name: c.canonicalName, center: c.center }));
+  const savedNames = rows.filter((r) => r.periodLabel === period).map((r) => r.canonicalName);
 
   return (
     <div className="fade-in space-y-4">
@@ -25,6 +38,9 @@ export default async function AllowanceHistoryPage() {
       <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
         <Coins className="h-5 w-5 text-indigo-500" /> Saved Allowances
       </h1>
+      {roster.length > 0 && (
+        <AllowanceCompleteness period={period} roster={roster} savedNames={savedNames} />
+      )}
       <AllowanceHistoryView rows={rows} canEdit={caps.has("run_allowance")} savers={savers} />
     </div>
   );
