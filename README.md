@@ -61,6 +61,7 @@ npm run build
 | `SUPER_ADMIN_EMAIL` | yes (prod, first run) | Email of the first super admin, seeded on the first sign-in. |
 | `SUPER_ADMIN_PASSWORD` | yes (prod, first run) | Password for that first super admin. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
+| `SENTRY_DSN` | optional | Enables Sentry server error monitoring. Unset → no-op. |
 
 > Auth is **per-user** (email + password, roles). The first super admin is bootstrapped
 > from `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`; after that, manage accounts in-app.

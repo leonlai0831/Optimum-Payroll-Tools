@@ -34,6 +34,7 @@ connection string as `POSTGRES_URL` — use the **pooled** URL.
 | `SUPER_ADMIN_EMAIL` | yes (first run) | Email for the first super admin. |
 | `SUPER_ADMIN_PASSWORD` | yes (first run) | Password for the first super admin. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merge + analysis; omitted = graceful fallback. |
+| `SENTRY_DSN` | optional | Enables Sentry server error monitoring; omitted = no-op. |
 
 ## 4. Migrations
 

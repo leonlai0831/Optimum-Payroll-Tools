@@ -1,6 +1,7 @@
 import { drizzle as drizzlePg, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
+import { logger } from "@/lib/log";
 
 /**
  * Single DB type used across the app. In production we connect to Postgres
@@ -118,6 +119,7 @@ export function getDb(): Promise<DB> {
       // Don't cache a failed init (e.g. a transient connect error on cold start) —
       // clear it so the next request retries instead of reusing a rejected promise.
       globalThis.__kpiDb = undefined;
+      logger.error("database init failed", { err });
       throw err;
     });
   }
