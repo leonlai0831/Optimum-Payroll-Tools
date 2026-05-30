@@ -1,10 +1,11 @@
 /** Account-level permission roles. Extensible — add e.g. "supervisor" here later. */
-export const ROLES = ["super_admin", "admin", "staff"] as const;
+export const ROLES = ["super_admin", "admin", "supervisor", "staff"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ROLE_LABELS: Record<Role, string> = {
   super_admin: "Super Admin",
   admin: "Admin",
+  supervisor: "Supervisor",
   staff: "Staff",
 };
 
@@ -40,7 +41,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
 
 /** Roles whose capabilities are configurable (super_admin is always all-access). */
 export type ConfigurableRole = Exclude<Role, "super_admin">;
-export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "staff"];
+export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "supervisor", "staff"];
 
 /** The editable permission matrix (super_admin omitted — it can never be locked out). */
 export type PermissionConfig = Record<ConfigurableRole, Capability[]>;
@@ -56,6 +57,17 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "run_kpi",
     "run_allowance",
     "view_audit",
+  ],
+  // A team lead / senior coach: oversee and review the team, run the monthly
+  // numbers, but no profile edits, user management, settings edits, or audit log.
+  supervisor: [
+    "view_settings",
+    "view_all_staff",
+    "view_own",
+    "edit_appraisals",
+    "edit_notes",
+    "run_kpi",
+    "run_allowance",
   ],
   staff: ["view_own"],
 };

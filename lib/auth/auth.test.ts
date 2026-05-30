@@ -120,4 +120,18 @@ describe("capability matrix (default permission config)", () => {
     expect(await userCan(staff, "view_all_staff")).toBe(false);
     expect(await userCan(staff, "run_allowance")).toBe(false);
   });
+
+  it("supervisor oversees and reviews the team but cannot administer", async () => {
+    const sup = asRole("supervisor");
+    expect(await userCan(sup, "view_all_staff")).toBe(true);
+    expect(await userCan(sup, "edit_appraisals")).toBe(true);
+    expect(await userCan(sup, "edit_notes")).toBe(true);
+    expect(await userCan(sup, "run_kpi")).toBe(true);
+    expect(await userCan(sup, "run_allowance")).toBe(true);
+    // ...but not the administrative capabilities:
+    expect(await userCan(sup, "edit_staff")).toBe(false);
+    expect(await userCan(sup, "view_audit")).toBe(false);
+    expect(await userCan(sup, "manage_users")).toBe(false);
+    expect(await userCan(sup, "edit_settings")).toBe(false);
+  });
 });

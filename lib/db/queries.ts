@@ -22,7 +22,7 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { DEFAULT_PERMISSION_CONFIG, type PermissionConfig, type Role } from "@/lib/auth/types";
+import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type PermissionConfig, type Role } from "@/lib/auth/types";
 import { DEFAULT_PERFORMANCE_CONFIG } from "@/lib/performance/defaults";
 import type {
   AppraisalRating,
@@ -614,6 +614,19 @@ export async function deleteUser(id: number): Promise<void> {
   await db.delete(users).where(eq(users.id, id));
 }
 
+/**
+ * Backfill any configurable role missing from a stored matrix with its
+ * defaults — lets a newly added role (e.g. supervisor) work on deployments
+ * whose matrix was saved before the role existed, with no migration.
+ */
+function normalizePermissionConfig(data: PermissionConfig): PermissionConfig {
+  const out: PermissionConfig = { ...data };
+  for (const role of CONFIGURABLE_ROLES) {
+    if (!Array.isArray(out[role])) out[role] = [...DEFAULT_PERMISSION_CONFIG[role]];
+  }
+  return out;
+}
+
 /** Read the singleton permission matrix, seeding defaults on first use. */
 export const getPermissionConfig = cache(async (): Promise<PermissionConfig> => {
   const db = await getDb();
@@ -622,7 +635,7 @@ export const getPermissionConfig = cache(async (): Promise<PermissionConfig> => 
     .from(permissionConfig)
     .where(eq(permissionConfig.id, 1))
     .limit(1);
-  if (rows[0]) return rows[0].data;
+  if (rows[0]) return normalizePermissionConfig(rows[0].data);
   const data = structuredClone(DEFAULT_PERMISSION_CONFIG);
   await db.insert(permissionConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;
