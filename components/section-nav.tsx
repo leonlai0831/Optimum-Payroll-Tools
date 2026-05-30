@@ -7,6 +7,7 @@ import {
   Calculator,
   History,
   Home,
+  Layers,
   LayoutDashboard,
   ScrollText,
   Settings,
@@ -34,6 +35,7 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
     title: "Staff Allowance",
     items: [
       { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
+      { href: "/allowance/bulk", label: "Bulk entry", icon: Layers },
       { href: "/allowance/history", label: "History", icon: History },
       { href: "/allowance/settings", label: "Settings", icon: SlidersHorizontal },
     ],
