@@ -20,6 +20,7 @@ export const CAPABILITIES = [
   "edit_appraisals",
   "edit_notes",
   "run_kpi",
+  "finalize_kpi",
   "run_allowance",
   "view_audit",
 ] as const;
@@ -35,6 +36,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   edit_appraisals: "Create/edit appraisals",
   edit_notes: "Create/edit notes",
   run_kpi: "Run KPI bonus",
+  finalize_kpi: "Finalize KPI bonus (management review)",
   run_allowance: "Run allowance",
   view_audit: "View audit log",
 };
@@ -55,11 +57,14 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "edit_appraisals",
     "edit_notes",
     "run_kpi",
+    // Finalize a KPI month after the management review — admin + super_admin only.
+    "finalize_kpi",
     "run_allowance",
     "view_audit",
   ],
   // A team lead / senior coach: oversee and review the team, run the monthly
   // numbers, but no profile edits, user management, settings edits, or audit log.
+  // Deliberately NOT granted `finalize_kpi` (closing a month is admin-only).
   supervisor: [
     "view_settings",
     "view_all_staff",

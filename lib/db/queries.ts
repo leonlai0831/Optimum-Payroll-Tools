@@ -25,7 +25,7 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type PermissionConfig, type Role } from "@/lib/auth/types";
+import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type Capability, type PermissionConfig, type Role } from "@/lib/auth/types";
 import { DEFAULT_PERFORMANCE_CONFIG } from "@/lib/performance/defaults";
 import type {
   AppraisalRating,
@@ -351,20 +351,55 @@ export async function getRun(id: number): Promise<RunRecord | undefined> {
   return rows[0];
 }
 
+/**
+ * A month is a draft until every shown coach has its required inputs (most
+ * commonly the management assessment, which a manager fills after the upload).
+ */
+export function runStatusFromResults(coachResults: RunCoach[]): "draft" | "finalized" {
+  return coachResults.length > 0 && coachResults.every((c) => c.isComplete)
+    ? "finalized"
+    : "draft";
+}
+
 export async function createRun(input: {
   periodLabel: string;
   filename: string;
   csvRows: InstructorRow[];
   configSnapshot: AppConfig;
   coachResults: RunCoach[];
+  status?: "draft" | "finalized";
 }): Promise<number> {
   const db = await getDb();
+  const status = input.status ?? "finalized";
   const [row] = await db
     .insert(runs)
-    .values({ ...input, status: "finalized" })
+    .values({
+      periodLabel: input.periodLabel,
+      filename: input.filename,
+      csvRows: input.csvRows,
+      configSnapshot: input.configSnapshot,
+      coachResults: input.coachResults,
+      status,
+    })
     .returning({ id: runs.id });
-  await upsertCoachesFromRun(input.coachResults);
+  // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
+  // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
+  if (status === "finalized") await upsertCoachesFromRun(input.coachResults);
   return row.id;
+}
+
+/**
+ * Save a management review back onto a run: replace the (client-recomputed) coach
+ * results and set the new status. Carries profiles forward when finalizing.
+ */
+export async function updateRunReview(
+  id: number,
+  coachResults: RunCoach[],
+  status: "draft" | "finalized",
+): Promise<void> {
+  const db = await getDb();
+  await db.update(runs).set({ coachResults, status }).where(eq(runs.id, id));
+  if (status === "finalized") await upsertCoachesFromRun(coachResults);
 }
 
 export async function deleteRun(id: number): Promise<void> {
@@ -818,10 +853,23 @@ export async function deleteUser(id: number): Promise<void> {
  * defaults — lets a newly added role (e.g. supervisor) work on deployments
  * whose matrix was saved before the role existed, with no migration.
  */
-function normalizePermissionConfig(data: PermissionConfig): PermissionConfig {
+/**
+ * Capabilities introduced after a permission_config row may already have been
+ * written are backfilled to the roles that hold them by default. Safe because a
+ * brand-new capability can't have been intentionally revoked. Extend when adding
+ * default-granted capabilities that must reach existing deployments.
+ */
+const BACKFILL_CAPS: Capability[] = ["finalize_kpi"];
+
+export function normalizePermissionConfig(data: PermissionConfig): PermissionConfig {
   const out: PermissionConfig = { ...data };
   for (const role of CONFIGURABLE_ROLES) {
     if (!Array.isArray(out[role])) out[role] = [...DEFAULT_PERMISSION_CONFIG[role]];
+    for (const cap of BACKFILL_CAPS) {
+      if (DEFAULT_PERMISSION_CONFIG[role].includes(cap) && !out[role].includes(cap)) {
+        out[role] = [...out[role], cap];
+      }
+    }
   }
   return out;
 }
