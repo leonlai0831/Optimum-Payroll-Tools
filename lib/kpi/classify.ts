@@ -160,16 +160,32 @@ const hasPlaceholderMarker = (name: string, markers: string[]) => {
   return markers.some((m) => up.includes(m.toUpperCase()));
 };
 
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Remove placeholder markers from a name so the owning coach is left behind,
+ * e.g. "COBYS HARVEST" -> "COBYS". A pure placeholder ("PAY-AS-YOU-GO") reduces
+ * to empty, which the caller treats as "no coach".
+ */
+function stripPlaceholderMarkers(name: string, markers: string[]): string {
+  let s = name;
+  for (const m of markers) s = s.replace(new RegExp(escapeRe(m), "ig"), " ");
+  return s.replace(/\s+/g, " ").trim();
+}
+
 /** Classify one raw account name under the given config. */
 export function classifyAccount(raw: string, config: ClassifyConfig): ClassifiedAccount {
   const codes = new Set(config.classCodes.map((c) => c.toUpperCase().replace(/\s+/g, "")));
   const centers = new Set(config.centerCodes.map((c) => c.toUpperCase()));
 
   if (hasPlaceholderMarker(raw, config.placeholderMarkers)) {
+    // Strip the marker first so "COBYS HARVEST" attributes to coach COBYS; a
+    // pure placeholder ("PAY-AS-YOU-GO") leaves an empty base.
+    const stripped = stripPlaceholderMarkers(raw, config.placeholderMarkers);
     return {
       raw,
       kind: "placeholder",
-      baseName: resolveBase(raw, codes, centers),
+      baseName: resolveBase(stripped, codes, centers),
       defaultInclude: false,
     };
   }

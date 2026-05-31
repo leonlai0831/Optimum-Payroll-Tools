@@ -82,6 +82,12 @@ describe("classifyAccount — kinds", () => {
     }
   });
 
+  it("a named placeholder attributes to its coach; a pure one is empty", () => {
+    expect(c("COBYS HARVEST").baseName).toBe("COBYS");
+    expect(c("WAN YING HARVEST").baseName).toBe("WAN YING");
+    expect(c("PAY-AS-YOU-GO [BK]").baseName).toBe("");
+  });
+
   it("slash co-teach lists both people; excluded by default", () => {
     const r = c("(PURPLE) HARVARD / AARON [KK]");
     expect(r.kind).toBe("coteach");

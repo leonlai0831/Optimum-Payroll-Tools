@@ -84,14 +84,18 @@ describe("merge grouping", () => {
     expect(js?.accounts.sort()).toEqual(["JIE SHERN [BK]", "JIE SHERN [BT]"]);
     expect(groups.length).toBe(2);
   });
-  it("does NOT merge numbered variants (COBYS vs COBYS 2) without AI", () => {
-    // getCleanName keeps the "2" before the bracket -> the gap AI merge fills.
+  it("folds numbered overflow into the base coach (classifier)", () => {
+    // COBYS 2 is an overflow class for COBYS. The classifier now attributes it
+    // to COBYS (excluded from the score by default downstream); v11.1 left it
+    // as a phantom separate account that only AI could merge.
     const groups = buildGroups({ names: ["COBYS [BK]", "COBYS 2 [BK]"] });
-    expect(groups.length).toBe(2);
+    expect(groups.length).toBe(1);
+    expect(groups[0].canonicalName).toBe("COBYS");
   });
-  it("does NOT merge cross-format aliases without AI", () => {
+  it("folds a HARVEST placeholder into its coach (classifier)", () => {
     const groups = buildGroups({ names: ["HONG LI [BK]", "HONG LI HARVEST"] });
-    expect(groups.length).toBe(2);
+    expect(groups.length).toBe(1);
+    expect(groups[0].canonicalName).toBe("HONG LI");
   });
   it("merges cross-format aliases when AI clusters them", () => {
     const groups = buildGroups({
