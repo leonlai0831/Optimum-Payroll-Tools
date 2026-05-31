@@ -197,6 +197,36 @@ export async function updateCoach(
     .where(eq(coaches.id, id));
 }
 
+/** Replace a coach's account aliases (used by the KPI link manager). */
+export async function updateCoachAliases(id: number, aliases: string[]): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(coaches)
+    .set({ aliases, updatedAt: new Date() })
+    .where(eq(coaches.id, id));
+}
+
+/**
+ * Set (or clear) a coach's "not applicable for KPI linking" override. When
+ * setting it, snapshot the tier it was set at so the link panel can re-surface
+ * the coach if they later move up to a teaching tier.
+ */
+export async function setCoachKpiLinkNa(
+  id: number,
+  na: boolean,
+  tier: AllowanceTier | null = null,
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(coaches)
+    .set({
+      kpiLinkNa: na,
+      kpiLinkNaTier: na ? tier : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(coaches.id, id));
+}
+
 /** Permanently remove a staff profile. Saved allowance/KPI records are kept. */
 export async function deleteCoach(id: number): Promise<void> {
   const db = await getDb();

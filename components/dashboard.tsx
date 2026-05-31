@@ -40,6 +40,8 @@ interface CoachProfile {
   lastMgmtAssessment: number | null;
   lastMgmtAssessmentAt: string | null;
   lastAllowance: number | null;
+  /** Persisted "don't KPI-link this coach" override (managed on /kpi/links). */
+  kpiLinkNa?: boolean;
 }
 
 interface Acct {
@@ -151,6 +153,8 @@ export function Dashboard({
           ]);
           setConfig(cfg);
           setCoachList(coachList);
+          // Seed the session NA set from persisted "not applicable" overrides.
+          setNaRecs(new Set(coachList.filter((c) => c.kpiLinkNa).map((c) => c.id)));
 
           const names = uniqueInstructorNames(parsed);
           const accountsForMatch = names.map((n) => {
@@ -466,10 +470,19 @@ export function Dashboard({
     setSavedId(null);
   }
 
-  /** Mark an allowance record "not applicable" — hide it from the link panel. */
+  /** Mark an allowance record "not applicable" — hide it + persist so it sticks next month. */
   function markNotApplicable(rec: AllowanceRec) {
     if (rec.coachId != null) {
-      setNaRecs((prev) => new Set(prev).add(rec.coachId!));
+      const coachId = rec.coachId;
+      setNaRecs((prev) => new Set(prev).add(coachId));
+      // Persist on the coach profile so the link page + next month respect it.
+      void fetch(`/api/kpi/links/${coachId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kpiLinkNa: true, naTier: rec.tier }),
+      }).catch(() => {
+        /* best-effort; session hide already applied */
+      });
     } else {
       setAllowanceRecs((prev) => prev.filter((r) => r !== rec));
     }

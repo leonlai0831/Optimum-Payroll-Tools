@@ -47,6 +47,11 @@ export const coaches = pgTable("coaches", {
   lastMgmtAssessmentAt: timestamp("last_mgmt_assessment_at", { withTimezone: true }),
   lastAllowance: real("last_allowance"),
   allowanceTier: text("allowance_tier").$type<AllowanceTier>(),
+  // KPI link override: user marked this coach "not applicable" for KPI linking.
+  // `kpiLinkNaTier` snapshots the tier when set, so the panel can re-surface the
+  // coach if they later move up to a teaching tier.
+  kpiLinkNa: boolean("kpi_link_na").default(false).notNull(),
+  kpiLinkNaTier: text("kpi_link_na_tier").$type<AllowanceTier>(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

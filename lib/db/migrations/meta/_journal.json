@@ -64,6 +64,13 @@
       "when": 1780150354737,
       "tag": "0008_glossy_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780221915136,
+      "tag": "0009_awesome_magus",
+      "breakpoints": true
     }
   ]
 }
