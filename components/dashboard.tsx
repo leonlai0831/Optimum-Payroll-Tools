@@ -2,15 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
-import { Download, FileUp, Save, Sparkles, TriangleAlert } from "lucide-react";
+import { Download, FileUp, Link2, Save, Sparkles, TriangleAlert } from "lucide-react";
 import { Drawer } from "@/components/drawer";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { Skeleton } from "@/components/skeleton";
+import { SearchableSelect } from "@/components/searchable-select";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
+import { linkAllowance, reconcileAllowances, type CoachLinkInfo } from "@/lib/kpi/allowance-link";
+import { isLinkableTier, nonLinkableReason } from "@/lib/allowance/tier-rules";
+import type { AllowanceTier } from "@/lib/allowance/types";
 import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
@@ -70,18 +74,10 @@ interface AllowanceRec {
   coachId: number | null;
   canonicalName: string;
   teaching: number;
-}
-
-/** Match a merged coach to a period's allowance record: prefer coachId, else canonical name. */
-function matchAllowance(
-  list: AllowanceRec[],
-  coachId: number | null,
-  canonicalName: string,
-): number | null {
-  const rec =
-    (coachId != null ? list.find((r) => r.coachId === coachId) : undefined) ??
-    list.find((r) => r.canonicalName === canonicalName);
-  return rec ? rec.teaching : null;
+  /** Pay tier — drives whether this record may link to a KPI coach at all. */
+  tier: AllowanceTier;
+  /** CSV account aliases of this allowance's coach profile (for tolerant linking). */
+  aliases?: string[];
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -122,6 +118,11 @@ export function Dashboard({
   const [period, setPeriod] = useState("");
   const [rows, setRows] = useState<InstructorRow[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [coachList, setCoachList] = useState<CoachProfile[]>([]);
+  /** Allowance records for the active period + how each linked, for the link panel. */
+  const [allowanceRecs, setAllowanceRecs] = useState<AllowanceRec[]>([]);
+  /** coachIds the user marked "not applicable" this session — hidden from the panel. */
+  const [naRecs, setNaRecs] = useState<Set<number>>(() => new Set());
   const [accts, setAccts] = useState<Acct[]>([]);
   const [meta, setMeta] = useState<Record<string, GroupInputs>>({});
   const [aiStatus, setAiStatus] = useState<"idle" | "matching" | "done">("idle");
@@ -149,6 +150,7 @@ export function Dashboard({
             fetchJson<CoachProfile[]>("/api/coaches"),
           ]);
           setConfig(cfg);
+          setCoachList(coachList);
 
           const names = uniqueInstructorNames(parsed);
           const accountsForMatch = names.map((n) => {
@@ -229,7 +231,9 @@ export function Dashboard({
           setAccts(nextAccts);
           setMeta(nextMeta);
           setPhase("working");
-          await applyAllowanceForPeriod(derivedPeriod);
+          // Pass the freshly-fetched coach list + accounts explicitly so alias
+          // enrichment doesn't depend on state having flushed yet.
+          await applyAllowanceForPeriod(derivedPeriod, { profiles: coachList, accts: nextAccts });
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Failed to process file");
         } finally {
@@ -244,14 +248,40 @@ export function Dashboard({
   }
 
   /** Fetch the period's saved allowances and overlay them onto each coach's teaching allowance. */
-  async function applyAllowanceForPeriod(p: string) {
+  async function applyAllowanceForPeriod(
+    p: string,
+    override?: { profiles: CoachProfile[]; accts: Acct[] },
+  ) {
     if (!p) return;
     let list: AllowanceRec[];
     try {
       list = await fetchJson<AllowanceRec[]>(`/api/allowance/runs?period=${encodeURIComponent(p)}`);
     } catch {
+      setAllowanceRecs([]);
       return; // no allowances saved for this period — keep carry-over values
     }
+    // Enrich each record with its coach profile's account aliases so a short KPI
+    // name (VASSEN) can still link to a full allowance name (VASSENTHAN).
+    const profiles = override?.profiles ?? coachList;
+    const aliasById = new Map(profiles.map((c) => [c.id, c.aliases ?? []]));
+    const enriched = list.map((r) => ({
+      ...r,
+      aliases: r.coachId != null ? aliasById.get(r.coachId) ?? [] : [],
+    }));
+    setAllowanceRecs(enriched);
+
+    // Accounts-per-group, from the explicit override or current state.
+    const acctsByGroup = new Map<string, string[]>();
+    const readAccts = (cur: Acct[]) => {
+      for (const a of cur) {
+        const arr = acctsByGroup.get(a.groupId) ?? [];
+        arr.push(a.name);
+        acctsByGroup.set(a.groupId, arr);
+      }
+    };
+    if (override) readAccts(override.accts);
+    else setAccts((cur) => (readAccts(cur), cur));
+
     setMeta((prev) => {
       const next: Record<string, GroupInputs> = {};
       for (const [id, m] of Object.entries(prev)) {
@@ -259,9 +289,14 @@ export function Dashboard({
           next[id] = m; // never clobber a manual override
           continue;
         }
-        const auto = matchAllowance(list, m.coachId, m.canonicalName);
-        if (auto != null) {
-          next[id] = { ...m, allowance: auto, allowanceSource: "auto" };
+        const coach: CoachLinkInfo = {
+          coachId: m.coachId,
+          canonicalName: m.canonicalName,
+          accounts: acctsByGroup.get(id) ?? [],
+        };
+        const linked = linkAllowance(enriched, coach).rec;
+        if (linked) {
+          next[id] = { ...m, allowance: linked.teaching, allowanceSource: "auto" };
         } else if (m.allowanceSource === "auto") {
           // an auto value from a different period no longer applies — fall back to carry-over
           next[id] = {
@@ -312,6 +347,25 @@ export function Dashboard({
   const ranked = useMemo(() => groups.filter((g) => (g.meta.allowance ?? 0) > 0), [groups]);
   const hiddenCount = groups.length - ranked.length;
   const incompleteCount = ranked.filter((g) => !g.comp.isComplete).length;
+
+  // Reconcile this month's allowance records against the uploaded coaches, so we
+  // can surface records that were entered but linked to nobody (the actionable
+  // "I entered 30 but only see 2" signal). Non-teaching tiers (A1–A3, PA, T0)
+  // are excluded — they never link, so they aren't "missing" links.
+  const { orphanAllowances, nonLinkableCount } = useMemo(() => {
+    if (allowanceRecs.length === 0) return { orphanAllowances: [], nonLinkableCount: 0 };
+    const coachInfos: CoachLinkInfo[] = groups.map((g) => ({
+      coachId: g.meta.coachId,
+      canonicalName: g.meta.canonicalName,
+      accounts: g.accounts.map((a) => a.name),
+    }));
+    const orphans = reconcileAllowances(allowanceRecs, coachInfos).orphanRecs;
+    const linkable = orphans.filter((r) => isLinkableTier(r.tier));
+    return {
+      orphanAllowances: linkable.filter((r) => !naRecs.has(r.coachId ?? -1)),
+      nonLinkableCount: orphans.length - linkable.length,
+    };
+  }, [allowanceRecs, groups, naRecs]);
 
   // Display-only sort/filter — save() and exportCsv() always use the full `ranked` list.
   const [q, setQ] = useState("");
@@ -382,6 +436,43 @@ export function Dashboard({
 
   function setAccountInclude(name: string, include: boolean) {
     setAccts((prev) => prev.map((a) => (a.name === name ? { ...a, include } : a)));
+    setSavedId(null);
+  }
+
+  /** Manually attach an unmatched allowance record to a coach group in this upload. */
+  function linkAllowanceToCoach(rec: AllowanceRec, groupId: string) {
+    // Non-teaching tiers (A1–A3, PA, T0) have no class — block the link.
+    if (!isLinkableTier(rec.tier)) {
+      toast.error(`${rec.canonicalName} (${rec.tier}) can’t be linked: ${nonLinkableReason(rec.tier)}`);
+      return;
+    }
+    setMeta((prev) => {
+      const m = prev[groupId];
+      if (!m) return prev;
+      return {
+        ...prev,
+        // Adopt the record's coachId so the link persists by id on save, and
+        // overlay its teaching allowance as an auto link.
+        [groupId]: {
+          ...m,
+          allowance: rec.teaching,
+          allowanceSource: "auto",
+          coachId: m.coachId ?? rec.coachId,
+        },
+      };
+    });
+    // Drop it from the orphan list immediately.
+    setAllowanceRecs((prev) => prev.filter((r) => r !== rec));
+    setSavedId(null);
+  }
+
+  /** Mark an allowance record "not applicable" — hide it from the link panel. */
+  function markNotApplicable(rec: AllowanceRec) {
+    if (rec.coachId != null) {
+      setNaRecs((prev) => new Set(prev).add(rec.coachId!));
+    } else {
+      setAllowanceRecs((prev) => prev.filter((r) => r !== rec));
+    }
     setSavedId(null);
   }
 
@@ -555,6 +646,53 @@ export function Dashboard({
           {hiddenCount} coach(es) hidden from the leaderboard — no teaching allowance for {period}.
           Save it in the Allowance Calculator for the same month to include them.
         </p>
+      )}
+
+      {/* Allowance link panel: records entered for this month that matched no coach. */}
+      {orphanAllowances.length > 0 && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3">
+          <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-indigo-900">
+            <Link2 className="h-4 w-4" />
+            {orphanAllowances.length} allowance record(s) for {period} didn&apos;t match a coach
+          </p>
+          <p className="mb-2 text-xs text-indigo-800/80">
+            These were entered in the Allowance Calculator but their name doesn&apos;t match any
+            uploaded coach. Link each to the right coach — it&apos;s remembered as an alias, so next
+            month links automatically. Pick <strong>Not applicable</strong> to skip one.
+            {nonLinkableCount > 0 && (
+              <> {nonLinkableCount} admin/T0 record(s) are hidden — those tiers don&apos;t teach.</>
+            )}
+          </p>
+          <div className="space-y-1">
+            {orphanAllowances.map((r) => (
+              <div
+                key={`${r.coachId ?? r.canonicalName}`}
+                className="flex items-center justify-between gap-2 rounded border border-indigo-100 bg-white px-2 py-1 text-xs"
+              >
+                <span className="truncate">
+                  <span className="font-medium text-gray-900">{r.canonicalName}</span>{" "}
+                  <span className="text-gray-400">· {r.tier} · {rm(r.teaching)}</span>
+                </span>
+                <SearchableSelect
+                  className="w-44"
+                  placeholder="link to coach…"
+                  searchPlaceholder="Search coach…"
+                  pinned={[{ value: "NA", label: "⊘ Not applicable (don’t link)" }]}
+                  options={groups
+                    .filter((g) => g.meta.allowanceSource !== "auto")
+                    .map((g) => ({
+                      value: g.id,
+                      label: `${g.meta.canonicalName} (${g.comp.students} students)`,
+                    }))}
+                  onSelect={(value) => {
+                    if (value === "NA") markNotApplicable(r);
+                    else if (value) linkAllowanceToCoach(r, value);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Coaches table */}
