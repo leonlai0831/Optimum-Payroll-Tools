@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { History } from "lucide-react";
-import { Card, Input } from "@/components/ui";
+import { Badge, Card, Input } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import type { RunSummary } from "@/lib/db/queries";
@@ -59,6 +59,7 @@ export function KpiHistoryView({
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <SortTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} />
+              <th className="px-4 py-2 text-left">Status</th>
               <SortTh label="File" sortKey="file" sort={sort} onSort={toggleSort} />
               <SortTh label="Coaches" sortKey="coaches" sort={sort} onSort={toggleSort} align="center" />
               <SortTh label="Total Payout" sortKey="payout" sort={sort} onSort={toggleSort} align="right" />
@@ -69,7 +70,7 @@ export function KpiHistoryView({
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
                   No saved months match the current filter.
                 </td>
               </tr>
@@ -77,6 +78,17 @@ export function KpiHistoryView({
               sorted.map((r) => (
                 <tr key={r.id} className="hover:bg-indigo-50/40">
                   <td className="px-4 py-2 font-semibold text-gray-900">{r.periodLabel}</td>
+                  <td className="px-4 py-2">
+                    {r.status === "draft" ? (
+                      <Badge className="border-amber-300 bg-amber-100 text-amber-800">
+                        Pending review
+                      </Badge>
+                    ) : (
+                      <Badge className="border-green-300 bg-green-100 text-green-800">
+                        Finalized
+                      </Badge>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-gray-500">{r.filename}</td>
                   <td className="px-4 py-2 text-center text-gray-600">{r.coachCount}</td>
                   <td className="px-4 py-2 text-right font-medium text-green-700">
@@ -100,7 +112,7 @@ export function KpiHistoryView({
                         href={`/kpi/history/${r.id}`}
                         className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                       >
-                        View
+                        {r.status === "draft" ? "Review" : "View"}
                       </Link>
                     </div>
                   </td>
