@@ -174,10 +174,12 @@ export function KpiLinkManager({
         <h1 className="text-lg font-bold text-gray-900">KPI ↔ Allowance links</h1>
       </div>
       <p className="mb-3 text-sm text-gray-500">
-        Controls which coaches&apos; teaching allowance links into the KPI leaderboard. Tiers that
-        don&apos;t teach (A1–A3, PA, T0) are locked and can never link. Mark anyone else
-        &ldquo;Not applicable&rdquo; to skip them; it&apos;s remembered until they move up to a
-        teaching tier.
+        Standing rules for how teaching allowances link into the KPI leaderboard — they apply to{" "}
+        <strong>future</strong> uploads, not a month already saved (fix a saved month on its review
+        page). Tiers that don&apos;t teach (A1–A3, PA, T0) are locked and can never link. Mark anyone
+        else &ldquo;Not applicable&rdquo; to skip them; it&apos;s remembered until they move up to a
+        teaching tier. Editing a coach&apos;s accounts here teaches next month&apos;s upload which CSV
+        names belong to them.
       </p>
 
       {counts.recheck > 0 && (
