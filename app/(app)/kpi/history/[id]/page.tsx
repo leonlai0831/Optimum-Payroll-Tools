@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { getRun } from "@/lib/db/queries";
 import { Badge, Card } from "@/components/ui";
 import { SectionNav } from "@/components/section-nav";
+import { sectionNavProps } from "@/lib/auth/section-nav-props";
 import { DeleteRunButton } from "@/components/delete-run-button";
 import { rm } from "@/lib/utils";
 
@@ -18,12 +19,13 @@ export default async function RunDetailPage({
   const run = await getRun(Number(id));
   if (!run) notFound();
 
+  const navProps = await sectionNavProps();
   const coaches = [...run.coachResults].sort((a, b) => b.finalScore - a.finalScore);
   const totalPayout = coaches.reduce((s, c) => s + (c.payout || 0), 0);
 
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="kpi" />
+      <SectionNav section="kpi" {...navProps} />
       <div className="flex items-center justify-between">
         <div>
           <Link href="/kpi/history" className="flex items-center gap-1 text-xs text-indigo-600">

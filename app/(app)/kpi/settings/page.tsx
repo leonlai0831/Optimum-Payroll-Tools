@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   const config = await getConfig();
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="kpi" />
+      <SectionNav section="kpi" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
       <SettingsForm initial={config} canEdit={canEdit} />
     </div>
   );

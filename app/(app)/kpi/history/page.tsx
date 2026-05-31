@@ -15,7 +15,7 @@ export default async function HistoryPage() {
 
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="kpi" />
+      <SectionNav section="kpi" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
       <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
         <History className="h-5 w-5 text-indigo-500" /> Saved Months
       </h1>
