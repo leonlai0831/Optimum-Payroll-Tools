@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Lock, Search, TriangleAlert } from "lucide-react";
+import { Link2, Lock, Search, TriangleAlert, X } from "lucide-react";
 import { Badge, Card, Input, Select } from "@/components/ui";
 import { SortTh, useTableSort } from "@/components/table-controls";
 import { useToast } from "@/components/toast";
@@ -63,6 +63,8 @@ export function KpiLinkManager({
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState<number | null>(null);
+  /** Coach whose Accounts cell is in edit mode (null = none). */
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const counts = useMemo(() => {
     let linkable = 0;
@@ -143,6 +145,25 @@ export function KpiLinkManager({
       toast.success(na ? `${c.canonicalName} won’t be KPI-linked.` : `${c.canonicalName} re-enabled.`);
     } catch {
       setCoaches(initial); // revert on failure
+    }
+  }
+
+  /**
+   * Persist a coach's account aliases. Aliases are the CSV account names that
+   * merge into this coach (lib/kpi/merge.ts), so adding one here is how you
+   * manually link an allowance whose CSV account didn't auto-match — next
+   * month's upload recognises that account and the allowance links into KPI.
+   */
+  async function saveAliases(c: LinkCoach, aliases: string[]) {
+    const cleaned = [...new Set(aliases.map((a) => a.trim()).filter(Boolean))].sort();
+    const prev = coaches;
+    setCoaches((cs) => cs.map((x) => (x.id === c.id ? { ...x, aliases: cleaned } : x)));
+    setEditingId(null);
+    try {
+      await patch(c.id, { aliases: cleaned });
+      toast.success(`Accounts updated for ${c.canonicalName}.`);
+    } catch {
+      setCoaches(prev); // revert on failure
     }
   }
 
@@ -229,9 +250,36 @@ export function KpiLinkManager({
                       <span className="text-xs font-medium text-gray-700">{c.tier ?? "—"}</span>
                     </td>
                     <td className="px-3 py-2">
-                      <div className="max-w-md truncate text-[11px] text-gray-500" title={c.aliases.join(", ")}>
-                        {c.aliases.length ? c.aliases.join(", ") : <span className="text-gray-300">none</span>}
-                      </div>
+                      {editingId === c.id ? (
+                        <AliasEditor
+                          initial={c.aliases}
+                          busy={busy === c.id}
+                          onCancel={() => setEditingId(null)}
+                          onSave={(next) => saveAliases(c, next)}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="max-w-md truncate text-[11px] text-gray-500"
+                            title={c.aliases.join(", ")}
+                          >
+                            {c.aliases.length ? (
+                              c.aliases.join(", ")
+                            ) : (
+                              <span className="text-gray-300">none</span>
+                            )}
+                          </div>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="shrink-0 text-[11px] font-medium text-indigo-600 hover:underline"
+                              onClick={() => setEditingId(c.id)}
+                            >
+                              {c.aliases.length ? "edit" : "+ add"}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-center">
                       {locked ? (
@@ -278,6 +326,94 @@ export function KpiLinkManager({
         <p className="mt-3 text-xs text-gray-500">You have read-only access to these links.</p>
       )}
     </Card>
+  );
+}
+
+/**
+ * Inline editor for a coach's account aliases (the CSV account names that merge
+ * into them). Add the exact account name as it appears in the KPI CSV so next
+ * month's upload links it — and its allowance — to this coach.
+ */
+function AliasEditor({
+  initial,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  initial: string[];
+  busy: boolean;
+  onSave: (aliases: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [list, setList] = useState<string[]>(initial);
+  const [draft, setDraft] = useState("");
+
+  function add() {
+    const v = draft.trim();
+    if (!v) return;
+    // Case-insensitive de-dupe so the same account isn't added twice.
+    if (!list.some((a) => a.toLowerCase() === v.toLowerCase())) setList((l) => [...l, v]);
+    setDraft("");
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1">
+        {list.map((a) => (
+          <span
+            key={a}
+            className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700"
+          >
+            {a}
+            <button
+              type="button"
+              className="text-gray-400 hover:text-red-600"
+              onClick={() => setList((l) => l.filter((x) => x !== a))}
+              aria-label={`Remove ${a}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        {list.length === 0 && <span className="text-[11px] text-gray-300">no accounts</span>}
+      </div>
+      <div className="flex items-center gap-1">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Add CSV account name…"
+          className="w-48 py-1 text-[11px]"
+        />
+        <button
+          type="button"
+          className="rounded border border-gray-200 px-1.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+          onClick={add}
+        >
+          Add
+        </button>
+        <button
+          type="button"
+          className="rounded bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          disabled={busy}
+          onClick={() => onSave(list)}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="px-1.5 py-1 text-[11px] font-medium text-gray-500 hover:underline"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
