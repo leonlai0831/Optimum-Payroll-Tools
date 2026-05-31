@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Lock, Search, TriangleAlert } from "lucide-react";
 import { Badge, Card, Input, Select } from "@/components/ui";
+import { SortTh, useTableSort } from "@/components/table-controls";
 import { useToast } from "@/components/toast";
 import { isLinkableTier } from "@/lib/allowance/tier-rules";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
@@ -34,6 +35,19 @@ export function needsRecheck(c: LinkCoach): boolean {
     (c.kpiLinkNaTier == null || !isLinkableTier(c.kpiLinkNaTier)) &&
     c.tier !== c.kpiLinkNaTier
   );
+}
+
+/** Sort rank for the "KPI link" column: Linkable, then Not applicable, then Locked. */
+function kpiLinkRank(c: LinkCoach): number {
+  if (!isLinkableTier(c.tier)) return 2; // locked
+  if (c.kpiLinkNa) return 1; // not applicable
+  return 0; // linkable
+}
+
+/** Tier sort uses the real tier order (A1…I3), not alphabetical (so I1 < T0 stays sane). */
+function tierRank(c: LinkCoach): number {
+  if (!c.tier) return ALLOWANCE_TIERS.length; // unknown tier sorts last
+  return ALLOWANCE_TIERS.indexOf(c.tier);
 }
 
 export function KpiLinkManager({
@@ -84,6 +98,17 @@ export function KpiLinkManager({
       }
     });
   }, [coaches, q, filter]);
+
+  // Click any header to sort (asc → desc → off). Default A–Z by coach name.
+  const { sorted, sort, toggleSort } = useTableSort(
+    visible,
+    {
+      coach: (c) => c.canonicalName,
+      tier: (c) => tierRank(c),
+      link: (c) => kpiLinkRank(c),
+    },
+    { key: "coach", dir: "asc" },
+  );
 
   async function patch(id: number, body: Record<string, unknown>) {
     setBusy(id);
@@ -174,21 +199,21 @@ export function KpiLinkManager({
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
-              <th className="px-3 py-2 text-left">Coach</th>
-              <th className="px-3 py-2 text-left">Tier</th>
+              <SortTh label="Coach" sortKey="coach" sort={sort} onSort={toggleSort} className="px-3" />
+              <SortTh label="Tier" sortKey="tier" sort={sort} onSort={toggleSort} className="px-3" />
               <th className="px-3 py-2 text-left">Accounts (aliases)</th>
-              <th className="px-3 py-2 text-center">KPI link</th>
+              <SortTh label="KPI link" sortKey="link" sort={sort} onSort={toggleSort} align="center" className="px-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {visible.length === 0 ? (
+            {sorted.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-sm text-gray-500">
                   No coaches match.
                 </td>
               </tr>
             ) : (
-              visible.map((c) => {
+              sorted.map((c) => {
                 const locked = !isLinkableTier(c.tier);
                 const recheck = needsRecheck(c);
                 return (
