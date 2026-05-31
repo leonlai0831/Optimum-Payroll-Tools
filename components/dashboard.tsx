@@ -13,6 +13,7 @@ import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
 import { linkAllowance, reconcileAllowances, type CoachLinkInfo } from "@/lib/kpi/allowance-link";
+import { appearsInLeaderboard } from "@/lib/kpi/leaderboard";
 import { isLinkableTier, nonLinkableReason } from "@/lib/allowance/tier-rules";
 import type { AllowanceTier } from "@/lib/allowance/types";
 import { computeCoach } from "@/lib/kpi/coach";
@@ -347,8 +348,21 @@ export function Dashboard({
     return list.sort((a, b) => b.comp.finalScore - a.comp.finalScore);
   }, [accts, meta, rows, config]);
 
-  // Only coaches with a teaching allowance (auto-linked or manual) appear in the leaderboard.
-  const ranked = useMemo(() => groups.filter((g) => (g.meta.allowance ?? 0) > 0), [groups]);
+  // A coach appears in the leaderboard only with a teaching allowance AND real
+  // teaching this month (students, or a supervisor's group score) — see
+  // appearsInLeaderboard. Keeps out "ghost" groups that inherit an allowance but
+  // have no class (e.g. a "… HARVEST" placeholder split into its own 0-student group).
+  const ranked = useMemo(
+    () =>
+      groups.filter((g) =>
+        appearsInLeaderboard({
+          allowance: g.meta.allowance,
+          students: g.comp.students,
+          groupScore: g.comp.groupScore,
+        }),
+      ),
+    [groups],
+  );
   const hiddenCount = groups.length - ranked.length;
   const incompleteCount = ranked.filter((g) => !g.comp.isComplete).length;
 
@@ -656,8 +670,9 @@ export function Dashboard({
       )}
       {hiddenCount > 0 && (
         <p className="text-xs text-gray-500">
-          {hiddenCount} coach(es) hidden from the leaderboard — no teaching allowance for {period}.
-          Save it in the Allowance Calculator for the same month to include them.
+          {hiddenCount} coach(es) hidden from the leaderboard — no teaching allowance for {period},
+          or no class data this month. Save the allowance in the Allowance Calculator for the same
+          month to include the ones who taught.
         </p>
       )}
 
