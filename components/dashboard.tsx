@@ -7,6 +7,7 @@ import { Drawer } from "@/components/drawer";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { Skeleton } from "@/components/skeleton";
+import { SearchableSelect } from "@/components/searchable-select";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
@@ -672,24 +673,22 @@ export function Dashboard({
                   <span className="font-medium text-gray-900">{r.canonicalName}</span>{" "}
                   <span className="text-gray-400">· {r.tier} · {rm(r.teaching)}</span>
                 </span>
-                <Select
-                  className="w-44 py-0.5 text-[11px]"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value === "NA") markNotApplicable(r);
-                    else if (e.target.value) linkAllowanceToCoach(r, e.target.value);
-                  }}
-                >
-                  <option value="">link to coach…</option>
-                  <option value="NA">⊘ Not applicable (don’t link)</option>
-                  {groups
+                <SearchableSelect
+                  className="w-44"
+                  placeholder="link to coach…"
+                  searchPlaceholder="Search coach…"
+                  pinned={[{ value: "NA", label: "⊘ Not applicable (don’t link)" }]}
+                  options={groups
                     .filter((g) => g.meta.allowanceSource !== "auto")
-                    .map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.meta.canonicalName} ({g.comp.students} students)
-                      </option>
-                    ))}
-                </Select>
+                    .map((g) => ({
+                      value: g.id,
+                      label: `${g.meta.canonicalName} (${g.comp.students} students)`,
+                    }))}
+                  onSelect={(value) => {
+                    if (value === "NA") markNotApplicable(r);
+                    else if (value) linkAllowanceToCoach(r, value);
+                  }}
+                />
               </div>
             ))}
           </div>
