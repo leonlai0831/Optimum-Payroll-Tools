@@ -1,0 +1,33 @@
+name: Delete Neon preview branch on PR close
+
+# The Vercel-Managed Neon integration creates a database branch per PR for its
+# preview deployments but has no built-in "delete on PR close" — cleanup is tied
+# to Vercel deployment retention (6 months by default), so branches pile up
+# against Neon's branch limit and new previews then fail to provision a DB.
+# This deletes the PR's Neon branch as soon as the PR is closed (merged or not).
+#
+# Requires two repo-level values (Settings -> Secrets and variables -> Actions):
+#   - Variable NEON_PROJECT_ID  (Neon Console -> Project -> Settings -> Project ID)
+#   - Secret   NEON_API_KEY     (Neon Console -> account menu -> API keys -> Create)
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  delete-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          # Neon names the preview branch with a "preview/" prefix
+          # (e.g. preview/claude/my-feature), so prepend it to the PR's head
+          # branch or the name won't match and nothing gets deleted.
+          branch: preview/${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+        # A missing branch (already deleted, or name mismatch) shouldn't fail the run.
+        continue-on-error: true
