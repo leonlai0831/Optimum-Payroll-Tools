@@ -12,6 +12,8 @@ import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
 import { linkAllowance, reconcileAllowances, type CoachLinkInfo } from "@/lib/kpi/allowance-link";
+import { isLinkableTier, nonLinkableReason } from "@/lib/allowance/tier-rules";
+import type { AllowanceTier } from "@/lib/allowance/types";
 import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
@@ -71,6 +73,8 @@ interface AllowanceRec {
   coachId: number | null;
   canonicalName: string;
   teaching: number;
+  /** Pay tier — drives whether this record may link to a KPI coach at all. */
+  tier: AllowanceTier;
   /** CSV account aliases of this allowance's coach profile (for tolerant linking). */
   aliases?: string[];
 }
@@ -116,6 +120,8 @@ export function Dashboard({
   const [coachList, setCoachList] = useState<CoachProfile[]>([]);
   /** Allowance records for the active period + how each linked, for the link panel. */
   const [allowanceRecs, setAllowanceRecs] = useState<AllowanceRec[]>([]);
+  /** coachIds the user marked "not applicable" this session — hidden from the panel. */
+  const [naRecs, setNaRecs] = useState<Set<number>>(() => new Set());
   const [accts, setAccts] = useState<Acct[]>([]);
   const [meta, setMeta] = useState<Record<string, GroupInputs>>({});
   const [aiStatus, setAiStatus] = useState<"idle" | "matching" | "done">("idle");
@@ -343,16 +349,22 @@ export function Dashboard({
 
   // Reconcile this month's allowance records against the uploaded coaches, so we
   // can surface records that were entered but linked to nobody (the actionable
-  // "I entered 30 but only see 2" signal).
-  const orphanAllowances = useMemo(() => {
-    if (allowanceRecs.length === 0) return [];
+  // "I entered 30 but only see 2" signal). Non-teaching tiers (A1–A3, PA, T0)
+  // are excluded — they never link, so they aren't "missing" links.
+  const { orphanAllowances, nonLinkableCount } = useMemo(() => {
+    if (allowanceRecs.length === 0) return { orphanAllowances: [], nonLinkableCount: 0 };
     const coachInfos: CoachLinkInfo[] = groups.map((g) => ({
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
       accounts: g.accounts.map((a) => a.name),
     }));
-    return reconcileAllowances(allowanceRecs, coachInfos).orphanRecs;
-  }, [allowanceRecs, groups]);
+    const orphans = reconcileAllowances(allowanceRecs, coachInfos).orphanRecs;
+    const linkable = orphans.filter((r) => isLinkableTier(r.tier));
+    return {
+      orphanAllowances: linkable.filter((r) => !naRecs.has(r.coachId ?? -1)),
+      nonLinkableCount: orphans.length - linkable.length,
+    };
+  }, [allowanceRecs, groups, naRecs]);
 
   // Display-only sort/filter — save() and exportCsv() always use the full `ranked` list.
   const [q, setQ] = useState("");
@@ -428,6 +440,11 @@ export function Dashboard({
 
   /** Manually attach an unmatched allowance record to a coach group in this upload. */
   function linkAllowanceToCoach(rec: AllowanceRec, groupId: string) {
+    // Non-teaching tiers (A1–A3, PA, T0) have no class — block the link.
+    if (!isLinkableTier(rec.tier)) {
+      toast.error(`${rec.canonicalName} (${rec.tier}) can’t be linked: ${nonLinkableReason(rec.tier)}`);
+      return;
+    }
     setMeta((prev) => {
       const m = prev[groupId];
       if (!m) return prev;
@@ -445,6 +462,16 @@ export function Dashboard({
     });
     // Drop it from the orphan list immediately.
     setAllowanceRecs((prev) => prev.filter((r) => r !== rec));
+    setSavedId(null);
+  }
+
+  /** Mark an allowance record "not applicable" — hide it from the link panel. */
+  function markNotApplicable(rec: AllowanceRec) {
+    if (rec.coachId != null) {
+      setNaRecs((prev) => new Set(prev).add(rec.coachId!));
+    } else {
+      setAllowanceRecs((prev) => prev.filter((r) => r !== rec));
+    }
     setSavedId(null);
   }
 
@@ -630,7 +657,10 @@ export function Dashboard({
           <p className="mb-2 text-xs text-indigo-800/80">
             These were entered in the Allowance Calculator but their name doesn&apos;t match any
             uploaded coach. Link each to the right coach — it&apos;s remembered as an alias, so next
-            month links automatically.
+            month links automatically. Pick <strong>Not applicable</strong> to skip one.
+            {nonLinkableCount > 0 && (
+              <> {nonLinkableCount} admin/T0 record(s) are hidden — those tiers don&apos;t teach.</>
+            )}
           </p>
           <div className="space-y-1">
             {orphanAllowances.map((r) => (
@@ -640,14 +670,18 @@ export function Dashboard({
               >
                 <span className="truncate">
                   <span className="font-medium text-gray-900">{r.canonicalName}</span>{" "}
-                  <span className="text-gray-400">· {rm(r.teaching)}</span>
+                  <span className="text-gray-400">· {r.tier} · {rm(r.teaching)}</span>
                 </span>
                 <Select
                   className="w-44 py-0.5 text-[11px]"
                   value=""
-                  onChange={(e) => e.target.value && linkAllowanceToCoach(r, e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === "NA") markNotApplicable(r);
+                    else if (e.target.value) linkAllowanceToCoach(r, e.target.value);
+                  }}
                 >
                   <option value="">link to coach…</option>
+                  <option value="NA">⊘ Not applicable (don’t link)</option>
                   {groups
                     .filter((g) => g.meta.allowanceSource !== "auto")
                     .map((g) => (
