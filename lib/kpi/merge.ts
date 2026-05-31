@@ -1,4 +1,5 @@
 import { getCleanName } from "./csv";
+import { classifyAccount, DEFAULT_CLASSIFY_CONFIG, type ClassifyConfig } from "./classify";
 import type { InstructorRow } from "./types";
 
 export interface MergeGroup {
@@ -52,20 +53,36 @@ class DSU {
 /**
  * Build merged coach groups from raw account names by combining three signals:
  *  1. Known aliases from existing coach profiles (cross-month memory).
- *  2. Deterministic clean-name grouping (v11.1 smart-merge behavior).
+ *  2. Deterministic base-name grouping from the classifier (numbered overflow,
+ *     placeholders, co-teach, branch suffixes and cross-center same-name all
+ *     resolve to one coach), falling back to the v11.1 clean-name.
  *  3. AI-suggested clusters of same-person names.
  *
  * Pure: AI clusters are computed elsewhere and passed in. With no AI clusters
- * and no known coaches, this reduces to the v11.1 clean-name grouping.
+ * and no known coaches, this reduces to deterministic base-name grouping.
  */
 export function buildGroups(opts: {
   names: string[];
   aiClusters?: string[][];
   knownCoaches?: KnownCoach[];
+  classifyConfig?: ClassifyConfig;
 }): MergeGroup[] {
-  const { names, aiClusters = [], knownCoaches = [] } = opts;
+  const {
+    names,
+    aiClusters = [],
+    knownCoaches = [],
+    classifyConfig = DEFAULT_CLASSIFY_CONFIG,
+  } = opts;
   const dsu = new DSU();
   names.forEach((n) => dsu.add(n));
+
+  // Resolved base coach name per account. The classifier strips center/class
+  // codes and attributes numbered/co-teach rows to their owning coach; the
+  // clean-name is a fallback when it yields nothing.
+  const baseOf = new Map<string, string>();
+  for (const n of names) {
+    baseOf.set(n, classifyAccount(n, classifyConfig).baseName || getCleanName(n));
+  }
 
   // 1. Known aliases: union all aliases of a coach that appear in this upload.
   const aliasToCoach = new Map<string, string>();
@@ -75,15 +92,15 @@ export function buildGroups(opts: {
     for (let i = 1; i < present.length; i++) dsu.union(present[0], present[i]);
   }
 
-  // 2. Deterministic clean-name grouping.
-  const byClean = new Map<string, string[]>();
+  // 2. Deterministic base-name grouping.
+  const byBase = new Map<string, string[]>();
   for (const n of names) {
-    const key = getCleanName(n);
-    const arr = byClean.get(key) ?? [];
+    const key = baseOf.get(n)!;
+    const arr = byBase.get(key) ?? [];
     arr.push(n);
-    byClean.set(key, arr);
+    byBase.set(key, arr);
   }
-  for (const arr of byClean.values()) {
+  for (const arr of byBase.values()) {
     for (let i = 1; i < arr.length; i++) dsu.union(arr[0], arr[i]);
   }
 
@@ -105,7 +122,7 @@ export function buildGroups(opts: {
   const result: MergeGroup[] = [];
   for (const accounts of groups.values()) {
     accounts.sort();
-    result.push({ canonicalName: pickCanonical(accounts, aliasToCoach), accounts });
+    result.push({ canonicalName: pickCanonical(accounts, aliasToCoach, baseOf), accounts });
   }
   result.sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
   return result;
@@ -114,16 +131,17 @@ export function buildGroups(opts: {
 function pickCanonical(
   accounts: string[],
   aliasToCoach: Map<string, string>,
+  baseOf: Map<string, string>,
 ): string {
   // Prefer an existing coach profile's canonical name.
   for (const a of accounts) {
     const c = aliasToCoach.get(a);
     if (c) return c;
   }
-  // Else most common clean name, tie-break alphabetically.
+  // Else the most common resolved base name, tie-break alphabetically.
   const freq = new Map<string, number>();
   for (const a of accounts) {
-    const k = getCleanName(a);
+    const k = baseOf.get(a) ?? getCleanName(a);
     freq.set(k, (freq.get(k) ?? 0) + 1);
   }
   return [...freq.entries()].sort(

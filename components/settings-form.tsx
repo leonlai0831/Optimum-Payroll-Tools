@@ -3,13 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Save, Settings, Trash2 } from "lucide-react";
-import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { METRIC_LIBRARY } from "@/lib/kpi/metrics";
+import { DEFAULT_CLASSIFY_CONFIG } from "@/lib/kpi/classify";
 import type { AppConfig, MetricConfig } from "@/lib/kpi/types";
 import { cn } from "@/lib/utils";
 
 type ListKey = "personalKpi" | "centerKpi";
+
+/** Parse a comma/newline-separated list into trimmed, de-duped, non-empty entries. */
+const parseList = (s: string) => [
+  ...new Set(s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean)),
+];
+
+type ClassifyKey = "classCodes" | "placeholderMarkers" | "centerCodes";
 
 export function SettingsForm({
   initial,
@@ -22,6 +30,17 @@ export function SettingsForm({
   const toast = useToast();
   const [cfg, setCfg] = useState<AppConfig>(() => structuredClone(initial));
   const [saving, setSaving] = useState(false);
+
+  // The classify whitelists are edited as free text and parsed back on save, so
+  // typing commas/spaces doesn't fight a normalized array.
+  const classify0 = initial.classify ?? DEFAULT_CLASSIFY_CONFIG;
+  const [classText, setClassText] = useState(() => ({
+    classCodes: (classify0.classCodes ?? []).join(", "),
+    placeholderMarkers: (classify0.placeholderMarkers ?? []).join(", "),
+    centerCodes: (classify0.centerCodes ?? []).join(", "),
+  }));
+  const setClass = (key: ClassifyKey, value: string) =>
+    setClassText((t) => ({ ...t, [key]: value }));
 
   function enabledWeight(list: MetricConfig[]) {
     return Math.round(list.filter((m) => m.enabled).reduce((s, m) => s + m.w, 0) * 100);
@@ -53,10 +72,19 @@ export function SettingsForm({
   async function save() {
     setSaving(true);
     try {
+      const payload: AppConfig = {
+        ...cfg,
+        classify: {
+          ...cfg.classify,
+          classCodes: parseList(classText.classCodes),
+          placeholderMarkers: parseList(classText.placeholderMarkers),
+          centerCodes: parseList(classText.centerCodes),
+        },
+      };
       const res = await fetch("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -233,6 +261,56 @@ export function SettingsForm({
               />
             </div>
           ))}
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <h3 className="mb-1 text-h3 text-gray-900">Account classification (name pass)</h3>
+        <p className="mb-3 text-[11px] text-gray-500">
+          How raw CSV account names are read before scoring. Comma- or newline-separated;
+          matched case-insensitively. Numbered overflow (e.g. “COBYS 2”) and co-teach classes
+          (“A / B”) are detected automatically.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <Label>Class-type codes</Label>
+            <p className="mb-1 text-[11px] text-gray-400">
+              Suffixes after “_” or “ - ” that mark a class type, not a person — stripped to find
+              the coach (e.g. LMHA, YL, FULL, LIFE SAVING, PRE-COMPETITIVE).
+            </p>
+            <Textarea
+              rows={3}
+              value={classText.classCodes}
+              onChange={(e) => setClass("classCodes", e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div>
+            <Label>Placeholder / promo markers</Label>
+            <p className="mb-1 text-[11px] text-gray-400">
+              An account containing any of these is a center/promo placeholder, kept out of
+              individual KPI by default (e.g. HARVEST, PAY-AS-YOU-GO, PROMO, NEW CLASS).
+            </p>
+            <Textarea
+              rows={2}
+              value={classText.placeholderMarkers}
+              onChange={(e) => setClass("placeholderMarkers", e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div>
+            <Label>Center codes</Label>
+            <p className="mb-1 text-[11px] text-gray-400">
+              Center abbreviations as written inside names, stripped as suffixes (e.g. HQ, USJ,
+              QSM, BK).
+            </p>
+            <Textarea
+              rows={2}
+              value={classText.centerCodes}
+              onChange={(e) => setClass("centerCodes", e.target.value)}
+              className="text-xs"
+            />
+          </div>
         </div>
       </Card>
       </fieldset>

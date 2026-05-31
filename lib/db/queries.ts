@@ -41,6 +41,7 @@ import {
   DEFAULT_GRADE_THRESHOLDS,
   DEFAULT_PERSONAL_KPI,
 } from "@/lib/kpi/metrics";
+import { DEFAULT_CLASSIFY_CONFIG } from "@/lib/kpi/classify";
 import { DEFAULT_ALLOWANCE_CONFIG } from "@/lib/allowance/defaults";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
@@ -60,6 +61,7 @@ export function defaultConfig(): AppConfig {
     centerKpi: structuredClone(DEFAULT_CENTER_KPI),
     centerTargets: structuredClone(DEFAULT_CENTER_TARGETS),
     gradeThresholds: { ...DEFAULT_GRADE_THRESHOLDS },
+    classify: structuredClone(DEFAULT_CLASSIFY_CONFIG),
   };
 }
 
@@ -67,7 +69,9 @@ export function defaultConfig(): AppConfig {
 export const getConfig = cache(async (): Promise<AppConfig> => {
   const db = await getDb();
   const rows = await db.select().from(config).where(eq(config.id, 1)).limit(1);
-  if (rows[0]) return rows[0].data;
+  // Backfill top-level keys added after a row was first written (e.g. `classify`)
+  // so older saved configs gain new defaults without a migration.
+  if (rows[0]) return { ...defaultConfig(), ...rows[0].data };
   const data = defaultConfig();
   await db.insert(config).values({ id: 1, data }).onConflictDoNothing();
   return data;

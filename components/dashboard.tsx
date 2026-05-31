@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/skeleton";
 import { RadarProfile } from "@/components/radar-chart";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
+import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
 import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
@@ -17,6 +18,14 @@ import { cn, rm } from "@/lib/utils";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 
 const GRADE_RANK: Record<string, number> = { S: 4, A: 3, B: 2, C: 1 };
+
+/** Short tags shown next to non-primary accounts in the merge editor. */
+const KIND_LABEL: Record<AccountKind, string> = {
+  primary: "primary",
+  numbered: "overflow",
+  placeholder: "promo",
+  coteach: "co-teach",
+};
 
 interface CoachProfile {
   id: number;
@@ -34,6 +43,10 @@ interface Acct {
   center: string;
   students: number;
   groupId: string;
+  /** Classifier verdict: primary / numbered / placeholder / coteach. */
+  kind: AccountKind;
+  /** Whether this account counts toward the coach's individual KPI. */
+  include: boolean;
 }
 
 interface GroupInputs {
@@ -165,7 +178,12 @@ export function Dashboard({
             canonicalName: c.canonicalName,
             aliases: c.aliases ?? [],
           }));
-          const groups = buildGroups({ names, aiClusters: clusters, knownCoaches: known });
+          const groups = buildGroups({
+            names,
+            aiClusters: clusters,
+            knownCoaches: known,
+            classifyConfig: cfg.classify,
+          });
 
           const nextAccts: Acct[] = [];
           const nextMeta: Record<string, GroupInputs> = {};
@@ -173,11 +191,14 @@ export function Dashboard({
             const id = `g${i}`;
             g.accounts.forEach((a) => {
               const rs = parsed.filter((r) => r.Instructor === a);
+              const cl = classifyAccount(a, cfg.classify);
               nextAccts.push({
                 name: a,
                 center: rs[0]?.Center ?? "",
                 students: rs.reduce((s, r) => s + r.TotalStudent, 0),
                 groupId: id,
+                kind: cl.kind,
+                include: cl.defaultInclude,
               });
             });
             const profile = coachList.find(
@@ -267,9 +288,12 @@ export function Dashboard({
     const list = [...byId.entries()].map(([id, list]) => {
       const m = meta[id];
       const names = list.map((a) => a.name);
+      // Only included accounts feed the score; numbered/placeholder/co-teach
+      // rows default out but stay in the group for the merge editor.
+      const includedNames = list.filter((a) => a.include).map((a) => a.name);
       const center = mostCommon(list.map((a) => a.center));
       const comp = computeCoach({
-        accounts: names,
+        accounts: includedNames,
         rows,
         config,
         inputs: {
@@ -279,7 +303,7 @@ export function Dashboard({
           groupConfig: m.groupConfig,
         },
       });
-      return { id, names, accounts: list, center, meta: m, comp };
+      return { id, names, includedNames, accounts: list, center, meta: m, comp };
     });
     return list.sort((a, b) => b.comp.finalScore - a.comp.finalScore);
   }, [accts, meta, rows, config]);
@@ -327,7 +351,8 @@ export function Dashboard({
 
   function moveAccount(name: string, toGroupId: string) {
     let target = toGroupId;
-    if (toGroupId === "NEW") {
+    const toNew = toGroupId === "NEW";
+    if (toNew) {
       target = `s${Math.random().toString(36).slice(2, 8)}`;
       setMeta((m) => ({
         ...m,
@@ -345,7 +370,18 @@ export function Dashboard({
         },
       }));
     }
-    setAccts((prev) => prev.map((a) => (a.name === name ? { ...a, groupId: target } : a)));
+    // Reassigning an account to its own coach means it should count there;
+    // a plain move keeps whatever include state it had.
+    setAccts((prev) =>
+      prev.map((a) =>
+        a.name === name ? { ...a, groupId: target, include: toNew ? true : a.include } : a,
+      ),
+    );
+    setSavedId(null);
+  }
+
+  function setAccountInclude(name: string, include: boolean) {
+    setAccts((prev) => prev.map((a) => (a.name === name ? { ...a, include } : a)));
     setSavedId(null);
   }
 
@@ -355,7 +391,7 @@ export function Dashboard({
     const coachResults: RunCoach[] = ranked.map((g) => ({
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
-      accounts: g.names,
+      accounts: g.includedNames,
       center: g.center,
       position: g.meta.position,
       teachingAllowance: g.meta.allowance,
@@ -696,6 +732,7 @@ export function Dashboard({
           centers={[...new Set(rows.map((r) => r.Center))].sort()}
           onClose={() => setDetailId(null)}
           onMoveAccount={moveAccount}
+          onToggleInclude={setAccountInclude}
           onGroupConfig={(gc) => updateMeta(detail.id, { groupConfig: gc })}
         />
       )}
@@ -724,6 +761,7 @@ interface DetailProps {
   centers: string[];
   onClose: () => void;
   onMoveAccount: (name: string, toGroupId: string) => void;
+  onToggleInclude: (name: string, include: boolean) => void;
   onGroupConfig: (gc: GroupConfig) => void;
 }
 
@@ -889,15 +927,38 @@ function CoachDetail(props: DetailProps) {
         )}
 
         <div className="mt-4">
-          <h4 className="mb-2 text-sm font-bold text-gray-700">Merged Accounts</h4>
+          <h4 className="mb-1 text-sm font-bold text-gray-700">Accounts in this coach</h4>
+          <p className="mb-2 text-[11px] text-gray-500">
+            Untick overflow / promo / co-teach classes that shouldn&apos;t count toward this coach.
+            Co-teach classes start off — tick them under whoever should be credited, or move them to
+            the other coach.
+          </p>
           <div className="space-y-1">
             {props.accounts.map((a) => (
-              <div key={a.name} className="flex items-center justify-between gap-2 rounded border border-gray-100 bg-gray-50 px-2 py-1 text-xs">
-                <span className="truncate">
+              <div
+                key={a.name}
+                className={cn(
+                  "flex items-center gap-2 rounded border border-gray-100 px-2 py-1 text-xs",
+                  a.include ? "bg-gray-50" : "bg-white opacity-60",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 shrink-0 accent-indigo-600"
+                  checked={a.include}
+                  title="Count this account toward the coach's KPI"
+                  onChange={(e) => props.onToggleInclude(a.name, e.target.checked)}
+                />
+                <span className="flex-1 truncate">
                   {a.name} <span className="text-gray-400">({a.students})</span>
+                  {a.kind !== "primary" && (
+                    <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] text-gray-600">
+                      {KIND_LABEL[a.kind]}
+                    </span>
+                  )}
                 </span>
                 <Select
-                  className="w-36 py-0.5 text-[11px]"
+                  className="w-32 py-0.5 text-[11px]"
                   value=""
                   onChange={(e) => e.target.value && props.onMoveAccount(a.name, e.target.value)}
                 >
