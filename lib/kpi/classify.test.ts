@@ -54,6 +54,19 @@ describe("classifyAccount — kinds", () => {
     expect(c("THING WAI 1 [BT]").kind).toBe("primary");
   });
 
+  it("seq-1 primary and seq-2 overflow share a base name so they merge", () => {
+    // Real data: "IQ 1 (BT)" (parens!) is the primary, "IQ 2 [BT]" the overflow.
+    const one = c("IQ 1 (BT)");
+    const two = c("IQ 2 [BT]");
+    expect(one.kind).toBe("primary");
+    expect(one.baseName).toBe("IQ");
+    expect(two.kind).toBe("numbered");
+    expect(two.baseName).toBe("IQ");
+    expect(one.baseName).toBe(two.baseName);
+    // Mixed shape: "COBYS" (no number) still merges with "COBYS 2".
+    expect(c("COBYS [BK]").baseName).toBe(c("COBYS 2 [BK]").baseName);
+  });
+
   it("placeholders/promo rows are excluded from individual KPI", () => {
     for (const name of [
       "HONG LI HARVEST",
@@ -88,6 +101,30 @@ describe("classifyAccount — kinds", () => {
     const r = c("MARCUS KOH - L [BT]");
     expect(r.kind).toBe("primary");
     expect(r.baseName).toBe("MARCUS KOH");
+  });
+
+  it("special programmes are a coach's own class type, not a co-teach", () => {
+    // PRE-COMPETITIVE / LIFE SAVING belong to the named coach (ANWAR / CHEE XUAN).
+    const a = c("ANWAR - PRE-COMPETITIVE [QSM]");
+    expect(a.kind).toBe("primary");
+    expect(a.baseName).toBe("ANWAR");
+    const b = c("CHEE XUAN - LIFE SAVING [QSM]");
+    expect(b.kind).toBe("primary");
+    expect(b.baseName).toBe("CHEE XUAN");
+  });
+
+  it("AARON (QSM/KK branch manager) is a real co-teach partner", () => {
+    for (const name of ["AFFAN / AARON [QSM]", "(WHITE) ERNEST / AARON [KK]"]) {
+      const r = c(name);
+      expect(r.kind, name).toBe("coteach");
+      expect(r.coaches, name).toContain("AARON");
+    }
+  });
+
+  it("cleans messy USJ hyphen/bracket names down to two people", () => {
+    expect(c("ETHAN - SHREYA [L] USJ").coaches).toEqual(["ETHAN", "SHREYA"]);
+    expect(c("JOSHUA - JING CHYI-[L]").coaches).toEqual(["JOSHUA", "JING CHYI"]);
+    expect(c("JOSHUA - YUE NING-YLM [USJ]").coaches).toEqual(["JOSHUA", "YUE NING"]);
   });
 });
 
