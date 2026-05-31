@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, isAuthed } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createRun, listRuns, recordAudit } from "@/lib/db/queries";
+import { createRun, listRuns, recordAudit, runStatusFromResults } from "@/lib/db/queries";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { RunCoach } from "@/lib/types";
 
@@ -24,7 +24,10 @@ export async function POST(req: Request) {
   if (!body.periodLabel) {
     return NextResponse.json({ error: "periodLabel is required" }, { status: 400 });
   }
-  const id = await createRun(body);
+  // A month with any incomplete coach (e.g. management review pending) is saved as
+  // a draft; it becomes finalized only once every coach is complete.
+  const status = runStatusFromResults(body.coachResults ?? []);
+  const id = await createRun({ ...body, status });
   if (actor) {
     await recordAudit({
       actorId: actor.id,
@@ -32,8 +35,8 @@ export async function POST(req: Request) {
       action: "kpi_run.save",
       entity: "run",
       entityId: id,
-      summary: `Saved KPI bonus run for ${body.periodLabel} (${body.coachResults?.length ?? 0} coaches)`,
+      summary: `Saved KPI bonus run for ${body.periodLabel} (${body.coachResults?.length ?? 0} coaches, ${status})`,
     });
   }
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({ ok: true, id, status });
 }
