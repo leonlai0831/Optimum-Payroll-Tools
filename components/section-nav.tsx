@@ -9,6 +9,7 @@ import {
   Home,
   Layers,
   LayoutDashboard,
+  Link2,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -45,6 +46,7 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
     title: "Instructor KPI Bonus",
     items: [
       { href: "/kpi", label: "Calculator", icon: LayoutDashboard, exact: true },
+      { href: "/kpi/links", label: "Links", icon: Link2, requires: { cap: "view_all_staff" } },
       { href: "/kpi/history", label: "History", icon: History },
       { href: "/kpi/trends", label: "Trends", icon: BarChart3 },
       { href: "/kpi/settings", label: "Settings", icon: Settings },
