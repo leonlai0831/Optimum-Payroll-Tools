@@ -134,6 +134,7 @@ export function Dashboard({
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [savedStatus, setSavedStatus] = useState<"draft" | "finalized">("finalized");
 
   async function onFile(file: File) {
     setParsing(true);
@@ -537,9 +538,12 @@ export function Dashboard({
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "Save failed");
-      const { id } = (await res.json()) as { id: number };
+      const { id, status } = (await res.json()) as { id: number; status: "draft" | "finalized" };
       setSavedId(id);
-      toast.success("Month saved.");
+      setSavedStatus(status);
+      toast.success(
+        status === "draft" ? "Saved as draft — pending management review." : "Month finalized.",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -653,8 +657,18 @@ export function Dashboard({
       </Card>
 
       {savedId && (
-        <p className="text-sm text-green-700">
-          Saved to history. <a className="underline" href={`/kpi/history/${savedId}`}>View record →</a>
+        <p className={cn("text-sm", savedStatus === "draft" ? "text-amber-700" : "text-green-700")}>
+          {savedStatus === "draft" ? (
+            <>
+              Saved as draft — pending management review.{" "}
+              <a className="underline" href={`/kpi/history/${savedId}`}>Review &amp; finalize →</a>
+            </>
+          ) : (
+            <>
+              Saved to history.{" "}
+              <a className="underline" href={`/kpi/history/${savedId}`}>View record →</a>
+            </>
+          )}
         </p>
       )}
 
