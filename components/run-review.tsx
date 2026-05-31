@@ -210,7 +210,9 @@ export function RunReview({ run }: { run: ReviewRun }) {
       <p className="text-xs text-gray-500">
         Enter each coach&apos;s management assessment and confirm the class data is linked to the
         right person. <strong>Add</strong> or <strong>remove</strong> class-data accounts per coach —
-        scores recompute live. <strong>Finalize</strong> unlocks once every coach is complete.
+        scores recompute live. Edits here adjust <strong>this saved month only</strong>; finalizing
+        also remembers the corrected accounts for future uploads (manage the standing rules on the
+        Links page). <strong>Finalize</strong> unlocks once every coach is complete.
       </p>
 
       {rows.map((r, idx) => {
