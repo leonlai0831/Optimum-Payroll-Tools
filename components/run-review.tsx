@@ -8,6 +8,7 @@ import {
   Save,
   TriangleAlert,
   Users,
+  X,
 } from "lucide-react";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
@@ -82,6 +83,20 @@ export function RunReview({ run }: { run: ReviewRun }) {
   const completeCount = active.filter((r) => r.rc.isComplete).length;
   const allComplete = active.length > 0 && completeCount === active.length;
 
+  // Every CSV account this month, for the "add class data" search. Labelled with
+  // its student total and current owner (if any) so the reviewer picks the right one.
+  const allAccountOptions = useMemo(() => {
+    const ownerOf = new Map<string, string>();
+    for (const r of rows) for (const a of r.rc.accounts) ownerOf.set(a, r.rc.canonicalName);
+    return [...accountStudents.keys()].sort().map((name) => {
+      const owner = ownerOf.get(name);
+      return {
+        value: name,
+        label: `${name} (${accountStudents.get(name) ?? 0})${owner ? ` · ${owner}` : ""}`,
+      };
+    });
+  }, [rows, accountStudents]);
+
   function setMgmt(idx: number, value: string) {
     const mgmt = value === "" ? null : Number(value);
     if (mgmt != null && Number.isNaN(mgmt)) return;
@@ -96,32 +111,51 @@ export function RunReview({ run }: { run: ReviewRun }) {
     });
   }
 
-  /** Move one CSV account from coach `fromIdx` to coach `toIdx`; recompute both. */
-  function moveAccount(fromIdx: number, account: string, toIdx: number) {
-    if (fromIdx === toIdx) return;
+  /** Remove one CSV account from a coach; recompute. */
+  function removeAccount(idx: number, account: string) {
     setRows((prev) => {
-      const from = prev[fromIdx];
-      const to = prev[toIdx];
-      if (!from || !to) return prev;
       const next = [...prev];
-      next[fromIdx] = recomputeRow(
-        { ...from.rc, accounts: from.rc.accounts.filter((a) => a !== account) },
-        run.csvRows,
-        run.configSnapshot,
-      );
-      next[toIdx] = recomputeRow(
-        {
-          ...to.rc,
-          accounts: to.rc.accounts.includes(account)
-            ? to.rc.accounts
-            : [...to.rc.accounts, account],
-        },
+      next[idx] = recomputeRow(
+        { ...next[idx].rc, accounts: next[idx].rc.accounts.filter((a) => a !== account) },
         run.csvRows,
         run.configSnapshot,
       );
       return next;
     });
-    toast.success(`Moved ${account} → ${rows[toIdx].rc.canonicalName}`);
+  }
+
+  /**
+   * Add a CSV account to a coach. Accounts are exclusive — a class is scored for
+   * exactly one coach — so if it currently belongs to someone else, confirm and
+   * move it (removing it from the previous owner) rather than double-counting.
+   */
+  function addAccount(idx: number, account: string) {
+    const ownerIdx = rows.findIndex((r) => r.rc.accounts.includes(account));
+    if (ownerIdx === idx) return; // already here
+    if (ownerIdx !== -1) {
+      const owner = rows[ownerIdx].rc.canonicalName;
+      const me = rows[idx].rc.canonicalName;
+      if (!window.confirm(`"${account}" is currently linked to ${owner}. Move it to ${me}?`)) {
+        return;
+      }
+    }
+    setRows((prev) => {
+      const next = [...prev];
+      if (ownerIdx !== -1) {
+        next[ownerIdx] = recomputeRow(
+          { ...next[ownerIdx].rc, accounts: next[ownerIdx].rc.accounts.filter((a) => a !== account) },
+          run.csvRows,
+          run.configSnapshot,
+        );
+      }
+      next[idx] = recomputeRow(
+        { ...next[idx].rc, accounts: [...next[idx].rc.accounts, account] },
+        run.csvRows,
+        run.configSnapshot,
+      );
+      return next;
+    });
+    toast.success(`Linked ${account} → ${rows[idx].rc.canonicalName}`);
   }
 
   async function save(finalize: boolean) {
@@ -175,19 +209,14 @@ export function RunReview({ run }: { run: ReviewRun }) {
 
       <p className="text-xs text-gray-500">
         Enter each coach&apos;s management assessment and confirm the class data is linked to the
-        right person. Use <strong>move</strong> to reassign a mis-linked account — scores recompute
-        live. <strong>Finalize</strong> unlocks once every coach is complete.
+        right person. <strong>Add</strong> or <strong>remove</strong> class-data accounts per coach —
+        scores recompute live. Edits here adjust <strong>this saved month only</strong>; finalizing
+        also remembers the corrected accounts for future uploads (manage the standing rules on the
+        Links page). <strong>Finalize</strong> unlocks once every coach is complete.
       </p>
 
       {rows.map((r, idx) => {
         const empty = r.rc.accounts.length === 0;
-        const moveTargets = rows
-          .map((other, j) => ({ other, j }))
-          .filter(({ j }) => j !== idx)
-          .map(({ other, j }) => ({
-            value: String(j),
-            label: `${other.rc.canonicalName} (${other.rc.students} students)`,
-          }));
         return (
           <Card
             key={`${r.rc.canonicalName}-${idx}`}
@@ -235,30 +264,34 @@ export function RunReview({ run }: { run: ReviewRun }) {
               </div>
             </div>
 
-            {/* Class-data linkage: accounts merged into this coach, with reassignment. */}
-            {!empty && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">
-                <span className="text-[11px] uppercase tracking-wide text-gray-400">
-                  Class data
-                </span>
-                {r.rc.accounts.map((a) => (
-                  <span
-                    key={a}
-                    className="flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px]"
+            {/* Class-data linkage: accounts merged into this coach — add or remove. */}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">
+              <span className="text-[11px] uppercase tracking-wide text-gray-400">Class data</span>
+              {r.rc.accounts.map((a) => (
+                <span
+                  key={a}
+                  className="flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px]"
+                >
+                  <span className="font-medium text-gray-700">{a}</span>
+                  <span className="text-gray-400">({accountStudents.get(a) ?? 0})</span>
+                  <button
+                    type="button"
+                    className="text-gray-400 hover:text-red-600"
+                    onClick={() => removeAccount(idx, a)}
+                    aria-label={`Remove ${a}`}
                   >
-                    <span className="font-medium text-gray-700">{a}</span>
-                    <span className="text-gray-400">({accountStudents.get(a) ?? 0})</span>
-                    <SearchableSelect
-                      className="w-28"
-                      placeholder="move…"
-                      searchPlaceholder="Move to coach…"
-                      options={moveTargets}
-                      onSelect={(value) => moveAccount(idx, a, Number(value))}
-                    />
-                  </span>
-                ))}
-              </div>
-            )}
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <SearchableSelect
+                className="w-44"
+                placeholder="+ add class data…"
+                searchPlaceholder="Search CSV account…"
+                options={allAccountOptions.filter((o) => !r.rc.accounts.includes(o.value))}
+                onSelect={(value) => addAccount(idx, value)}
+              />
+            </div>
           </Card>
         );
       })}
