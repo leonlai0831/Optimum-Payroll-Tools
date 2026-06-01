@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type KeyboardEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Lock, Search, TriangleAlert, X } from "lucide-react";
 import { Badge, Card, Input, Select } from "@/components/ui";
@@ -53,9 +53,12 @@ function tierRank(c: LinkCoach): number {
 export function KpiLinkManager({
   coaches: initial,
   canEdit,
+  accountNames = [],
 }: {
   coaches: LinkCoach[];
   canEdit: boolean;
+  /** All distinct CSV account names across saved runs, for alias-edit suggestions. */
+  accountNames?: string[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -256,6 +259,7 @@ export function KpiLinkManager({
                         <AliasEditor
                           initial={c.aliases}
                           busy={busy === c.id}
+                          suggestions={accountNames}
                           onCancel={() => setEditingId(null)}
                           onSave={(next) => saveAliases(c, next)}
                         />
@@ -333,29 +337,58 @@ export function KpiLinkManager({
 
 /**
  * Inline editor for a coach's account aliases (the CSV account names that merge
- * into them). Add the exact account name as it appears in the KPI CSV so next
- * month's upload links it — and its allowance — to this coach.
+ * into them). Type to search account names seen in saved runs; Enter adds the
+ * highlighted suggestion, or your typed text if it matches none (so a brand-new
+ * account still works). Adding the exact CSV name links it — and its allowance —
+ * to this coach on the next upload.
  */
 function AliasEditor({
   initial,
   busy,
+  suggestions,
   onSave,
   onCancel,
 }: {
   initial: string[];
   busy: boolean;
+  suggestions: string[];
   onSave: (aliases: string[]) => void;
   onCancel: () => void;
 }) {
   const [list, setList] = useState<string[]>(initial);
   const [draft, setDraft] = useState("");
+  const [active, setActive] = useState(0);
 
-  function add() {
-    const v = draft.trim();
+  // Account names not yet added, matching the current query (case-insensitive).
+  const matches = useMemo(() => {
+    const q = draft.trim().toLowerCase();
+    const taken = new Set(list.map((a) => a.toLowerCase()));
+    return suggestions
+      .filter((s) => !taken.has(s.toLowerCase()) && (q === "" || s.toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [draft, list, suggestions]);
+
+  function addValue(value: string) {
+    const v = value.trim();
     if (!v) return;
     // Case-insensitive de-dupe so the same account isn't added twice.
     if (!list.some((a) => a.toLowerCase() === v.toLowerCase())) setList((l) => [...l, v]);
     setDraft("");
+    setActive(0);
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((i) => Math.min(i + 1, matches.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      // Enter picks the highlighted suggestion, else adds the typed text verbatim.
+      addValue(matches[active] ?? draft);
+    }
   }
 
   return (
@@ -380,25 +413,36 @@ function AliasEditor({
         {list.length === 0 && <span className="text-[11px] text-gray-300">no accounts</span>}
       </div>
       <div className="flex items-center gap-1">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="Add CSV account name…"
-          className="w-48 py-1 text-[11px]"
-        />
-        <button
-          type="button"
-          className="rounded border border-gray-200 px-1.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
-          onClick={add}
-        >
-          Add
-        </button>
+        <div className="relative w-56">
+          <Input
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder="Search account name, Enter to add…"
+            className="w-full py-1 text-[11px]"
+          />
+          {draft.trim() !== "" && matches.length > 0 && (
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+              {matches.map((m, i) => (
+                <button
+                  key={m}
+                  type="button"
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => addValue(m)}
+                  className={cn(
+                    "block w-full truncate px-2 py-1 text-left text-[11px]",
+                    i === active ? "bg-indigo-50 text-indigo-900" : "text-gray-700 hover:bg-gray-50",
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           type="button"
           className="rounded bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
