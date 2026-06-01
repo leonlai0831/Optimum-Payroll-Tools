@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, UserCog } from "lucide-react";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
+import { cn } from "@/lib/utils";
 import type { Brand } from "@/components/brand-shell";
 
-/** Per-brand logo + wordmark shown in the top nav. */
-const BRANDS: Record<Brand, { src: string; alt: string; width: number; height: number; label: string }> = {
-  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350, label: "Payroll Tools" },
-  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1037, height: 405, label: "Staff Commission" },
+/** Per-brand logo in the top nav. Both render side by side; the active one is highlighted. */
+const BRANDS: Record<Brand, { src: string; alt: string; width: number; height: number }> = {
+  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350 },
+  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1037, height: 405 },
 };
 
 export function Nav({ email, role, brand = "swim" }: { email: string; role: Role; brand?: Brand }) {
@@ -26,17 +27,39 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
   return (
     <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur no-print">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2 sm:gap-3" aria-label="Home">
+          {/* Mobile: show only the active brand's logo to save width. */}
           <Image
             src={b.src}
             alt={b.alt}
             width={b.width}
             height={b.height}
             priority
-            className="h-8 w-auto sm:h-9"
+            className="h-7 w-auto sm:hidden"
           />
-          <span className="hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
-          <span className="hidden text-sm font-semibold text-gray-500 sm:inline">{b.label}</span>
+          {/* Desktop: both brands side by side; the active one is highlighted. */}
+          <div className="hidden items-center gap-3 sm:flex">
+            {(["swim", "fit"] as Brand[]).map((key, i) => {
+              const x = BRANDS[key];
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  {i > 0 && <span className="h-6 w-px bg-gray-200" aria-hidden />}
+                  <Image
+                    src={x.src}
+                    alt={x.alt}
+                    width={x.width}
+                    height={x.height}
+                    priority
+                    title={x.alt}
+                    className={cn(
+                      "h-9 w-auto transition",
+                      brand === key ? "opacity-100" : "opacity-40 grayscale",
+                    )}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </Link>
 
         <div className="flex items-center gap-2">
