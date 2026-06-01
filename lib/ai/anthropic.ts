@@ -356,3 +356,93 @@ export async function analyzeTrend(input: TrendInput): Promise<string> {
     return fallbackTrend(input);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Bonus/allowance audit narration (feature B): the FINDINGS are computed
+// deterministically in lib/kpi/audit.ts — Claude only turns them into prose.
+// ---------------------------------------------------------------------------
+
+export interface AuditFindingForNarration {
+  coach: string;
+  severity: string;
+  message: string;
+}
+
+const AUDIT_SYSTEM = `You are a payroll auditor for a swim school. You are given a list of pre-computed audit findings (already verified by deterministic checks) about one month's KPI bonus run vs the allowance records. Write a brief management summary (2–4 sentences, plain prose): how many issues, which are most serious, and what to check first. Do NOT invent findings beyond the list. If the list is empty, say the month reconciles cleanly.`;
+
+/** Narrate deterministic audit findings. Falls back to a terse template. */
+export async function narrateAudit(findings: AuditFindingForNarration[]): Promise<string> {
+  const client = getClient();
+  const fallback =
+    findings.length === 0
+      ? "No discrepancies found — the month reconciles cleanly."
+      : `${findings.length} issue(s) flagged. Highest priority: ${
+          findings.find((f) => f.severity === "high")?.message ?? findings[0].message
+        }`;
+  if (!client) return fallback;
+
+  const list = findings.map((f) => `- [${f.severity}] ${f.coach}: ${f.message}`).join("\n");
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      system: [{ type: "text", text: AUDIT_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [
+        {
+          role: "user",
+          content: findings.length
+            ? `Audit findings:\n${list}\n\nSummarize for management.`
+            : "There are no audit findings this month.",
+        },
+      ],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    return text && text.type === "text" ? text.text.trim() : fallback;
+  } catch (err) {
+    logger.warn("narrateAudit failed; using template fallback", { err });
+    return fallback;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Q&A data insight (feature A): answer a question about ALREADY-AGGREGATED run
+// data. Claude does NOT build a query — it reasons over a compact data summary
+// we pass in, so it can't produce a wrong/expensive DB query.
+// ---------------------------------------------------------------------------
+
+export interface QueryInput {
+  /** The user's natural-language question. */
+  question: string;
+  /** A compact, pre-built text summary of the runs/coaches data to reason over. */
+  dataSummary: string;
+}
+
+const QUERY_SYSTEM = `You are a data assistant for a swim school's payroll tool. Answer the user's question using ONLY the data summary provided — it contains the saved monthly KPI results (coaches, scores, grades, payouts, periods). Be concise and specific with names and numbers. If the answer isn't in the data, say so plainly. Never invent figures.`;
+
+/** Answer a question about the provided run data. Needs a key (no useful template). */
+export async function answerDataQuestion(input: QueryInput): Promise<string> {
+  const client = getClient();
+  if (!client) {
+    return "AI query needs ANTHROPIC_API_KEY to be configured. Use the History and Trends pages to explore the data directly.";
+  }
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      system: [{ type: "text", text: QUERY_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [
+        {
+          role: "user",
+          content: `Data:\n${input.dataSummary}\n\nQuestion: ${input.question}`,
+        },
+      ],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    return text && text.type === "text"
+      ? text.text.trim()
+      : "No answer was returned. Try rephrasing the question.";
+  } catch (err) {
+    logger.warn("answerDataQuestion failed", { err });
+    return "Could not answer that right now. Please try again.";
+  }
+}
