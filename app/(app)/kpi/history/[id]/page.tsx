@@ -9,6 +9,7 @@ import { SectionNav } from "@/components/section-nav";
 import { sectionNavProps } from "@/lib/auth/section-nav-props";
 import { DeleteRunButton } from "@/components/delete-run-button";
 import { RunReview } from "@/components/run-review";
+import { RunDigest } from "@/components/run-digest";
 import { rm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,18 @@ export default async function RunDetailPage({
             assessment scores and finalize it before the bonus is locked.
           </span>
         </div>
+      )}
+
+      {!isDraft && (
+        <RunDigest
+          period={run.periodLabel}
+          coaches={coaches.map((c) => ({
+            name: c.canonicalName,
+            finalScore: c.finalScore,
+            grade: c.grade,
+            payout: c.payout,
+          }))}
+        />
       )}
 
       <Card className="overflow-hidden">
