@@ -10,6 +10,7 @@ import { sectionNavProps } from "@/lib/auth/section-nav-props";
 import { DeleteRunButton } from "@/components/delete-run-button";
 import { RunReview } from "@/components/run-review";
 import { RunDigest } from "@/components/run-digest";
+import { RunAudit } from "@/components/run-audit";
 import { rm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -93,15 +94,18 @@ export default async function RunDetailPage({
       )}
 
       {!isDraft && (
-        <RunDigest
-          period={run.periodLabel}
-          coaches={coaches.map((c) => ({
-            name: c.canonicalName,
-            finalScore: c.finalScore,
-            grade: c.grade,
-            payout: c.payout,
-          }))}
-        />
+        <div className="grid gap-3 md:grid-cols-2">
+          <RunDigest
+            period={run.periodLabel}
+            coaches={coaches.map((c) => ({
+              name: c.canonicalName,
+              finalScore: c.finalScore,
+              grade: c.grade,
+              payout: c.payout,
+            }))}
+          />
+          <RunAudit runId={run.id} />
+        </div>
       )}
 
       <Card className="overflow-hidden">
