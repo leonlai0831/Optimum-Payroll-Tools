@@ -129,4 +129,33 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(normalized.supervisor).not.toContain("finalize_kpi");
     expect(normalized.staff).not.toContain("finalize_kpi");
   });
+
+  it("lists distinct CSV account names across runs, sorted and trimmed", async () => {
+    const row = (Instructor: string) => ({
+      Center: "Berkeley",
+      Instructor,
+      TotalStudent: 10,
+      TotalColor: 10,
+      Black: 0,
+      LevelUp: 0,
+      Downgrade: 0,
+      Switch: 0,
+      Stop: 0,
+      Attended: 30,
+    });
+    await queries.createRun({
+      periodLabel: "2026-05",
+      filename: "may.csv",
+      csvRows: [row("ZOE [BK]"), row("  ARIF FARHAN [PK]  "), row("ZOE [BK]")],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+    });
+
+    const names = await queries.listAllCsvAccountNames();
+    // Trimmed, de-duped, A–Z; both this run's names appear once each.
+    expect(names).toContain("ARIF FARHAN [PK]");
+    expect(names).toContain("ZOE [BK]");
+    expect(names.filter((n) => n === "ZOE [BK]")).toHaveLength(1);
+    expect(names.indexOf("ARIF FARHAN [PK]")).toBeLessThan(names.indexOf("ZOE [BK]"));
+  });
 });

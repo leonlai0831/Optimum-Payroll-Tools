@@ -98,6 +98,25 @@ export async function getKnownCoaches(): Promise<KnownCoach[]> {
     .map((c) => ({ canonicalName: c.canonicalName, aliases: c.aliases ?? [] }));
 }
 
+/**
+ * Distinct CSV account (instructor) names across every saved run, A–Z. Powers
+ * the account-name search when manually editing a coach's aliases on /kpi/links,
+ * so the reviewer can pick a real account that appeared in the data rather than
+ * retype it blind.
+ */
+export async function listAllCsvAccountNames(): Promise<string[]> {
+  const db = await getDb();
+  const all = await db.select({ csvRows: runs.csvRows }).from(runs);
+  const names = new Set<string>();
+  for (const r of all) {
+    for (const row of r.csvRows ?? []) {
+      const n = row.Instructor?.trim();
+      if (n) names.add(n);
+    }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 export async function getCoach(id: number): Promise<CoachRecord | undefined> {
   const db = await getDb();
   const rows = await db.select().from(coaches).where(eq(coaches.id, id)).limit(1);
