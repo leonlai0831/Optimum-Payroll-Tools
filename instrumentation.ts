@@ -10,6 +10,17 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { initObservability } = await import("./lib/observability");
     await initObservability();
+
+    // Warm the DB connection at server boot so the first real request (usually
+    // login) doesn't pay the cold-start cost — establishing the pool + running
+    // migrations on the first query can take several seconds on a serverless
+    // Postgres. Fire-and-forget: a transient connect failure here must not block
+    // the server from becoming ready (getDb() retries on the next call anyway).
+    void import("./lib/db")
+      .then(({ getDb }) => getDb())
+      .catch(() => {
+        /* getDb() already logs + clears its cached promise so requests retry */
+      });
   }
 }
 

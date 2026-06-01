@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 import type { Role } from "./types";
@@ -39,8 +40,13 @@ export interface CurrentUser {
  * Resolve the logged-in user from the session, re-validating against the DB so a
  * deactivated/deleted account can't keep a stale cookie. The queries module is
  * imported dynamically so this file stays free of DB code in the edge `proxy`.
+ *
+ * Wrapped in React `cache()`: the layout, the page, and helpers like
+ * `sectionNavProps` all call this on every navigation, so without memoization a
+ * single request decrypts the session + hits the DB several times. `cache()`
+ * dedupes within one request only (never across requests/users), so it's safe.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await getSession();
   if (!session.userId) return null;
   const { getUserById } = await import("@/lib/db/queries");
@@ -53,7 +59,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     coachId: user.coachId,
     active: user.active,
   };
-}
+});
 
 /** Defense-in-depth auth check for API route handlers. */
 export async function isAuthed(): Promise<boolean> {
