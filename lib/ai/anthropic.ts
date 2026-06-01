@@ -446,3 +446,110 @@ export async function answerDataQuestion(input: QueryInput): Promise<string> {
     return "Could not answer that right now. Please try again.";
   }
 }
+
+// ---------------------------------------------------------------------------
+// KPI target suggestion (feature #3a): recommend min/max targets from the actual
+// distribution of recent results. Advisory — the user still edits Settings.
+// ---------------------------------------------------------------------------
+
+export interface TargetStat {
+  name: string;
+  currentMin: number;
+  currentMax: number;
+  achievedMin: number;
+  achievedMedian: number;
+  achievedMax: number;
+  count: number;
+}
+
+const TARGET_SYSTEM = `You are a KPI analyst for a swim school. For each metric you are given the CURRENT target min/max and the distribution of what coaches actually achieved last period (min, median, max, sample size). Recommend whether to keep or adjust each target, and to what, so targets are challenging but attainable. Keep it brief (one short line per metric). These are suggestions only — the manager applies them manually — so be clear and conservative, and note when the sample is small.`;
+
+function fallbackTargets(stats: TargetStat[]): string {
+  if (stats.length === 0) return "No recent metric data to base target suggestions on.";
+  return stats
+    .map(
+      (s) =>
+        `${s.name}: current ${s.currentMin}–${s.currentMax}; achieved median ${s.achievedMedian.toFixed(2)} (range ${s.achievedMin.toFixed(2)}–${s.achievedMax.toFixed(2)}, n=${s.count}).`,
+    )
+    .join("\n");
+}
+
+/** Suggest KPI target adjustments from the achieved distribution. */
+export async function suggestTargets(stats: TargetStat[]): Promise<string> {
+  const client = getClient();
+  if (!client || stats.length === 0) return fallbackTargets(stats);
+
+  const lines = stats
+    .map(
+      (s) =>
+        `- ${s.name}: current target ${s.currentMin}–${s.currentMax}; achieved min ${s.achievedMin.toFixed(2)}, median ${s.achievedMedian.toFixed(2)}, max ${s.achievedMax.toFixed(2)} (n=${s.count})`,
+    )
+    .join("\n");
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      system: [{ type: "text", text: TARGET_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: `Metrics:\n${lines}\n\nRecommend target adjustments.` }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    return text && text.type === "text" ? text.text.trim() : fallbackTargets(stats);
+  } catch (err) {
+    logger.warn("suggestTargets failed; using template fallback", { err });
+    return fallbackTargets(stats);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Retention check-in note (feature #3b): narrate the DETERMINISTIC watch signals
+// from lib/kpi/retention.ts. Heavily caveated and supportive by design — this is
+// not an attrition prediction and must never drive an employment decision.
+// ---------------------------------------------------------------------------
+
+export interface RetentionForNarration {
+  name: string;
+  level: string;
+  reasons: string[];
+}
+
+const RETENTION_SYSTEM = `You are an HR support assistant for a swim school. You are given coaches whose KPI SCORES have declined, with the exact figures behind each flag. Write a brief, supportive note for the manager (2–4 sentences) suggesting a constructive check-in with the coaches who show the clearest decline.
+
+Critical rules:
+- This is based ONLY on KPI scores — it is NOT a prediction that anyone will leave, and must NOT be framed as one.
+- Do NOT speculate about reasons, personal circumstances, or intentions. Stick to the score facts given.
+- Frame it as an opportunity to offer support, not as a risk to manage. Never recommend any employment action.
+- If the list is empty, say scores look stable and no check-in is indicated.`;
+
+/** Narrate retention watch signals supportively. Falls back to a plain template. */
+export async function narrateRetention(items: RetentionForNarration[]): Promise<string> {
+  const client = getClient();
+  const fallback =
+    items.length === 0
+      ? "KPI scores look stable across coaches — no check-in indicated by the data."
+      : `Consider a supportive check-in with ${items.map((i) => i.name).join(", ")} — their KPI scores have dipped recently. This reflects scores only, not any prediction about their plans.`;
+  if (!client) return fallback;
+
+  const list = items
+    .map((i) => `- ${i.name} (${i.level}): ${i.reasons.join(" ")}`)
+    .join("\n");
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      system: [{ type: "text", text: RETENTION_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [
+        {
+          role: "user",
+          content: items.length
+            ? `Coaches with declining KPI scores:\n${list}\n\nWrite the supportive check-in note.`
+            : "No coaches show a declining KPI trend this period.",
+        },
+      ],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    return text && text.type === "text" ? text.text.trim() : fallback;
+  } catch (err) {
+    logger.warn("narrateRetention failed; using template fallback", { err });
+    return fallback;
+  }
+}
