@@ -158,4 +158,14 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(names.filter((n) => n === "ZOE [BK]")).toHaveLength(1);
     expect(names.indexOf("ARIF FARHAN [PK]")).toBeLessThan(names.indexOf("ZOE [BK]"));
   });
+
+  it("includes coach aliases in account-name suggestions even with no run for them", async () => {
+    // Regression: deleting the run that contained an account used to drop it from
+    // the suggestions. Coach aliases are a second, run-independent source.
+    const coach = await queries.createCoach({ canonicalName: "CHAM TENG HUI" });
+    await queries.updateCoachAliases(coach.id, ["CHAM - YL [PJ]"]);
+
+    const names = await queries.listAllCsvAccountNames();
+    expect(names).toContain("CHAM - YL [PJ]");
+  });
 });

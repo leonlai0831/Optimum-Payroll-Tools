@@ -99,18 +99,31 @@ export async function getKnownCoaches(): Promise<KnownCoach[]> {
 }
 
 /**
- * Distinct CSV account (instructor) names across every saved run, A–Z. Powers
- * the account-name search when manually editing a coach's aliases on /kpi/links,
- * so the reviewer can pick a real account that appeared in the data rather than
- * retype it blind.
+ * Distinct account names for the alias-edit search on /kpi/links, A–Z. Drawn from
+ * BOTH sources so the list survives data changes:
+ *  - every saved run's CSV instructor names (accounts seen in uploads), and
+ *  - every coach's existing aliases (already-confirmed account names).
+ *
+ * Including coach aliases matters because runs can be deleted: if the only run
+ * that contained an account is removed, that account would otherwise vanish from
+ * the suggestions even though it's still a coach's known alias.
  */
 export async function listAllCsvAccountNames(): Promise<string[]> {
   const db = await getDb();
-  const all = await db.select({ csvRows: runs.csvRows }).from(runs);
+  const [runRows, coachRows] = await Promise.all([
+    db.select({ csvRows: runs.csvRows }).from(runs),
+    db.select({ aliases: coaches.aliases }).from(coaches),
+  ]);
   const names = new Set<string>();
-  for (const r of all) {
+  for (const r of runRows) {
     for (const row of r.csvRows ?? []) {
       const n = row.Instructor?.trim();
+      if (n) names.add(n);
+    }
+  }
+  for (const c of coachRows) {
+    for (const a of c.aliases ?? []) {
+      const n = a?.trim();
       if (n) names.add(n);
     }
   }
