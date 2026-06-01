@@ -1,14 +1,14 @@
 import { SectionNav } from "@/components/section-nav";
-import { sectionNavProps } from "@/lib/auth/section-nav-props";
 import { BrandedLoader } from "@/components/branded-loader";
 
-export default async function Loading() {
-  // Resolve caps so permission-gated tabs (e.g. KPI "Links") stay visible during
-  // loading — without them the nav would briefly drop those tabs and flicker.
-  const navProps = await sectionNavProps();
+// Must render instantly — a loading.tsx that awaits anything (e.g. caps via the
+// DB) defeats its purpose: the click appears to hang until that resolves. So the
+// nav here is rendered WITHOUT caps (a few permission-gated tabs are omitted for
+// this one frame); the real page renders the full caps-aware nav once loaded.
+export default function Loading() {
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="kpi" {...navProps} />
+      <SectionNav section="kpi" />
       <BrandedLoader />
     </div>
   );
