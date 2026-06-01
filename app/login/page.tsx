@@ -49,14 +49,25 @@ export default function LoginPage() {
               <source src="/logo-animation.mp4" type="video/mp4" />
             </video>
           ) : (
-            <Image
-              src="/logo.png"
-              alt="Optimum Swim School"
-              width={560}
-              height={433}
-              priority
-              className="mx-auto h-auto w-36"
-            />
+            <div className="flex items-center justify-center gap-2.5">
+              <Image
+                src="/logo-full.png"
+                alt="Optimum Swim School"
+                width={1080}
+                height={350}
+                priority
+                className="h-8 w-auto"
+              />
+              <span className="h-7 w-px bg-gray-200" aria-hidden />
+              <Image
+                src="/logo-fit.png"
+                alt="Optimum Fit"
+                width={1600}
+                height={355}
+                priority
+                className="h-8 w-auto"
+              />
+            </div>
           )}
           <p className="mt-3 text-sm font-semibold text-gray-500">
             {loading ? "Signing in…" : "Optimum Payroll Tools"}

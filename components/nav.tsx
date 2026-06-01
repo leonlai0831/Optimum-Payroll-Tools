@@ -11,7 +11,7 @@ import type { Brand } from "@/components/brand-shell";
 /** Per-brand logo in the top nav. Both render side by side; the active one is highlighted. */
 const BRANDS: Record<Brand, { src: string; alt: string; width: number; height: number }> = {
   swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350 },
-  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1037, height: 405 },
+  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1600, height: 355 },
 };
 
 export function Nav({ email, role, brand = "swim" }: { email: string; role: Role; brand?: Brand }) {
