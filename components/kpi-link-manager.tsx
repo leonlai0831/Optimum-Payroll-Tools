@@ -50,6 +50,15 @@ function tierRank(c: LinkCoach): number {
   return ALLOWANCE_TIERS.indexOf(c.tier);
 }
 
+/**
+ * Composite sort key "<rank>|<name>": a zero-padded numeric rank followed by the
+ * coach name, so sorting by it orders by the rank first and breaks ties by name
+ * A–Z (useTableSort is single-key, so the tiebreak is encoded here).
+ */
+function rankThenName(rank: number, name: string): string {
+  return `${String(rank).padStart(3, "0")}|${name.toLowerCase()}`;
+}
+
 export function KpiLinkManager({
   coaches: initial,
   canEdit,
@@ -109,10 +118,12 @@ export function KpiLinkManager({
     visible,
     {
       coach: (c) => c.canonicalName,
-      tier: (c) => tierRank(c),
-      link: (c) => kpiLinkRank(c),
+      // Tier order first, then staff name A–Z within a tier.
+      tier: (c) => rankThenName(tierRank(c), c.canonicalName),
+      link: (c) => rankThenName(kpiLinkRank(c), c.canonicalName),
     },
-    { key: "coach", dir: "asc" },
+    // Default: by tier, then staff name.
+    { key: "tier", dir: "asc" },
   );
 
   async function patch(id: number, body: Record<string, unknown>) {
@@ -225,7 +236,7 @@ export function KpiLinkManager({
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
-              <SortTh label="Coach" sortKey="coach" sort={sort} onSort={toggleSort} className="px-3" />
+              <SortTh label="Staff Name" sortKey="coach" sort={sort} onSort={toggleSort} className="px-3" />
               <SortTh label="Tier" sortKey="tier" sort={sort} onSort={toggleSort} className="px-3" />
               <th className="px-3 py-2 text-left">Accounts (aliases)</th>
               <SortTh label="KPI link" sortKey="link" sort={sort} onSort={toggleSort} align="center" className="px-3" />
