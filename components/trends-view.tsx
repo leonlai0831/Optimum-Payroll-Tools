@@ -11,8 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { BarChart3 } from "lucide-react";
-import { Card } from "@/components/ui";
+import { BarChart3, Sparkles } from "lucide-react";
+import { Button, Card, Select, Spinner } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import type { TrendData } from "@/lib/db/queries";
@@ -27,6 +27,30 @@ export function TrendsView({ data }: { data: TrendData }) {
   const [selected, setSelected] = useState<string[]>(() =>
     data.coaches.slice(0, 5).map((c) => c.name),
   );
+  // AI trend narrative for one chosen coach (on demand).
+  const [trendCoach, setTrendCoach] = useState<string>(() => data.coaches[0]?.name ?? "");
+  const [trendText, setTrendText] = useState<string | null>(null);
+  const [trendLoading, setTrendLoading] = useState(false);
+
+  async function analyzeTrend() {
+    const coach = data.coaches.find((c) => c.name === trendCoach);
+    if (!coach) return;
+    setTrendLoading(true);
+    setTrendText(null);
+    try {
+      const res = await fetch("/api/trend-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: coach.name, points: coach.points }),
+      });
+      const d = (await res.json()) as { text?: string };
+      setTrendText(d.text ?? "");
+    } catch {
+      setTrendText("Could not analyze this trend right now.");
+    } finally {
+      setTrendLoading(false);
+    }
+  }
 
   if (data.periods.length === 0) {
     return (
@@ -99,6 +123,35 @@ export function TrendsView({ data }: { data: TrendData }) {
             </LineChart>
           </ResponsiveContainer>
         </div>
+      </Card>
+
+      <Card className="p-4">
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <Sparkles className="h-3.5 w-3.5 text-accent" /> AI trend analysis
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={trendCoach}
+            onChange={(e) => {
+              setTrendCoach(e.target.value);
+              setTrendText(null);
+            }}
+            className="w-auto py-1.5 text-xs"
+          >
+            {data.coaches.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" variant="outline" onClick={analyzeTrend} disabled={trendLoading || !trendCoach}>
+            {trendLoading ? <Spinner className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {trendLoading ? "Analyzing…" : "Analyze"}
+          </Button>
+        </div>
+        {trendText !== null && (
+          <p className="mt-2 text-sm leading-relaxed text-gray-800">{trendText}</p>
+        )}
       </Card>
 
       <Card className="p-4">

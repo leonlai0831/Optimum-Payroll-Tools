@@ -14,6 +14,7 @@ import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
 import { linkAllowance, reconcileAllowances, type CoachLinkInfo } from "@/lib/kpi/allowance-link";
 import { appearsInLeaderboard } from "@/lib/kpi/leaderboard";
+import type { CsvAnomaly } from "@/lib/ai/anthropic";
 import { isLinkableTier, nonLinkableReason } from "@/lib/allowance/tier-rules";
 import type { AllowanceTier } from "@/lib/allowance/types";
 import { computeCoach } from "@/lib/kpi/coach";
@@ -129,6 +130,9 @@ export function Dashboard({
   const [accts, setAccts] = useState<Acct[]>([]);
   const [meta, setMeta] = useState<Record<string, GroupInputs>>({});
   const [aiStatus, setAiStatus] = useState<"idle" | "matching" | "done">("idle");
+  /** AI data-quality warnings for the uploaded month (advisory; dismissible). */
+  const [anomalies, setAnomalies] = useState<CsvAnomaly[]>([]);
+  const [anomaliesDismissed, setAnomaliesDismissed] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -167,6 +171,27 @@ export function Dashboard({
               students: rs.reduce((s, r) => s + r.TotalStudent, 0),
             };
           });
+
+          // Fire the AI data-quality check in the background — advisory only, so
+          // it must never block or delay the merge/scoring path below.
+          setAnomalies([]);
+          setAnomaliesDismissed(false);
+          void fetch("/api/validate-csv", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              current: accountsForMatch.map((a) => ({
+                instructor: a.name,
+                center: a.center,
+                students: a.students,
+              })),
+            }),
+          })
+            .then((r) => r.json() as Promise<{ anomalies?: CsvAnomaly[] }>)
+            .then((d) => setAnomalies(d.anomalies ?? []))
+            .catch(() => {
+              /* advisory only — ignore failures */
+            });
 
           setAiStatus("matching");
           let clusters: string[][] = [];
@@ -670,6 +695,48 @@ export function Dashboard({
             </>
           )}
         </p>
+      )}
+
+      {/* AI data-quality warnings (advisory; dismissible). */}
+      {anomalies.length > 0 && !anomaliesDismissed && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-semibold text-rose-900">
+              <TriangleAlert className="h-4 w-4" /> AI flagged {anomalies.length} thing(s) to review
+            </span>
+            <button
+              type="button"
+              className="text-xs font-medium text-rose-500 hover:underline"
+              onClick={() => setAnomaliesDismissed(true)}
+            >
+              Dismiss
+            </button>
+          </div>
+          <ul className="space-y-1">
+            {anomalies.map((a, i) => (
+              <li key={`${a.account}-${i}`} className="flex items-start gap-1.5 text-rose-800">
+                <Badge
+                  className={cn(
+                    "mt-0.5 shrink-0",
+                    a.severity === "high"
+                      ? "bg-rose-200 text-rose-900"
+                      : a.severity === "medium"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-gray-100 text-gray-600",
+                  )}
+                >
+                  {a.severity}
+                </Badge>
+                <span>
+                  <strong>{a.account}</strong> — {a.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-rose-400">
+            Advisory only — review and correct in the data if needed; nothing is changed automatically.
+          </p>
+        </div>
       )}
 
       {/* Readiness banner */}
