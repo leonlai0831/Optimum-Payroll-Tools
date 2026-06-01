@@ -5,9 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, UserCog } from "lucide-react";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
+import type { Brand } from "@/components/brand-shell";
 
-export function Nav({ email, role }: { email: string; role: Role }) {
+/** Per-brand logo + wordmark shown in the top nav. */
+const BRANDS: Record<Brand, { src: string; alt: string; width: number; height: number; label: string }> = {
+  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350, label: "Payroll Tools" },
+  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1037, height: 405, label: "Staff Commission" },
+};
+
+export function Nav({ email, role, brand = "swim" }: { email: string; role: Role; brand?: Brand }) {
   const router = useRouter();
+  const b = BRANDS[brand];
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -20,15 +28,15 @@ export function Nav({ email, role }: { email: string; role: Role }) {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2.5">
           <Image
-            src="/logo-full.png"
-            alt="Optimum Swim School"
-            width={1080}
-            height={350}
+            src={b.src}
+            alt={b.alt}
+            width={b.width}
+            height={b.height}
             priority
             className="h-8 w-auto sm:h-9"
           />
           <span className="hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
-          <span className="hidden text-sm font-semibold text-gray-500 sm:inline">Payroll Tools</span>
+          <span className="hidden text-sm font-semibold text-gray-500 sm:inline">{b.label}</span>
         </Link>
 
         <div className="flex items-center gap-2">

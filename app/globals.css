@@ -49,6 +49,36 @@
   --color-muted-bg: #f3f4f6;
 }
 
+/* Optimum Fit (gym) brand skin. Scoped to `[data-brand="fit"]`, set by the app
+   shell when the route is under /commission. Tailwind v4 utilities resolve to
+   var(--color-*), so re-declaring the tokens here re-skins every `bg-brand`,
+   `text-brand`, and remapped `indigo-*` class inside the scope — no component
+   changes. Main color shifts blue -> black; the yellow accent is shared with
+   Swim, so it barely moves. */
+[data-brand="fit"] {
+  --color-brand: #1a1a1a;
+  --color-brand-dark: #000000;
+  --color-brand-light: #f4f4f5;
+  --color-accent: #f5a623;
+  --color-accent-bright: #ffb733;
+
+  /* Remap the indigo scale (used app-wide as the primary) to a neutral black ramp. */
+  --color-indigo-50: #f6f6f7;
+  --color-indigo-100: #e6e6e8;
+  --color-indigo-200: #c9c9cd;
+  --color-indigo-300: #a3a3aa;
+  --color-indigo-400: #71717a;
+  --color-indigo-500: #3f3f46;
+  --color-indigo-600: #1a1a1a;
+  --color-indigo-700: #121212;
+  --color-indigo-800: #0a0a0a;
+  --color-indigo-900: #050505;
+  --color-indigo-950: #000000;
+
+  --color-info: #1a1a1a;
+  --color-info-bg: #f4f4f5;
+}
+
 /* Typography composites (Phase 1 design tokens).
    Single-class shortcuts that bundle font-size + line-height + weight for each
    role. Color is intentionally NOT included — pair with `text-gray-900` for

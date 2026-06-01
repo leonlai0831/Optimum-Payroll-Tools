@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { Nav } from "@/components/nav";
+import { BrandShell } from "@/components/brand-shell";
 import { ToastProvider } from "@/components/toast";
 
 export default async function AppLayout({
@@ -11,8 +11,9 @@ export default async function AppLayout({
 
   return (
     <ToastProvider>
-      <Nav email={user.email} role={user.role} />
-      <main className="mx-auto max-w-7xl p-4 md:p-6">{children}</main>
+      <BrandShell email={user.email} role={user.role}>
+        {children}
+      </BrandShell>
     </ToastProvider>
   );
 }

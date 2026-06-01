@@ -31,7 +31,7 @@ type SectionItem = {
 };
 type SectionConfig = { title: string; items: SectionItem[] };
 
-const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
+const NAVS: Record<"allowance" | "kpi" | "staff" | "commission", SectionConfig> = {
   allowance: {
     title: "Staff Allowance",
     items: [
@@ -81,6 +81,16 @@ const NAVS: Record<"allowance" | "kpi" | "staff", SectionConfig> = {
         icon: ShieldCheck,
         requires: { superAdmin: true },
       },
+    ],
+  },
+  commission: {
+    title: "Staff Commission",
+    items: [
+      { href: "/commission", label: "Calculator", icon: Calculator, exact: true },
+      { href: "/commission/bulk", label: "Bulk entry", icon: Layers },
+      { href: "/commission/history", label: "History", icon: History },
+      { href: "/commission/trends", label: "Trends", icon: BarChart3 },
+      { href: "/commission/settings", label: "Settings", icon: SlidersHorizontal },
     ],
   },
 };
