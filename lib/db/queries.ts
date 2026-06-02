@@ -12,6 +12,7 @@ import {
   commissionConfig,
   commissionRuns,
   teachingConfig,
+  gymStaff,
   config,
   notes,
   performanceConfig,
@@ -24,6 +25,7 @@ import {
   type AuditLogRecord,
   type CoachRecord,
   type CommissionRunRecord,
+  type GymStaffRecord,
   type NoteRecord,
   type RunRecord,
   type UserRecord,
@@ -53,6 +55,7 @@ import { defaultCommissionConfig } from "@/lib/commission/defaults";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
 import type { TeachingConfig } from "@/lib/teaching/types";
+import type { GymStaffInput } from "@/lib/gym/types";
 import type { RunCoach } from "@/lib/types";
 import {
   CENTERS,
@@ -604,6 +607,60 @@ export async function saveTeachingConfig(data: TeachingConfig): Promise<void> {
     .insert(teachingConfig)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: teachingConfig.id, set: { data, updatedAt: new Date() } });
+}
+
+// ── Gym staff roster (Optimum Fit) ────────────────────────────────────────────
+
+export async function listGymStaff(): Promise<GymStaffRecord[]> {
+  const db = await getDb();
+  return db.select().from(gymStaff).orderBy(gymStaff.name);
+}
+
+export async function getGymStaffMember(id: number): Promise<GymStaffRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(gymStaff).where(eq(gymStaff.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createGymStaff(input: GymStaffInput): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(gymStaff)
+    .values({
+      name: input.name,
+      staffCode: input.staffCode,
+      position: input.position,
+      employmentType: input.employmentType,
+      email: input.email,
+      phone: input.phone,
+      aliases: input.aliases,
+      active: input.active,
+    })
+    .returning({ id: gymStaff.id });
+  return row.id;
+}
+
+export async function updateGymStaff(id: number, input: GymStaffInput): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(gymStaff)
+    .set({
+      name: input.name,
+      staffCode: input.staffCode,
+      position: input.position,
+      employmentType: input.employmentType,
+      email: input.email,
+      phone: input.phone,
+      aliases: input.aliases,
+      active: input.active,
+      updatedAt: new Date(),
+    })
+    .where(eq(gymStaff.id, id));
+}
+
+export async function deleteGymStaff(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(gymStaff).where(eq(gymStaff.id, id));
 }
 
 // ── Allowance ────────────────────────────────────────────────────────────────

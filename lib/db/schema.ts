@@ -20,6 +20,7 @@ import type {
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import type { TeachingConfig } from "@/lib/teaching/types";
+import type { GymEmploymentType, GymPosition } from "@/lib/gym/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
   AllowanceConfig,
@@ -142,6 +143,25 @@ export const teachingConfig = pgTable("teaching_config", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Optimum Fit gym-staff roster: position (sales consultant / personal trainer /
+ * front desk) + employment type (incl. freelancer). Separate from swim `coaches`.
+ * `staffCode` links to commission data; `aliases` help match coaching exports.
+ */
+export const gymStaff = pgTable("gym_staff", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  staffCode: text("staff_code").default("").notNull(),
+  position: text("position").$type<GymPosition>().default("personal_trainer").notNull(),
+  employmentType: text("employment_type").$type<GymEmploymentType>().default("full_time").notNull(),
+  email: text("email").default("").notNull(),
+  phone: text("phone").default("").notNull(),
+  aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** Singleton appraisal configuration (one row, id = 1). */
 export const performanceConfig = pgTable("performance_config", {
   id: integer("id").primaryKey().default(1),
@@ -220,3 +240,4 @@ export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
 export type CommissionConfigRecord = typeof commissionConfig.$inferSelect;
 export type CommissionRunRecord = typeof commissionRuns.$inferSelect;
 export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;
+export type GymStaffRecord = typeof gymStaff.$inferSelect;
