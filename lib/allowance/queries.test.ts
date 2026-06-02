@@ -195,4 +195,79 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     await queries.deleteAllowanceRun(id);
     expect(await queries.getAllowanceRun(id)).toBeUndefined();
   });
+
+  it("sequential-month guard: blocks a new month until the previous one has entries", async () => {
+    // 2026-06 already has SAM LEE → adding/editing within it is always allowed.
+    expect((await queries.checkAllowancePeriodAllowed("2026-06")).allowed).toBe(true);
+    // 2026-10 is new, but its predecessor 2026-09 has MULTI MIA → allowed.
+    expect((await queries.checkAllowancePeriodAllowed("2026-10")).allowed).toBe(true);
+    // 2026-12 is new and 2026-11 is empty (other data exists) → blocked.
+    const blocked = await queries.checkAllowancePeriodAllowed("2026-12");
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.previousPeriod).toBe("2026-11");
+  });
+
+  const mk = (periodLabel: string, name: string) =>
+    queries
+      .getAllowanceConfig()
+      .then((configSnapshot) =>
+        queries.createAllowanceRun({
+          periodLabel,
+          input: {
+            coachId: null,
+            name,
+            tier: "I3",
+            center: "HQ",
+            opHours: 160,
+            leaveHours: 0,
+            teachingRows: [],
+            otherItems: [],
+          },
+          result: perfect,
+          configSnapshot,
+        }),
+      );
+
+  it("blocks a whole-month move when any staff clashes, and changes nothing", async () => {
+    await mk("2030-01", "ALICE");
+    await mk("2030-01", "BOB");
+    await mk("2030-02", "BOB"); // clashes with the move
+    await mk("2030-02", "CAROL");
+
+    expect(await queries.getAllowancePeriodClashes("2030-01", "2030-02")).toEqual(["BOB"]);
+
+    const res = await queries.moveAllowancePeriod("2030-01", "2030-02");
+    expect(res).toEqual({ moved: 0, clashes: ["BOB"] }); // all-or-nothing: nothing moved
+
+    // Both months are untouched.
+    expect((await queries.listAllowanceRuns("2030-01")).map((r) => r.canonicalName).sort()).toEqual([
+      "ALICE",
+      "BOB",
+    ]);
+    expect((await queries.listAllowanceRuns("2030-02")).map((r) => r.canonicalName).sort()).toEqual([
+      "BOB",
+      "CAROL",
+    ]);
+  });
+
+  it("moves a whole month with no clashes (here, into an empty target)", async () => {
+    await mk("2030-03", "DAVE");
+    const res = await queries.moveAllowancePeriod("2030-03", "2030-04");
+    expect(res).toEqual({ moved: 1, clashes: [] });
+    expect((await queries.listAllowanceRuns("2030-03")).length).toBe(0);
+    expect((await queries.listAllowanceRuns("2030-04")).map((r) => r.canonicalName)).toEqual(["DAVE"]);
+  });
+
+  it("changes one entry's month, and refuses when the target already has that person", async () => {
+    const eveId = await mk("2031-01", "EVE");
+    const ok = await queries.moveAllowanceRun(eveId, "2031-02");
+    expect(ok.ok).toBe(true);
+    expect((await queries.listAllowanceRuns("2031-01")).length).toBe(0);
+    expect((await queries.listAllowanceRuns("2031-02")).map((r) => r.canonicalName)).toEqual(["EVE"]);
+
+    const eve3 = await mk("2031-03", "EVE"); // EVE now in 2031-02 and 2031-03
+    const clash = await queries.moveAllowanceRun(eve3, "2031-02");
+    expect(clash.ok).toBe(false);
+    expect((await queries.listAllowanceRuns("2031-03")).map((r) => r.canonicalName)).toEqual(["EVE"]);
+  });
 });

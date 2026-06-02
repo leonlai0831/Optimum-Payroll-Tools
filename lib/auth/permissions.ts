@@ -33,3 +33,20 @@ export async function requireCapability(capability: Capability): Promise<NextRes
   }
   return null;
 }
+
+/**
+ * Manager-only gate (admin + super_admin) for sensitive payroll operations that
+ * aren't tied to a single capability — closing/reopening months and relabelling
+ * a record's month. Returns `{ user }` on success or `{ error }` to short-circuit:
+ *   const gate = await requireManager();
+ *   if ("error" in gate) return gate.error;
+ */
+export async function requireManager(): Promise<{ user: CurrentUser } | { error: NextResponse }> {
+  const { getCurrentUser } = await import("./session");
+  const user = await getCurrentUser();
+  if (!user) return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
+  if (user.role !== "admin" && user.role !== "super_admin") {
+    return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+  }
+  return { user };
+}

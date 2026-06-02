@@ -9,6 +9,7 @@ import { StaffCombobox } from "@/components/staff-combobox";
 import { useToast } from "@/components/toast";
 import { attendanceBracket, calcAllowance } from "@/lib/allowance/calc";
 import { validateAllowanceInput } from "@/lib/allowance/validate";
+import { currentPeriod, isValidPeriod, previousPeriod } from "@/lib/allowance/period";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type {
   AllowanceConfig,
@@ -27,11 +28,6 @@ interface RosterCoach {
   allowanceTier: AllowanceTier | null;
 }
 
-function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 const num = (v: string) => (v === "" ? 0 : Number(v) || 0);
 
 export interface AllowanceEditTarget {
@@ -44,10 +40,13 @@ export function AllowanceCalculator({
   config,
   coaches,
   initial,
+  existingPeriods = [],
 }: {
   config: AllowanceConfig;
   coaches: RosterCoach[];
   initial?: AllowanceEditTarget;
+  /** Months that already have entries — drives the sequential-month hint. */
+  existingPeriods?: string[];
 }) {
   const editing = !!initial;
   const [period, setPeriod] = useState(initial?.periodLabel ?? currentPeriod());
@@ -148,9 +147,23 @@ export function AllowanceCalculator({
     );
   }
 
+  // Sequential-month guard (mirrors the server): a brand-new month can't be keyed
+  // until the previous one has entries. Advisory here; the API enforces it on save.
+  const guardPrev = isValidPeriod(period) ? previousPeriod(period) : "";
+  const blockedByGuard =
+    !editing &&
+    isValidPeriod(period) &&
+    existingPeriods.length > 0 &&
+    !existingPeriods.includes(period) &&
+    !existingPeriods.includes(guardPrev);
+
   async function save() {
     if (!input.name) {
       toast.error("Pick or name a staff member first.");
+      return;
+    }
+    if (blockedByGuard) {
+      toast.error(`Key ${guardPrev} first — months are entered in order.`);
       return;
     }
     setSaving(true);
@@ -193,16 +206,23 @@ export function AllowanceCalculator({
                 {editing ? (
                   <p className="mt-1 py-2 text-sm font-medium text-gray-900">{period}</p>
                 ) : (
-                  <Input
-                    id="period"
-                    type="month"
-                    value={period}
-                    onChange={(e) => {
-                      setPeriod(e.target.value);
-                      dirty();
-                    }}
-                    className="mt-1"
-                  />
+                  <>
+                    <Input
+                      id="period"
+                      type="month"
+                      value={period}
+                      onChange={(e) => {
+                        setPeriod(e.target.value);
+                        dirty();
+                      }}
+                      className="mt-1"
+                    />
+                    {blockedByGuard && (
+                      <p className="mt-1 text-xs font-medium text-amber-600">
+                        {guardPrev} has no entries yet — key it before {period}.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
               <div className="col-span-2 sm:col-span-1">
@@ -240,7 +260,7 @@ export function AllowanceCalculator({
               <Button variant="outline" onClick={() => setShowReport(true)} disabled={!input.name}>
                 <FileText className="h-4 w-4" /> PDF report
               </Button>
-              <Button onClick={save} disabled={saving}>
+              <Button onClick={save} disabled={saving || blockedByGuard}>
                 {saving ? <Spinner /> : <Save className="h-4 w-4" />} {editing ? "Update" : "Save"}
               </Button>
             </div>
