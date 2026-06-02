@@ -43,14 +43,25 @@ export default async function SetupPage() {
     <div className="flex min-h-screen items-start justify-center p-4 sm:items-center">
       <Card className="w-full max-w-lg overflow-hidden border-t-4 border-t-brand">
         <div className="bg-white px-6 pb-4 pt-7 text-center">
-          <Image
-            src="/logo.png"
-            alt="Optimum Swim School"
-            width={560}
-            height={433}
-            priority
-            className="mx-auto h-auto w-28"
-          />
+          <div className="flex items-center justify-center gap-2.5">
+            <Image
+              src="/logo-full.png"
+              alt="Optimum Swim School"
+              width={1080}
+              height={350}
+              priority
+              className="h-8 w-auto"
+            />
+            <span className="h-5 w-px bg-gray-200" aria-hidden />
+            <Image
+              src="/logo-fit.png"
+              alt="Optimum Fit"
+              width={1600}
+              height={355}
+              priority
+              className="h-5 w-auto"
+            />
+          </div>
           <p className="mt-3 text-sm font-semibold text-gray-500">Deployment setup status</p>
         </div>
 
