@@ -5,10 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, UserCog } from "lucide-react";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
-import { cn } from "@/lib/utils";
 import type { Brand } from "@/components/brand-shell";
 
-/** Per-brand logo in the top nav. Both render side by side; the active one is highlighted. */
+/** Per-brand logo in the top nav. Both render side by side, in full color. */
 const BRANDS: Record<Brand, { src: string; alt: string; width: number; height: number }> = {
   swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350 },
   fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1600, height: 355 },
@@ -37,7 +36,7 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
             priority
             className="h-7 w-auto sm:hidden"
           />
-          {/* Desktop: both brands side by side; the active one is highlighted. */}
+          {/* Desktop: show both brand logos side by side, in full color. */}
           <div className="hidden items-center gap-3 sm:flex">
             {(["swim", "fit"] as Brand[]).map((key, i) => {
               const x = BRANDS[key];
@@ -51,10 +50,7 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
                     height={x.height}
                     priority
                     title={x.alt}
-                    className={cn(
-                      "h-9 w-auto transition",
-                      brand === key ? "opacity-100" : "opacity-40 grayscale",
-                    )}
+                    className="h-9 w-auto"
                   />
                 </div>
               );
