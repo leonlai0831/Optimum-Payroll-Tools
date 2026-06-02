@@ -1,22 +1,14 @@
 import { redirect } from "next/navigation";
-import { History } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
-import { listCommissionRuns } from "@/lib/db/queries";
-import { CommissionHistoryView } from "@/components/commission-history-view";
+import { listCommissionRuns, listTeachingRuns } from "@/lib/db/queries";
+import { HistoryTabs } from "@/components/history-tabs";
 
 export const dynamic = "force-dynamic";
 
 export default async function CommissionHistoryPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const runs = await listCommissionRuns();
+  const [commissionRuns, teachingRuns] = await Promise.all([listCommissionRuns(), listTeachingRuns()]);
 
-  return (
-    <>
-      <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-        <History className="h-5 w-5 text-brand" /> Saved commission months
-      </h1>
-      <CommissionHistoryView runs={runs} />
-    </>
-  );
+  return <HistoryTabs commissionRuns={commissionRuns} teachingRuns={teachingRuns} />;
 }

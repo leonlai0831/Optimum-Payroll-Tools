@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Download, FileSpreadsheet, RotateCcw, Save, UploadCloud } from "lucide-react";
+import { Download, FileSpreadsheet, History, RotateCcw, Save, UploadCloud } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
+import { TeachingReport } from "@/components/teaching-report";
 import { computeTeaching } from "@/lib/teaching/calc";
-import { rm } from "@/lib/utils";
 import type { TeachingConfig, TeachingRow } from "@/lib/teaching/types";
 
 export function TeachingCalculator({ initialConfig }: { initialConfig: TeachingConfig }) {
@@ -14,9 +14,10 @@ export function TeachingCalculator({ initialConfig }: { initialConfig: TeachingC
 
   const [rows, setRows] = useState<TeachingRow[] | null>(null);
   const [monthLabel, setMonthLabel] = useState("");
+  const [filename, setFilename] = useState("");
   const [config, setConfig] = useState<TeachingConfig>(initialConfig);
   const [computing, setComputing] = useState(false);
-  const [busy, setBusy] = useState<"download" | "save" | null>(null);
+  const [busy, setBusy] = useState<"download" | "save" | "run" | null>(null);
 
   // Recompute live as rates change — the engine is pure, so no server round-trip.
   const summary = useMemo(() => (rows ? computeTeaching(rows, config) : null), [rows, config]);
@@ -39,10 +40,33 @@ export function TeachingCalculator({ initialConfig }: { initialConfig: TeachingC
       setRows(data.rows);
       setConfig(data.config);
       setMonthLabel(data.monthLabel);
+      setFilename(file.name);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Compute failed");
     } finally {
       setComputing(false);
+    }
+  }
+
+  async function saveRun() {
+    if (!rows) return;
+    if (!monthLabel.trim()) {
+      toast.error("Add a period label before saving to history.");
+      return;
+    }
+    setBusy("run");
+    try {
+      const res = await fetch("/api/teaching/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ periodLabel: monthLabel.trim(), filename, rows, config }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
+      toast.success(`Saved ${monthLabel.trim()} to history.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -92,6 +116,7 @@ export function TeachingCalculator({ initialConfig }: { initialConfig: TeachingC
   function reset() {
     setRows(null);
     setMonthLabel("");
+    setFilename("");
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -158,6 +183,9 @@ export function TeachingCalculator({ initialConfig }: { initialConfig: TeachingC
                 <Button variant="ghost" onClick={saveRates} disabled={busy !== null}>
                   {busy === "save" ? <Spinner /> : <Save className="h-4 w-4" />} Save rates
                 </Button>
+                <Button onClick={saveRun} disabled={busy !== null}>
+                  {busy === "run" ? <Spinner /> : <History className="h-4 w-4" />} Save to history
+                </Button>
                 <Button variant="outline" onClick={download} disabled={busy !== null}>
                   {busy === "download" ? <Spinner /> : <Download className="h-4 w-4" />} Download Excel
                 </Button>
@@ -165,49 +193,11 @@ export function TeachingCalculator({ initialConfig }: { initialConfig: TeachingC
             </div>
             <p className="mt-2 text-xs text-gray-400">
               PT classes match: <code>{config.ptKeywords.join(", ") || "—"}</code> (case-insensitive). Rates apply live;
-              “Save rates” persists them for next month.
+              “Save rates” persists them for next month; “Save to history” stores this month for History &amp; Trends.
             </p>
           </Card>
 
-          <Card className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-overline text-muted">
-                  <th className="px-3 py-2">Coach</th>
-                  <th className="px-3 py-2 text-right">PT sessions</th>
-                  <th className="px-3 py-2 text-right">PT attendees</th>
-                  <th className="px-3 py-2 text-right">PT income</th>
-                  <th className="px-3 py-2 text-right">Group sessions</th>
-                  <th className="px-3 py-2 text-right">Group income</th>
-                  <th className="px-3 py-2 text-right">Total income</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {summary.coaches.map((c) => (
-                  <tr key={c.staffName} className="tabular-nums">
-                    <td className="px-3 py-2 text-gray-900">{c.staffName}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{c.ptSessions}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{c.ptAttendees}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{rm(c.ptIncome)}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{c.groupSessions}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{rm(c.groupIncome)}</td>
-                    <td className="px-3 py-2 text-right font-bold text-green-700">{rm(c.totalIncome)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-gray-200 bg-gray-50 tabular-nums">
-                <tr className="font-bold text-gray-900">
-                  <td className="px-3 py-2">TOTAL</td>
-                  <td className="px-3 py-2 text-right">{summary.totals.ptSessions}</td>
-                  <td className="px-3 py-2 text-right">{summary.totals.ptAttendees}</td>
-                  <td className="px-3 py-2 text-right">{rm(summary.totals.ptIncome)}</td>
-                  <td className="px-3 py-2 text-right">{summary.totals.groupSessions}</td>
-                  <td className="px-3 py-2 text-right">{rm(summary.totals.groupIncome)}</td>
-                  <td className="px-3 py-2 text-right text-green-700">{rm(summary.totals.totalIncome)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </Card>
+          <TeachingReport summary={summary} />
         </>
       )}
     </div>
