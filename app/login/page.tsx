@@ -35,43 +35,26 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm overflow-hidden border-t-4 border-t-brand">
         <div className="bg-white px-6 pb-4 pt-7 text-center">
-          {loading ? (
-            <video
-              className="mx-auto h-auto w-36"
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              poster="/logo.png"
-              aria-hidden="true"
-            >
-              <source src="/logo-animation.mp4" type="video/mp4" />
-            </video>
-          ) : (
-            <div className="flex items-center justify-center gap-2.5">
-              <Image
-                src="/logo-full.png"
-                alt="Optimum Swim School"
-                width={1080}
-                height={350}
-                priority
-                className="h-8 w-auto"
-              />
-              <span className="h-7 w-px bg-gray-200" aria-hidden />
-              <Image
-                src="/logo-fit.png"
-                alt="Optimum Fit"
-                width={1600}
-                height={355}
-                priority
-                className="h-8 w-auto"
-              />
-            </div>
-          )}
-          <p className="mt-3 text-sm font-semibold text-gray-500">
-            {loading ? "Signing in…" : "Optimum Payroll Tools"}
-          </p>
+          <div className="flex items-center justify-center gap-2.5">
+            <Image
+              src="/logo-full.png"
+              alt="Optimum Swim School"
+              width={1080}
+              height={350}
+              priority
+              className="h-8 w-auto"
+            />
+            <span className="h-5 w-px bg-gray-200" aria-hidden />
+            <Image
+              src="/logo-fit.png"
+              alt="Optimum Fit"
+              width={1600}
+              height={355}
+              priority
+              className="h-5 w-auto"
+            />
+          </div>
+          <p className="mt-3 text-sm font-semibold text-gray-500">Optimum Payroll Tools</p>
         </div>
         <form onSubmit={submit} className="space-y-4 p-6">
           <div>
