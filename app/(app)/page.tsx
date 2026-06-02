@@ -57,8 +57,8 @@ const TOOLS: Tool[] = [
   },
   {
     href: "/commission",
-    title: "Staff Commission",
-    subtitle: "Gym staff commission · membership, PT & products",
+    title: "Staff Earnings",
+    subtitle: "Gym staff pay · commission, coaching income & bonuses",
     icon: Dumbbell,
     cap: "run_commission",
     brand: "fit",

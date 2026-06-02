@@ -11,6 +11,7 @@ import {
   coaches,
   commissionConfig,
   commissionRuns,
+  teachingConfig,
   config,
   notes,
   performanceConfig,
@@ -50,6 +51,8 @@ import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
 import { defaultCommissionConfig } from "@/lib/commission/defaults";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
+import { defaultTeachingConfig } from "@/lib/teaching/defaults";
+import type { TeachingConfig } from "@/lib/teaching/types";
 import type { RunCoach } from "@/lib/types";
 import {
   CENTERS,
@@ -581,6 +584,26 @@ export async function getCommissionTrendData(): Promise<CommissionTrendData> {
       }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+// ── Coaching income (Optimum Fit) ─────────────────────────────────────────────
+
+/** Read the singleton coaching-income rates, seeding spec defaults on first use. */
+export const getTeachingConfig = cache(async (): Promise<TeachingConfig> => {
+  const db = await getDb();
+  const rows = await db.select().from(teachingConfig).where(eq(teachingConfig.id, 1)).limit(1);
+  if (rows[0]) return { ...defaultTeachingConfig(), ...rows[0].data };
+  const data = defaultTeachingConfig();
+  await db.insert(teachingConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+});
+
+export async function saveTeachingConfig(data: TeachingConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(teachingConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: teachingConfig.id, set: { data, updatedAt: new Date() } });
 }
 
 // ── Allowance ────────────────────────────────────────────────────────────────

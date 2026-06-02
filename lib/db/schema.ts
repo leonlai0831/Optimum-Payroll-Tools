@@ -19,6 +19,7 @@ import type {
 } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
+import type { TeachingConfig } from "@/lib/teaching/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
   AllowanceConfig,
@@ -134,6 +135,13 @@ export const commissionRuns = pgTable("commission_runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Singleton Optimum Fit coaching-income rates (one row, id = 1). */
+export const teachingConfig = pgTable("teaching_config", {
+  id: integer("id").primaryKey().default(1),
+  data: jsonb("data").$type<TeachingConfig>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** Singleton appraisal configuration (one row, id = 1). */
 export const performanceConfig = pgTable("performance_config", {
   id: integer("id").primaryKey().default(1),
@@ -211,3 +219,4 @@ export type AllowanceConfigRecord = typeof allowanceConfig.$inferSelect;
 export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
 export type CommissionConfigRecord = typeof commissionConfig.$inferSelect;
 export type CommissionRunRecord = typeof commissionRuns.$inferSelect;
+export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;
