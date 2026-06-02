@@ -7,10 +7,19 @@ import { LogOut, UserCog } from "lucide-react";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
 import type { Brand } from "@/components/brand-shell";
 
-/** Per-brand logo in the top nav. Both render side by side, in full color. */
-const BRANDS: Record<Brand, { src: string; alt: string; width: number; height: number }> = {
-  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350 },
-  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1600, height: 355 },
+/**
+ * Per-brand logo in the top nav. Both render side by side, in full color.
+ * `h`/`hSm` are display heights (desktop/mobile). The Swim logo carries ~18%
+ * built-in vertical padding (its ink fills ~64% of the box); the Fit logo has
+ * none (ink fills 100%). Rendering Fit a notch shorter equalizes their optical
+ * height so the lockup looks balanced.
+ */
+const BRANDS: Record<
+  Brand,
+  { src: string; alt: string; width: number; height: number; h: string; hSm: string }
+> = {
+  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350, h: "h-9", hSm: "h-7" },
+  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1600, height: 355, h: "h-6", hSm: "h-5" },
 };
 
 export function Nav({ email, role, brand = "swim" }: { email: string; role: Role; brand?: Brand }) {
@@ -34,7 +43,7 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
             width={b.width}
             height={b.height}
             priority
-            className="h-7 w-auto sm:hidden"
+            className={`${b.hSm} w-auto sm:hidden`}
           />
           {/* Desktop: show both brand logos side by side, in full color. */}
           <div className="hidden items-center gap-3 sm:flex">
@@ -50,7 +59,7 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
                     height={x.height}
                     priority
                     title={x.alt}
-                    className="h-9 w-auto"
+                    className={`${x.h} w-auto`}
                   />
                 </div>
               );
