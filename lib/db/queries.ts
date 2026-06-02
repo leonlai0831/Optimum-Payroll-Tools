@@ -12,6 +12,7 @@ import {
   commissionConfig,
   commissionRuns,
   teachingConfig,
+  teachingRuns,
   gymStaff,
   config,
   notes,
@@ -26,6 +27,7 @@ import {
   type CoachRecord,
   type CommissionRunRecord,
   type GymStaffRecord,
+  type TeachingRunRecord,
   type NoteRecord,
   type RunRecord,
   type UserRecord,
@@ -54,7 +56,7 @@ import type { KnownCoach } from "@/lib/kpi/merge";
 import { defaultCommissionConfig } from "@/lib/commission/defaults";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
-import type { TeachingConfig } from "@/lib/teaching/types";
+import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymStaffInput } from "@/lib/gym/types";
 import type { RunCoach } from "@/lib/types";
 import {
@@ -607,6 +609,121 @@ export async function saveTeachingConfig(data: TeachingConfig): Promise<void> {
     .insert(teachingConfig)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: teachingConfig.id, set: { data, updatedAt: new Date() } });
+}
+
+// Saved coaching-income months (mirror of commission runs).
+
+export interface TeachingRunSummary {
+  id: number;
+  periodLabel: string;
+  filename: string;
+  createdAt: Date;
+  coachCount: number;
+  ptIncome: number;
+  groupIncome: number;
+  totalIncome: number;
+}
+
+export async function listTeachingRuns(): Promise<TeachingRunSummary[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: teachingRuns.id,
+      periodLabel: teachingRuns.periodLabel,
+      filename: teachingRuns.filename,
+      createdAt: teachingRuns.createdAt,
+      summary: teachingRuns.summary,
+    })
+    .from(teachingRuns)
+    .orderBy(desc(teachingRuns.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    periodLabel: r.periodLabel,
+    filename: r.filename,
+    createdAt: r.createdAt,
+    coachCount: r.summary.coaches.length,
+    ptIncome: r.summary.totals.ptIncome,
+    groupIncome: r.summary.totals.groupIncome,
+    totalIncome: r.summary.totals.totalIncome,
+  }));
+}
+
+export async function getTeachingRun(id: number): Promise<TeachingRunRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(teachingRuns).where(eq(teachingRuns.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createTeachingRun(input: {
+  periodLabel: string;
+  filename: string;
+  sessionRows: TeachingRow[];
+  configSnapshot: TeachingConfig;
+  summary: TeachingSummary;
+}): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(teachingRuns)
+    .values({
+      periodLabel: input.periodLabel,
+      filename: input.filename,
+      sessionRows: input.sessionRows,
+      configSnapshot: input.configSnapshot,
+      summary: input.summary,
+    })
+    .returning({ id: teachingRuns.id });
+  return row.id;
+}
+
+export async function deleteTeachingRun(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(teachingRuns).where(eq(teachingRuns.id, id));
+}
+
+export interface TeachingTrendData {
+  periods: string[];
+  totals: { period: string; totalIncome: number; ptIncome: number; groupIncome: number }[];
+  coaches: { name: string; points: { period: string; income: number }[] }[];
+}
+
+/** Company totals + per-coach income across saved coaching months, for Trends. */
+export async function getTeachingTrendData(): Promise<TeachingTrendData> {
+  const db = await getDb();
+  const rows = await db
+    .select({ periodLabel: teachingRuns.periodLabel, summary: teachingRuns.summary })
+    .from(teachingRuns)
+    .orderBy(teachingRuns.createdAt);
+
+  const periods: string[] = [];
+  const totalByPeriod = new Map<string, TeachingTrendData["totals"][number]>();
+  const coachByName = new Map<string, Map<string, number>>();
+
+  // Ordered asc by createdAt, so a later save of the same period label wins.
+  for (const r of rows) {
+    if (!periods.includes(r.periodLabel)) periods.push(r.periodLabel);
+    totalByPeriod.set(r.periodLabel, {
+      period: r.periodLabel,
+      totalIncome: r.summary.totals.totalIncome,
+      ptIncome: r.summary.totals.ptIncome,
+      groupIncome: r.summary.totals.groupIncome,
+    });
+    for (const c of r.summary.coaches) {
+      const m = coachByName.get(c.staffName) ?? new Map<string, number>();
+      m.set(r.periodLabel, c.totalIncome);
+      coachByName.set(c.staffName, m);
+    }
+  }
+
+  return {
+    periods,
+    totals: periods.map((p) => totalByPeriod.get(p)!),
+    coaches: [...coachByName.entries()]
+      .map(([name, m]) => ({
+        name,
+        points: [...m.entries()].map(([period, income]) => ({ period, income })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
 }
 
 // ── Gym staff roster (Optimum Fit) ────────────────────────────────────────────

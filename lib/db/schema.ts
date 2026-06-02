@@ -19,7 +19,7 @@ import type {
 } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
-import type { TeachingConfig } from "@/lib/teaching/types";
+import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymEmploymentType, GymPosition } from "@/lib/gym/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
@@ -144,6 +144,22 @@ export const teachingConfig = pgTable("teaching_config", {
 });
 
 /**
+ * A saved Optimum Fit coaching-income month. Mirrors `commissionRuns`:
+ * `sessionRows` is the parsed class-attendees data (so History/Excel re-render
+ * without the source file); `summary` is the computed per-coach result;
+ * `configSnapshot` makes the month reproducible after later rate edits.
+ */
+export const teachingRuns = pgTable("teaching_runs", {
+  id: serial("id").primaryKey(),
+  periodLabel: text("period_label").notNull(),
+  filename: text("filename").default("").notNull(),
+  sessionRows: jsonb("session_rows").$type<TeachingRow[]>().notNull(),
+  configSnapshot: jsonb("config_snapshot").$type<TeachingConfig>().notNull(),
+  summary: jsonb("summary").$type<TeachingSummary>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
  * Optimum Fit gym-staff roster: position (sales consultant / personal trainer /
  * front desk) + employment type (incl. freelancer). Separate from swim `coaches`.
  * `staffCode` links to commission data; `aliases` help match coaching exports.
@@ -240,4 +256,5 @@ export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
 export type CommissionConfigRecord = typeof commissionConfig.$inferSelect;
 export type CommissionRunRecord = typeof commissionRuns.$inferSelect;
 export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;
+export type TeachingRunRecord = typeof teachingRuns.$inferSelect;
 export type GymStaffRecord = typeof gymStaff.$inferSelect;
