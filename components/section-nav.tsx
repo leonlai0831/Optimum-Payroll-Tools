@@ -87,7 +87,6 @@ const NAVS: Record<"allowance" | "kpi" | "staff" | "commission", SectionConfig> 
     title: "Staff Commission",
     items: [
       { href: "/commission", label: "Calculator", icon: Calculator, exact: true },
-      { href: "/commission/bulk", label: "Bulk entry", icon: Layers },
       { href: "/commission/history", label: "History", icon: History },
       { href: "/commission/trends", label: "Trends", icon: BarChart3 },
       { href: "/commission/settings", label: "Settings", icon: SlidersHorizontal },

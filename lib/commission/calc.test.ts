@@ -145,3 +145,16 @@ describe("computeCommission (end-to-end)", () => {
     expect(sum.totals.commission).toBe(0);
   });
 });
+
+describe("commission rounds UP to whole ringgit (no decimals)", () => {
+  it("ceils a fractional per-staff commission and the total", () => {
+    const rows = [
+      row({ sales_type: "Subscription", staff_code: "X", staff_name: "Y", subtotal_amount: 174.07 }),
+    ];
+    const res = perStaffCommission(rows, 0.08); // 174.07 * 0.08 = 13.9256
+    expect(res.staff[0].totalBase).toBeCloseTo(174.07, 2);
+    expect(res.staff[0].commission).toBe(14);
+    expect(res.totals.commission).toBe(14);
+    expect(Number.isInteger(res.staff[0].commission)).toBe(true);
+  });
+});

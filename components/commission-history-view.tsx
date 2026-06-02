@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Download, Eye, Trash2 } from "lucide-react";
 import { Card, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
-import { rm2 } from "@/lib/utils";
+import { rm } from "@/lib/utils";
 import type { CommissionRunSummary } from "@/lib/db/queries";
 
 export function CommissionHistoryView({ runs }: { runs: CommissionRunSummary[] }) {
@@ -63,7 +63,7 @@ export function CommissionHistoryView({ runs }: { runs: CommissionRunSummary[] }
               <td className="px-3 py-2 text-right text-gray-600">{r.qualifying}</td>
               <td className="px-3 py-2 text-right text-gray-600">{(r.rate * 100).toFixed(0)}%</td>
               <td className="px-3 py-2 text-right text-gray-600">{r.staffCount}</td>
-              <td className="px-3 py-2 text-right font-bold text-green-700">{rm2(r.totalCommission)}</td>
+              <td className="px-3 py-2 text-right font-bold text-green-700">{rm(r.totalCommission)}</td>
               <td className="px-3 py-2">
                 <div className="flex items-center justify-end gap-1">
                   <Link href={`/commission/history/${r.id}`} title="View" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-brand">

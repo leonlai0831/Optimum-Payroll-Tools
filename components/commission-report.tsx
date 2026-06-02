@@ -1,6 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui";
-import { cn, rm2 } from "@/lib/utils";
+import { cn, rm, rm2 } from "@/lib/utils";
 import type { CommissionSummary } from "@/lib/commission/types";
 
 type Tone = "brand" | "green" | "warn" | "muted";
@@ -51,7 +51,7 @@ export function CommissionReport({
           sub={summary.belowMin ? "below minimum band" : monthLabel}
           tone={summary.belowMin ? "warn" : "brand"}
         />
-        <Stat label="Total commission" value={rm2(summary.totals.commission)} sub={`${summary.staff.length} staff`} tone="green" />
+        <Stat label="Total commission" value={rm(summary.totals.commission)} sub={`${summary.staff.length} staff`} tone="green" />
         <Stat
           label="Unattributed (no code)"
           value={rm2(summary.unattributedBase)}
@@ -104,7 +104,7 @@ export function CommissionReport({
                 <td className="px-3 py-2 text-right text-gray-600">{rm2(s.packageBase)}</td>
                 <td className="px-3 py-2 text-right text-gray-600">{rm2(s.registrationBase)}</td>
                 <td className="px-3 py-2 text-right font-medium text-gray-900">{rm2(s.totalBase)}</td>
-                <td className="px-3 py-2 text-right font-bold text-green-700">{rm2(s.commission)}</td>
+                <td className="px-3 py-2 text-right font-bold text-green-700">{rm(s.commission)}</td>
               </tr>
             ))}
             {summary.staff.length === 0 && (
@@ -125,7 +125,7 @@ export function CommissionReport({
               <td className="px-3 py-2 text-right">{rm2(summary.totals.packageBase)}</td>
               <td className="px-3 py-2 text-right">{rm2(summary.totals.registrationBase)}</td>
               <td className="px-3 py-2 text-right">{rm2(summary.totals.totalBase)}</td>
-              <td className="px-3 py-2 text-right text-green-700">{rm2(summary.totals.commission)}</td>
+              <td className="px-3 py-2 text-right text-green-700">{rm(summary.totals.commission)}</td>
             </tr>
             <tr className="text-xs text-gray-500">
               <td className="px-3 py-1.5" colSpan={6}>

@@ -536,6 +536,53 @@ export async function deleteCommissionRun(id: number): Promise<void> {
   await db.delete(commissionRuns).where(eq(commissionRuns.id, id));
 }
 
+export interface CommissionTrendData {
+  periods: string[];
+  totals: { period: string; commission: number; rate: number; qualifying: number }[];
+  staff: { name: string; points: { period: string; commission: number }[] }[];
+}
+
+/** Company totals + per-staff commission across saved months, for the Trends page. */
+export async function getCommissionTrendData(): Promise<CommissionTrendData> {
+  const db = await getDb();
+  const rows = await db
+    .select({ periodLabel: commissionRuns.periodLabel, summary: commissionRuns.summary })
+    .from(commissionRuns)
+    .orderBy(commissionRuns.createdAt);
+
+  const periods: string[] = [];
+  const totalByPeriod = new Map<string, CommissionTrendData["totals"][number]>();
+  const staffByName = new Map<string, Map<string, number>>();
+
+  // Ordered asc by createdAt, so a later save of the same period label wins.
+  for (const r of rows) {
+    if (!periods.includes(r.periodLabel)) periods.push(r.periodLabel);
+    totalByPeriod.set(r.periodLabel, {
+      period: r.periodLabel,
+      commission: r.summary.totals.commission,
+      rate: r.summary.rate,
+      qualifying: r.summary.registrations.qualifying,
+    });
+    for (const s of r.summary.staff) {
+      const name = s.staffName || s.staffCode;
+      const m = staffByName.get(name) ?? new Map<string, number>();
+      m.set(r.periodLabel, s.commission);
+      staffByName.set(name, m);
+    }
+  }
+
+  return {
+    periods,
+    totals: periods.map((p) => totalByPeriod.get(p)!),
+    staff: [...staffByName.entries()]
+      .map(([name, m]) => ({
+        name,
+        points: [...m.entries()].map(([period, commission]) => ({ period, commission })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
 // ── Allowance ────────────────────────────────────────────────────────────────
 
 /** Read the singleton allowance rate tables, seeding defaults on first use. */

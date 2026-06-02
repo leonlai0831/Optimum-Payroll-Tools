@@ -23,6 +23,11 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/** Commission is paid in whole ringgit, rounded UP (favouring staff). */
+function roundUpRinggit(n: number): number {
+  return Math.ceil(n - 1e-9);
+}
+
 type IdentityKeys = { phones: Set<string>; names: Set<string>; emails: Set<string> };
 
 /** Identity keys a member could be matched on, gathered from subscription+package rows. */
@@ -153,7 +158,7 @@ export function perStaffCommission(
       packageBase: round2(pkg),
       registrationBase: round2(reg),
       totalBase: round2(totalBase),
-      commission: round2(totalBase * rate),
+      commission: roundUpRinggit(totalBase * rate),
     });
   }
 
@@ -165,7 +170,8 @@ export function perStaffCommission(
     packageBase: round2(staff.reduce((s, x) => s + x.packageBase, 0)),
     registrationBase: round2(staff.reduce((s, x) => s + x.registrationBase, 0)),
     totalBase: round2(staff.reduce((s, x) => s + x.totalBase, 0)),
-    commission: round2(staff.reduce((s, x) => s + x.commission, 0)),
+    // Per-staff commissions are already whole ringgit; the column sum stays exact.
+    commission: staff.reduce((s, x) => s + x.commission, 0),
   };
 
   return { staff, totals, allSalesPreSst: round2(allSalesPreSst), unattributedBase: round2(unattributedBase) };

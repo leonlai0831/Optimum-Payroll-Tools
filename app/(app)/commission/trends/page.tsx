@@ -1,12 +1,13 @@
-import { BarChart3 } from "lucide-react";
-import { SectionPlaceholder } from "@/components/section-placeholder";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/session";
+import { getCommissionTrendData } from "@/lib/db/queries";
+import { CommissionTrendsView } from "@/components/commission-trends-view";
 
-export default function CommissionTrendsPage() {
-  return (
-    <SectionPlaceholder
-      icon={BarChart3}
-      title="Trends"
-      description="Month-over-month commission totals per staff member and per gym, once a few months are saved."
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function CommissionTrendsPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const data = await getCommissionTrendData();
+  return <CommissionTrendsView data={data} />;
 }

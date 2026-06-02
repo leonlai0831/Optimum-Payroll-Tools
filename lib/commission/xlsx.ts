@@ -11,6 +11,7 @@ const ARIAL_BOLD = { name: "Arial", bold: true } as const;
 const HEADER_FONT = { name: "Arial", bold: true, color: { argb: WHITE } } as const;
 const HEADER_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
 const MONEY = "#,##0.00";
+const INT = "#,##0"; // commission is whole ringgit (rounded up)
 
 /** Unified Tab-1 columns, in order. `id` columns render as TEXT (exact digits). */
 const TAB1_COLUMNS: { key: keyof CommissionRow; header: string; kind: "text" | "num" | "id"; width: number }[] = [
@@ -367,11 +368,12 @@ export async function buildReportWorkbook(opts: {
       result: s.registrationBase,
     };
     t2.getCell(r, 7).value = { formula: `SUMIFS(${range("K")},${range("H")},$A${r})`, result: s.totalBase };
-    t2.getCell(r, 8).value = { formula: `G${r}*$B$7`, result: s.commission };
+    t2.getCell(r, 8).value = { formula: `ROUNDUP(G${r}*$B$7,0)`, result: s.commission };
     for (let c = 1; c <= 8; c++) {
       const cell = t2.getCell(r, c);
       cell.font = ARIAL;
-      if (c >= 4) cell.numFmt = MONEY;
+      if (c >= 4 && c <= 7) cell.numFmt = MONEY;
+      if (c === 8) cell.numFmt = INT;
     }
     r++;
   }
@@ -396,7 +398,8 @@ export async function buildReportWorkbook(opts: {
         ? { formula: `SUM(${L}${firstStaffRow}:${L}${lastStaffRow})`, result: totalsByCol[c] }
         : 0;
     cell.font = ARIAL_BOLD;
-    if (c >= 4) cell.numFmt = MONEY;
+    if (c >= 4 && c <= 7) cell.numFmt = MONEY;
+    if (c === 8) cell.numFmt = INT;
   }
   r += 2;
 
