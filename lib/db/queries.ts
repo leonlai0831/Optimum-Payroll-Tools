@@ -9,6 +9,9 @@ import {
   appraisals,
   auditLog,
   coaches,
+  commissionConfig,
+  commissionRuns,
+  teachingConfig,
   config,
   notes,
   performanceConfig,
@@ -20,6 +23,7 @@ import {
   type AppraisalRecord,
   type AuditLogRecord,
   type CoachRecord,
+  type CommissionRunRecord,
   type NoteRecord,
   type RunRecord,
   type UserRecord,
@@ -45,6 +49,10 @@ import { DEFAULT_CLASSIFY_CONFIG } from "@/lib/kpi/classify";
 import { DEFAULT_ALLOWANCE_CONFIG } from "@/lib/allowance/defaults";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
+import { defaultCommissionConfig } from "@/lib/commission/defaults";
+import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
+import { defaultTeachingConfig } from "@/lib/teaching/defaults";
+import type { TeachingConfig } from "@/lib/teaching/types";
 import type { RunCoach } from "@/lib/types";
 import {
   CENTERS,
@@ -438,6 +446,164 @@ export async function updateRunReview(
 export async function deleteRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(runs).where(eq(runs.id, id));
+}
+
+// ── Commission (Optimum Fit) ──────────────────────────────────────────────────
+
+/** Read the singleton commission rate bands, seeding spec defaults on first use. */
+export const getCommissionConfig = cache(async (): Promise<CommissionConfig> => {
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(commissionConfig)
+    .where(eq(commissionConfig.id, 1))
+    .limit(1);
+  if (rows[0]) return { ...defaultCommissionConfig(), ...rows[0].data };
+  const data = defaultCommissionConfig();
+  await db.insert(commissionConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+});
+
+export async function saveCommissionConfig(data: CommissionConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(commissionConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: commissionConfig.id, set: { data, updatedAt: new Date() } });
+}
+
+export interface CommissionRunSummary {
+  id: number;
+  periodLabel: string;
+  filename: string;
+  createdAt: Date;
+  rate: number;
+  staffCount: number;
+  totalCommission: number;
+  qualifying: number;
+}
+
+export async function listCommissionRuns(): Promise<CommissionRunSummary[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: commissionRuns.id,
+      periodLabel: commissionRuns.periodLabel,
+      filename: commissionRuns.filename,
+      createdAt: commissionRuns.createdAt,
+      summary: commissionRuns.summary,
+    })
+    .from(commissionRuns)
+    .orderBy(desc(commissionRuns.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    periodLabel: r.periodLabel,
+    filename: r.filename,
+    createdAt: r.createdAt,
+    rate: r.summary.rate,
+    staffCount: r.summary.staff.length,
+    totalCommission: r.summary.totals.commission,
+    qualifying: r.summary.registrations.qualifying,
+  }));
+}
+
+export async function getCommissionRun(id: number): Promise<CommissionRunRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(commissionRuns).where(eq(commissionRuns.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createCommissionRun(input: {
+  periodLabel: string;
+  filename: string;
+  salesRows: CommissionRow[];
+  configSnapshot: CommissionConfig;
+  summary: CommissionSummary;
+}): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(commissionRuns)
+    .values({
+      periodLabel: input.periodLabel,
+      filename: input.filename,
+      salesRows: input.salesRows,
+      configSnapshot: input.configSnapshot,
+      summary: input.summary,
+    })
+    .returning({ id: commissionRuns.id });
+  return row.id;
+}
+
+export async function deleteCommissionRun(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(commissionRuns).where(eq(commissionRuns.id, id));
+}
+
+export interface CommissionTrendData {
+  periods: string[];
+  totals: { period: string; commission: number; rate: number; qualifying: number }[];
+  staff: { name: string; points: { period: string; commission: number }[] }[];
+}
+
+/** Company totals + per-staff commission across saved months, for the Trends page. */
+export async function getCommissionTrendData(): Promise<CommissionTrendData> {
+  const db = await getDb();
+  const rows = await db
+    .select({ periodLabel: commissionRuns.periodLabel, summary: commissionRuns.summary })
+    .from(commissionRuns)
+    .orderBy(commissionRuns.createdAt);
+
+  const periods: string[] = [];
+  const totalByPeriod = new Map<string, CommissionTrendData["totals"][number]>();
+  const staffByName = new Map<string, Map<string, number>>();
+
+  // Ordered asc by createdAt, so a later save of the same period label wins.
+  for (const r of rows) {
+    if (!periods.includes(r.periodLabel)) periods.push(r.periodLabel);
+    totalByPeriod.set(r.periodLabel, {
+      period: r.periodLabel,
+      commission: r.summary.totals.commission,
+      rate: r.summary.rate,
+      qualifying: r.summary.registrations.qualifying,
+    });
+    for (const s of r.summary.staff) {
+      const name = s.staffName || s.staffCode;
+      const m = staffByName.get(name) ?? new Map<string, number>();
+      m.set(r.periodLabel, s.commission);
+      staffByName.set(name, m);
+    }
+  }
+
+  return {
+    periods,
+    totals: periods.map((p) => totalByPeriod.get(p)!),
+    staff: [...staffByName.entries()]
+      .map(([name, m]) => ({
+        name,
+        points: [...m.entries()].map(([period, commission]) => ({ period, commission })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
+// ── Coaching income (Optimum Fit) ─────────────────────────────────────────────
+
+/** Read the singleton coaching-income rates, seeding spec defaults on first use. */
+export const getTeachingConfig = cache(async (): Promise<TeachingConfig> => {
+  const db = await getDb();
+  const rows = await db.select().from(teachingConfig).where(eq(teachingConfig.id, 1)).limit(1);
+  if (rows[0]) return { ...defaultTeachingConfig(), ...rows[0].data };
+  const data = defaultTeachingConfig();
+  await db.insert(teachingConfig).values({ id: 1, data }).onConflictDoNothing();
+  return data;
+});
+
+export async function saveTeachingConfig(data: TeachingConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(teachingConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: teachingConfig.id, set: { data, updatedAt: new Date() } });
 }
 
 // ── Allowance ────────────────────────────────────────────────────────────────
