@@ -1,10 +1,19 @@
 import Link from "next/link";
-import { ShieldCheck, Trophy, UserCircle, Users, Wallet, type LucideIcon } from "lucide-react";
+import {
+  Dumbbell,
+  ShieldCheck,
+  Trophy,
+  UserCircle,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import type { Capability } from "@/lib/auth/types";
+import type { Brand } from "@/components/brand-shell";
 
 type Tool = {
   href?: string;
@@ -13,6 +22,8 @@ type Tool = {
   icon: LucideIcon;
   disabled?: boolean;
   cap?: Capability;
+  /** Which brand this tool belongs to on the launcher. Defaults to swim. */
+  brand?: Brand;
 };
 
 const TOOLS: Tool[] = [
@@ -44,7 +55,55 @@ const TOOLS: Tool[] = [
     disabled: true,
     cap: "run_kpi",
   },
+  {
+    href: "/commission",
+    title: "Staff Commission",
+    subtitle: "Gym staff commission · membership, PT & products",
+    icon: Dumbbell,
+    cap: "run_commission",
+    brand: "fit",
+  },
 ];
+
+/** Launcher groups, in display order. */
+const BRAND_GROUPS: { brand: Brand; label: string }[] = [
+  { brand: "swim", label: "Optimum Swim School" },
+  { brand: "fit", label: "Optimum Fit" },
+];
+
+function ToolCard({ tool }: { tool: Tool }) {
+  const Icon = tool.icon;
+  const disabled = tool.disabled || !tool.href;
+  const body = (
+    <Card
+      className={cn(
+        "h-full p-5",
+        disabled ? "opacity-60" : "transition hover:border-brand hover:shadow-md",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-11 w-11 items-center justify-center rounded-lg",
+          disabled ? "bg-gray-100 text-gray-400" : "bg-brand-light text-brand",
+        )}
+      >
+        <Icon className="h-6 w-6" />
+      </div>
+      <div className="mt-3 text-base font-bold text-gray-900">{tool.title}</div>
+      <p className="mt-1 text-sm text-gray-500">{tool.subtitle}</p>
+    </Card>
+  );
+
+  return disabled ? (
+    <div aria-disabled className="cursor-not-allowed">
+      {body}
+    </div>
+  ) : (
+    <Link href={tool.href!} className="block">
+      {body}
+    </Link>
+  );
+}
 
 export const dynamic = "force-dynamic";
 
@@ -73,41 +132,21 @@ export default async function HubPage() {
           No tools are available for your role yet.
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tools.map((tool) => {
-            const Icon = tool.icon;
-            const disabled = tool.disabled || !tool.href;
-            const body = (
-              <Card
-                className={cn(
-                  "h-full p-5",
-                  disabled ? "opacity-60" : "transition hover:border-brand hover:shadow-md",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-11 w-11 items-center justify-center rounded-lg",
-                    disabled ? "bg-gray-100 text-gray-400" : "bg-brand-light text-brand",
-                  )}
-                >
-                  <Icon className="h-6 w-6" />
-                </div>
-                <div className="mt-3 text-base font-bold text-gray-900">{tool.title}</div>
-                <p className="mt-1 text-sm text-gray-500">{tool.subtitle}</p>
-              </Card>
-            );
-
-            return disabled ? (
-              <div key={tool.title} aria-disabled className="cursor-not-allowed">
-                {body}
+        BRAND_GROUPS.map(({ brand, label }) => {
+          const group = tools.filter((t) => (t.brand ?? "swim") === brand);
+          if (group.length === 0) return null;
+          return (
+            // data-brand re-skins this group's cards (the Fit group renders black/yellow).
+            <section key={brand} data-brand={brand} className="space-y-3">
+              <h2 className="text-overline text-gray-400">{label}</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {group.map((tool) => (
+                  <ToolCard key={tool.title} tool={tool} />
+                ))}
               </div>
-            ) : (
-              <Link key={tool.title} href={tool.href!} className="block">
-                {body}
-              </Link>
-            );
-          })}
-        </div>
+            </section>
+          );
+        })
       )}
     </div>
   );

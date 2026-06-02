@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { History, Lock, LockOpen, Search } from "lucide-react";
+import { ArrowLeftRight, History, Lock, LockOpen, Search } from "lucide-react";
 import { Button, Card, Input, Select, Spinner } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
-import { ConfirmModal } from "@/components/modal";
+import { ConfirmModal, Modal } from "@/components/modal";
 import { AllowanceExportButton } from "@/components/allowance-export-button";
+import { previousPeriod } from "@/lib/allowance/period";
 import {
   SortTh,
   TableToolbar,
@@ -72,6 +73,90 @@ function LockButton({ period, locked }: { period: string; locked: boolean }) {
         confirmLabel={locked ? "Unlock" : "Lock month"}
         busy={busy}
       />
+    </>
+  );
+}
+
+/** Relabel a whole month — move every entry in `period` to another month. */
+function ChangeMonthButton({ period }: { period: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState(() => previousPeriod(period));
+  const [busy, setBusy] = useState(false);
+
+  async function apply() {
+    if (!to || to === period) {
+      toast.error("Pick a different target month.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/allowance/period/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: period, to }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; moved?: number };
+      // A clash blocks the whole move; the server sends a 409 with the names.
+      if (!res.ok) throw new Error(data.error || "Failed");
+      const moved = data.moved ?? 0;
+      toast.success(`Moved ${moved} ${moved === 1 ? "entry" : "entries"} from ${period} to ${to}.`);
+      setOpen(false);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="px-2.5 py-1 text-xs"
+        onClick={() => {
+          setTo(previousPeriod(period));
+          setOpen(true);
+        }}
+        title={`Move all of ${period} to another month`}
+      >
+        <ArrowLeftRight className="h-3.5 w-3.5" /> Change month
+      </Button>
+      <Modal
+        open={open}
+        onClose={busy ? () => {} : () => setOpen(false)}
+        title={`Change month — ${period}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button onClick={apply} disabled={busy || !to || to === period}>
+              {busy && <Spinner />} Move to {to || "…"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Move every entry in <span className="font-semibold">{period}</span> to the month below.
+            If anyone already has an entry in the target month, the move is blocked and they&rsquo;re
+            listed — nothing is overwritten.
+          </p>
+          <label className="block text-sm font-medium text-gray-700">
+            Move to month
+            <Input
+              type="month"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="mt-1"
+            />
+          </label>
+        </div>
+      </Modal>
     </>
   );
 }
@@ -214,6 +299,7 @@ export function AllowanceHistoryView({
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {canLock && !locked && <ChangeMonthButton period={period} />}
                   {canLock && <LockButton period={period} locked={locked} />}
                   <AllowanceExportButton period={period} rows={list} />
                 </div>

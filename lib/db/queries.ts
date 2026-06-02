@@ -54,6 +54,7 @@ import {
   type AllowanceTier,
   type OtherAllowanceItem,
 } from "@/lib/allowance/types";
+import { previousPeriod } from "@/lib/allowance/period";
 
 export function defaultConfig(): AppConfig {
   return {
@@ -728,6 +729,103 @@ export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | 
 export async function deleteAllowanceRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(allowanceRuns).where(eq(allowanceRuns.id, id));
+}
+
+// ── Sequential-month guard + month relabel ──────────────────────────────────────
+
+/** How many allowance rows are filed under `period`. */
+export async function countAllowanceRunsForPeriod(period: string): Promise<number> {
+  const db = await getDb();
+  const rows = await db
+    .select({ id: allowanceRuns.id })
+    .from(allowanceRuns)
+    .where(eq(allowanceRuns.periodLabel, period));
+  return rows.length;
+}
+
+/** True when any allowance row exists at all (used to exempt the very first month). */
+export async function hasAnyAllowanceRuns(): Promise<boolean> {
+  const db = await getDb();
+  const rows = await db.select({ id: allowanceRuns.id }).from(allowanceRuns).limit(1);
+  return rows.length > 0;
+}
+
+/** Distinct months that already have at least one allowance entry. */
+export async function listAllowancePeriods(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.select({ periodLabel: allowanceRuns.periodLabel }).from(allowanceRuns);
+  return [...new Set(rows.map((r) => r.periodLabel))];
+}
+
+/**
+ * Sequential-month guard ("防呆"): a brand-new month may only be keyed once the
+ * previous calendar month already has at least one entry — so you can't key June
+ * before May. Two carve-outs keep it from getting in the way:
+ *   • a month that already has entries is always open (editing/adding is fine), and
+ *   • the very first month on an empty database is allowed (you must start somewhere).
+ * Back-filling a gap still works, because the gap's previous month exists.
+ * Returns the previous period so callers can build a clear message. This is the
+ * gate for *keying* (creating) entries only — the month-relabel tools below are a
+ * deliberate escape hatch and are not constrained by it.
+ */
+export async function checkAllowancePeriodAllowed(
+  period: string,
+): Promise<{ allowed: boolean; previousPeriod: string }> {
+  const prev = previousPeriod(period);
+  if ((await countAllowanceRunsForPeriod(period)) > 0) return { allowed: true, previousPeriod: prev };
+  if ((await countAllowanceRunsForPeriod(prev)) > 0) return { allowed: true, previousPeriod: prev };
+  if (!(await hasAnyAllowanceRuns())) return { allowed: true, previousPeriod: prev };
+  return { allowed: false, previousPeriod: prev };
+}
+
+/** Canonical names present in BOTH periods — i.e. who would clash on a move. */
+export async function getAllowancePeriodClashes(from: string, to: string): Promise<string[]> {
+  const db = await getDb();
+  const [fromRows, toRows] = await Promise.all([
+    db.select({ name: allowanceRuns.canonicalName }).from(allowanceRuns).where(eq(allowanceRuns.periodLabel, from)),
+    db.select({ name: allowanceRuns.canonicalName }).from(allowanceRuns).where(eq(allowanceRuns.periodLabel, to)),
+  ]);
+  const toNames = new Set(toRows.map((r) => r.name));
+  return [...new Set(fromRows.map((r) => r.name).filter((n) => toNames.has(n)))];
+}
+
+/**
+ * Re-label a whole month: move every entry from `from` to `to` — but only if NO
+ * staff member already has an entry in `to`. If any would clash, the whole move is
+ * blocked (nothing changes) and the clashing names are returned so the caller can
+ * report them. This is the "block & report" rule: never overwrite, never do a
+ * partial move.
+ */
+export async function moveAllowancePeriod(
+  from: string,
+  to: string,
+): Promise<{ moved: number; clashes: string[] }> {
+  const clashes = await getAllowancePeriodClashes(from, to);
+  if (clashes.length > 0) return { moved: 0, clashes };
+  const db = await getDb();
+  const moved = await countAllowanceRunsForPeriod(from);
+  await db.update(allowanceRuns).set({ periodLabel: to }).where(eq(allowanceRuns.periodLabel, from));
+  return { moved, clashes: [] };
+}
+
+/**
+ * Change one entry's month. Refuses (returns `clash`) when that staff member
+ * already has an entry in the target month, so nothing is overwritten.
+ */
+export async function moveAllowanceRun(
+  id: number,
+  to: string,
+): Promise<{ ok: true; from: string; name: string } | { ok: false; clash: true; name: string }> {
+  const db = await getDb();
+  const run = await getAllowanceRun(id);
+  if (!run) throw new Error(`allowance run ${id} not found`);
+  const existing = await db
+    .select({ id: allowanceRuns.id })
+    .from(allowanceRuns)
+    .where(and(eq(allowanceRuns.periodLabel, to), eq(allowanceRuns.canonicalName, run.canonicalName)));
+  if (existing.some((e) => e.id !== id)) return { ok: false, clash: true, name: run.canonicalName };
+  await db.update(allowanceRuns).set({ periodLabel: to }).where(eq(allowanceRuns.id, id));
+  return { ok: true, from: run.periodLabel, name: run.canonicalName };
 }
 
 // ── Allowance period locks ─────────────────────────────────────────────────────

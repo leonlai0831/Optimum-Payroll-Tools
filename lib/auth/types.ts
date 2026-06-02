@@ -22,6 +22,7 @@ export const CAPABILITIES = [
   "run_kpi",
   "finalize_kpi",
   "run_allowance",
+  "run_commission",
   "view_audit",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
@@ -38,6 +39,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   run_kpi: "Run KPI bonus",
   finalize_kpi: "Finalize KPI bonus (management review)",
   run_allowance: "Run allowance",
+  run_commission: "Run gym staff commission",
   view_audit: "View audit log",
 };
 
@@ -60,6 +62,7 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     // Finalize a KPI month after the management review — admin + super_admin only.
     "finalize_kpi",
     "run_allowance",
+    "run_commission",
     "view_audit",
   ],
   // A team lead / senior coach: oversee and review the team, run the monthly
@@ -73,6 +76,7 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "edit_notes",
     "run_kpi",
     "run_allowance",
+    "run_commission",
   ],
   staff: ["view_own"],
 };

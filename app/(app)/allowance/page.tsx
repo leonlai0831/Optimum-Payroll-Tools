@@ -1,5 +1,11 @@
 import { redirect } from "next/navigation";
-import { getAllowanceConfig, getAllowanceRun, isPeriodLocked, listCoaches } from "@/lib/db/queries";
+import {
+  getAllowanceConfig,
+  getAllowanceRun,
+  isPeriodLocked,
+  listAllowancePeriods,
+  listCoaches,
+} from "@/lib/db/queries";
 import { SectionNav } from "@/components/section-nav";
 import { AllowanceCalculator, type AllowanceEditTarget } from "@/components/allowance-calculator";
 
@@ -12,7 +18,11 @@ export default async function AllowancePage({
 }) {
   const sp = await searchParams;
   const edit = typeof sp.edit === "string" ? sp.edit : undefined;
-  const [config, coaches] = await Promise.all([getAllowanceConfig(), listCoaches()]);
+  const [config, coaches, existingPeriods] = await Promise.all([
+    getAllowanceConfig(),
+    listCoaches(),
+    listAllowancePeriods(),
+  ]);
   const roster = coaches
     .filter((c) => c.active)
     .map((c) => ({
@@ -42,6 +52,7 @@ export default async function AllowancePage({
         config={config}
         coaches={roster}
         initial={initial}
+        existingPeriods={existingPeriods}
       />
     </div>
   );

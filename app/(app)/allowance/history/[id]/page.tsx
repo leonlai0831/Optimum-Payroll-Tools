@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
 import { DeleteAllowanceRunButton } from "@/components/delete-allowance-run-button";
+import { ChangeRunMonthButton } from "@/components/change-run-month-button";
 import { Card } from "@/components/ui";
 import { rm } from "@/lib/utils";
 import type { TeachingHoursRow } from "@/lib/allowance/types";
@@ -24,8 +25,9 @@ export default async function AllowanceRunDetailPage({
   const locked = await isPeriodLocked(run.periodLabel);
   // A locked month is read-only; the Edit affordance disappears.
   const canEdit = !locked && !!user && (await getCapabilities(user)).has("run_allowance");
-  // Edit attribution is visible to admins + super admins only.
+  // Edit attribution + the month-relabel tool are for admins + super admins only.
   const canSeeEditor = user?.role === "admin" || user?.role === "super_admin";
+  const canManage = canSeeEditor;
   const editedBy = canSeeEditor ? (await getAllowanceSavers())[run.id] : undefined;
 
   const { input, result } = run;
@@ -59,6 +61,9 @@ export default async function AllowanceRunDetailPage({
             >
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Link>
+          )}
+          {canManage && !locked && (
+            <ChangeRunMonthButton id={run.id} from={run.periodLabel} name={run.canonicalName} />
           )}
           <DeleteAllowanceRunButton id={run.id} />
         </div>
