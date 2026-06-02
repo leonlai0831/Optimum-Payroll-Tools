@@ -1,12 +1,22 @@
+import { redirect } from "next/navigation";
 import { History } from "lucide-react";
-import { SectionPlaceholder } from "@/components/section-placeholder";
+import { getCurrentUser } from "@/lib/auth/session";
+import { listCommissionRuns } from "@/lib/db/queries";
+import { CommissionHistoryView } from "@/components/commission-history-view";
 
-export default function CommissionHistoryPage() {
+export const dynamic = "force-dynamic";
+
+export default async function CommissionHistoryPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const runs = await listCommissionRuns();
+
   return (
-    <SectionPlaceholder
-      icon={History}
-      title="History"
-      description="Saved monthly commission runs, each reproducible from the rules in effect when it was saved."
-    />
+    <>
+      <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
+        <History className="h-5 w-5 text-brand" /> Saved commission months
+      </h1>
+      <CommissionHistoryView runs={runs} />
+    </>
   );
 }

@@ -18,6 +18,7 @@ import type {
   PerformanceConfig,
 } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
+import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
   AllowanceConfig,
@@ -110,6 +111,29 @@ export const allowanceRuns = pgTable("allowance_runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Singleton Optimum Fit commission rate bands (one row, id = 1). */
+export const commissionConfig = pgTable("commission_config", {
+  id: integer("id").primaryKey().default(1),
+  data: jsonb("data").$type<CommissionConfig>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * A saved Optimum Fit commission month. `salesRows` is the consolidated Tab-1
+ * data (so the workbook can be re-exported and History rendered without the
+ * source files); `summary` is the computed Tab-2 result; `configSnapshot` makes
+ * the month reproducible after later rate-band edits.
+ */
+export const commissionRuns = pgTable("commission_runs", {
+  id: serial("id").primaryKey(),
+  periodLabel: text("period_label").notNull(),
+  filename: text("filename").default("").notNull(),
+  salesRows: jsonb("sales_rows").$type<CommissionRow[]>().notNull(),
+  configSnapshot: jsonb("config_snapshot").$type<CommissionConfig>().notNull(),
+  summary: jsonb("summary").$type<CommissionSummary>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** Singleton appraisal configuration (one row, id = 1). */
 export const performanceConfig = pgTable("performance_config", {
   id: integer("id").primaryKey().default(1),
@@ -185,3 +209,5 @@ export type RunRecord = typeof runs.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;
 export type AllowanceConfigRecord = typeof allowanceConfig.$inferSelect;
 export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
+export type CommissionConfigRecord = typeof commissionConfig.$inferSelect;
+export type CommissionRunRecord = typeof commissionRuns.$inferSelect;
