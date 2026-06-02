@@ -11,6 +11,7 @@ import {
   Layers,
   LayoutDashboard,
   Link2,
+  Receipt,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -89,6 +90,7 @@ const NAVS: Record<"allowance" | "kpi" | "staff" | "commission", SectionConfig> 
     items: [
       { href: "/commission", label: "Commission", icon: Calculator, exact: true },
       { href: "/commission/teaching", label: "Coaching income", icon: Dumbbell },
+      { href: "/commission/income", label: "Income report", icon: Receipt },
       { href: "/commission/history", label: "History", icon: History },
       { href: "/commission/trends", label: "Trends", icon: BarChart3 },
       { href: "/commission/settings", label: "Settings", icon: SlidersHorizontal },
