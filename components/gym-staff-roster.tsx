@@ -1,11 +1,13 @@
 "use client";
 
-import { useImperativeHandle, useState, type Ref } from "react";
+import { useImperativeHandle, useMemo, useState, type Ref } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { Pencil, Plus, Save, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
+import { EmptyState } from "@/components/empty-state";
+import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import {
   GYM_EMPLOYMENT_TYPES,
   GYM_POSITIONS,
@@ -68,6 +70,32 @@ export function GymStaffRoster({
       }
     },
   }), []);
+
+  // Directory search / filter / sort (mirrors the Swim School staff directory).
+  const [q, setQ] = useState("");
+  const [posFilter, setPosFilter] = useState("");
+  const [empFilter, setEmpFilter] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("active");
+
+  const filtered = useMemo(
+    () =>
+      staff.filter((m) => {
+        if (!includesText(m.name, q) && !includesText(m.staffCode, q)) return false;
+        if (posFilter && m.position !== posFilter) return false;
+        if (empFilter && m.employmentType !== empFilter) return false;
+        if (activeFilter === "active" && !m.active) return false;
+        if (activeFilter === "inactive" && m.active) return false;
+        return true;
+      }),
+    [staff, q, posFilter, empFilter, activeFilter],
+  );
+  const { sorted, sort, toggleSort } = useTableSort(filtered, {
+    name: (m) => m.name,
+    staffCode: (m) => m.staffCode,
+    position: (m) => gymPositionLabel(m.position),
+    employmentType: (m) => gymEmploymentLabel(m.employmentType),
+    active: (m) => (m.active ? 1 : 0),
+  });
 
   function startEdit(m: GymStaffRecord) {
     setEditingId(m.id);
@@ -199,65 +227,120 @@ export function GymStaffRoster({
         </Card>
       )}
 
-      <Card className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr className="text-left text-overline text-muted">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Code</th>
-              <th className="px-3 py-2">Position</th>
-              <th className="px-3 py-2">Employment</th>
-              <th className="px-3 py-2">Contact</th>
-              <th className="px-3 py-2">Status</th>
-              {canEdit && <th className="px-3 py-2 text-right">Actions</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {staff.map((m) => (
-              <tr key={m.id} className={m.active ? "" : "opacity-50"}>
-                <td className="px-3 py-2 font-medium">
-                  <Link href={`/commission/staff/${m.id}`} className="text-gray-900 hover:text-brand hover:underline">
-                    {m.name}
-                  </Link>
-                </td>
-                <td className="px-3 py-2 font-mono text-xs text-gray-500">{m.staffCode || "—"}</td>
-                <td className="px-3 py-2 text-gray-700">{gymPositionLabel(m.position)}</td>
-                <td className="px-3 py-2">
-                  <Badge className={m.employmentType === "freelancer" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-600"}>
-                    {gymEmploymentLabel(m.employmentType)}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 text-xs text-gray-500">
-                  {m.email || m.phone ? (
-                    <span>{[m.email, m.phone].filter(Boolean).join(" · ")}</span>
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
+          <Users className="h-4 w-4 text-brand" />
+          <span className="text-sm font-bold text-gray-900">Directory</span>
+          <span className="text-xs text-gray-500">{staff.length} total</span>
+        </div>
+
+        {staff.length === 0 ? (
+          <EmptyState
+            bare
+            icon={Users}
+            title="No gym staff yet"
+            body={canEdit ? "Add the first member above." : undefined}
+          />
+        ) : (
+          <>
+            <TableToolbar>
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search name or code…"
+                className="w-48 py-1.5 text-xs"
+              />
+              <Select value={posFilter} onChange={(e) => setPosFilter(e.target.value)} className="w-auto py-1.5 text-xs">
+                <option value="">All positions</option>
+                {GYM_POSITIONS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </Select>
+              <Select value={empFilter} onChange={(e) => setEmpFilter(e.target.value)} className="w-auto py-1.5 text-xs">
+                <option value="">All types</option>
+                {GYM_EMPLOYMENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </Select>
+              <Select
+                value={activeFilter}
+                onChange={(e) => setActiveFilter(e.target.value as "all" | "active" | "inactive")}
+                className="w-auto py-1.5 text-xs"
+              >
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+                <option value="all">All</option>
+              </Select>
+              <span className="ml-auto text-xs text-gray-500">
+                {sorted.length} of {staff.length}
+              </span>
+            </TableToolbar>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <SortTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Code" sortKey="staffCode" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Position" sortKey="position" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Employment" sortKey="employmentType" sort={sort} onSort={toggleSort} />
+                    <th className="px-4 py-2 text-left">Contact</th>
+                    <SortTh label="Status" sortKey="active" sort={sort} onSort={toggleSort} align="center" />
+                    {canEdit && <th className="px-4 py-2 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sorted.length === 0 ? (
+                    <tr>
+                      <td colSpan={canEdit ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
+                        No staff match the current filters.
+                      </td>
+                    </tr>
                   ) : (
-                    "—"
+                    sorted.map((m) => (
+                      <tr key={m.id} className={m.active ? "" : "bg-gray-50/60 opacity-60"}>
+                        <td className="px-4 py-2 font-medium">
+                          <Link href={`/commission/staff/${m.id}`} className="text-gray-900 hover:text-brand hover:underline">
+                            {m.name}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs text-gray-500">{m.staffCode || "—"}</td>
+                        <td className="px-4 py-2 text-gray-700">{gymPositionLabel(m.position)}</td>
+                        <td className="px-4 py-2">
+                          <Badge className={m.employmentType === "freelancer" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-600"}>
+                            {gymEmploymentLabel(m.employmentType)}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-gray-500">
+                          {m.email || m.phone ? <span>{[m.email, m.phone].filter(Boolean).join(" · ")}</span> : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center text-xs">
+                          {m.active ? (
+                            <span className="text-green-600" title="Active">●</span>
+                          ) : (
+                            <span className="text-gray-300" title="Inactive">●</span>
+                          )}
+                        </td>
+                        {canEdit && (
+                          <td className="px-4 py-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => startEdit(m)} title="Edit" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-brand">
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => remove(m)} disabled={removing === m.id} title="Delete" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50">
+                                {removing === m.id ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))
                   )}
-                </td>
-                <td className="px-3 py-2 text-xs">{m.active ? <span className="text-green-700">Active</span> : <span className="text-gray-400">Inactive</span>}</td>
-                {canEdit && (
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => startEdit(m)} title="Edit" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-brand">
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => remove(m)} disabled={removing === m.id} title="Delete" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50">
-                        {removing === m.id ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-            {staff.length === 0 && (
-              <tr>
-                <td colSpan={canEdit ? 7 : 6} className="px-3 py-8 text-center text-gray-400">
-                  No gym staff yet.{canEdit ? " Add the first member above." : ""}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </Card>
     </div>
   );
