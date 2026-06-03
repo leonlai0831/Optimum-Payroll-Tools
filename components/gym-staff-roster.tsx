@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useImperativeHandle, useState, type Ref } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
@@ -38,13 +38,36 @@ const EMPTY: FormState = {
   active: true,
 };
 
-export function GymStaffRoster({ staff, canEdit }: { staff: GymStaffRecord[]; canEdit: boolean }) {
+/** Imperative handle so a sibling (the unmatched-earner rows) can pre-fill the add form. */
+export type StaffRosterHandle = { prefillAdd: (p: { name: string; staffCode: string }) => void };
+
+export function GymStaffRoster({
+  staff,
+  canEdit,
+  ref,
+}: {
+  staff: GymStaffRecord[];
+  canEdit: boolean;
+  ref?: Ref<StaffRosterHandle>;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState<number | null>(null);
+
+  // Let an unmatched-earner row pre-fill the *add* form (same scroll-to-top + focus as edit).
+  useImperativeHandle(ref, () => ({
+    prefillAdd: ({ name, staffCode }) => {
+      setEditingId(null);
+      setForm({ ...EMPTY, name, staffCode });
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        requestAnimationFrame(() => document.getElementById("gs-name")?.focus());
+      }
+    },
+  }), []);
 
   function startEdit(m: GymStaffRecord) {
     setEditingId(m.id);
