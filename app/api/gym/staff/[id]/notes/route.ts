@@ -1,0 +1,62 @@
+import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
+import { createGymNote, recordAudit } from "@/lib/db/queries";
+import {
+  NOTE_SEVERITIES,
+  NOTE_TYPES,
+  type NoteSeverity,
+  type NoteType,
+} from "@/lib/performance/types";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireCapability("edit_notes");
+  if (denied) return denied;
+  const actor = await getCurrentUser();
+  if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const gymStaffId = Number(id);
+  const body = (await req.json().catch(() => ({}))) as {
+    type?: string;
+    noteDate?: string;
+    title?: string;
+    body?: string;
+    severity?: string;
+    followUp?: boolean;
+  };
+
+  const title = String(body.title ?? "").trim();
+  if (!title) return NextResponse.json({ error: "A title is required." }, { status: 400 });
+
+  const type: NoteType = (NOTE_TYPES as readonly string[]).includes(body.type ?? "")
+    ? (body.type as NoteType)
+    : "general";
+  const severity: NoteSeverity | null =
+    type === "disciplinary" && (NOTE_SEVERITIES as readonly string[]).includes(body.severity ?? "")
+      ? (body.severity as NoteSeverity)
+      : null;
+  const parsedDate = body.noteDate ? new Date(body.noteDate) : new Date();
+
+  await createGymNote({
+    gymStaffId,
+    noteDate: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
+    type,
+    title,
+    body: String(body.body ?? "").trim(),
+    severity,
+    followUp: !!body.followUp,
+    authoredBy: actor.email,
+  });
+  await recordAudit({
+    actorId: actor.id,
+    actorEmail: actor.email,
+    action: "gym_note.create",
+    entity: "gym_staff",
+    entityId: gymStaffId,
+    summary: `Added ${type} note "${title}" for gym staff #${gymStaffId}`,
+  });
+  return NextResponse.json({ ok: true });
+}
