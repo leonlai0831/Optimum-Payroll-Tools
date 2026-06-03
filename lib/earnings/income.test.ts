@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { matcherFor, normName, staffEarnings, type CommissionRunSlice, type TeachingRunSlice } from "./income";
+import {
+  extractStaffMonth,
+  matcherFor,
+  normName,
+  staffEarnings,
+  type CommissionRunSlice,
+  type TeachingRunSlice,
+} from "./income";
 
 describe("normName", () => {
   it("ignores spacing and case so commission/coaching names match", () => {
@@ -71,5 +78,40 @@ describe("staffEarnings", () => {
     const r = staffEarnings(matcherFor({ name: "Nobody Here", staffCode: "", aliases: [] }), commissionRuns, teachingRuns);
     expect(r.months).toHaveLength(0);
     expect(r.totals.total).toBe(0);
+  });
+});
+
+describe("extractStaffMonth", () => {
+  const commissionStaff = [
+    { staffCode: "CAMRG836", staffName: "Dharmesh S. Raju", transactions: 4, subscriptionBase: 800, packageBase: 200, registrationBase: 100, totalBase: 1100, commission: 441 },
+    { staffCode: "ZZZ", staffName: "Someone Else", transactions: 1, subscriptionBase: 1, packageBase: 0, registrationBase: 0, totalBase: 1, commission: 1 },
+  ];
+  const coaches = [
+    {
+      staffName: "Dharmesh Sundara Raju",
+      ptSessions: 2, ptAttendees: 3, groupSessions: 1, groupAttendees: 5, ptIncome: 90, groupIncome: 75, totalIncome: 165,
+      classes: [
+        { className: "Fitness Appointment", kind: "pt" as const, sessions: 2, attendees: 3, income: 90 },
+        { className: "Strength", kind: "group" as const, sessions: 1, attendees: 5, income: 75 },
+      ],
+    },
+  ];
+
+  it("pulls one person's commission line + coaching line (with classes) for the month", () => {
+    const d = extractStaffMonth(matcherFor({ name: "Dharmesh Sundara Raju", staffCode: "CAMRG836", aliases: [] }), commissionStaff, coaches);
+    expect(d.commission?.commission).toBe(441);
+    expect(d.commission?.totalBase).toBe(1100);
+    expect(d.coaching?.totalIncome).toBe(165);
+    expect(d.coaching?.classes).toHaveLength(2);
+    expect(d.total).toBe(606); // 441 + 165
+  });
+
+  it("returns null sides when the person has no commission or no coaching that month", () => {
+    const d = extractStaffMonth(matcherFor({ name: "Coach Only", staffCode: "", aliases: [] }), commissionStaff, [
+      { ...coaches[0], staffName: "Coach Only" },
+    ]);
+    expect(d.commission).toBeNull();
+    expect(d.coaching?.totalIncome).toBe(165);
+    expect(d.total).toBe(165);
   });
 });
