@@ -58,6 +58,7 @@ import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/c
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymStaffInput } from "@/lib/gym/types";
+import { matcherFor, staffEarnings, type StaffEarningsReport } from "@/lib/earnings/income";
 import type { RunCoach } from "@/lib/types";
 import {
   CENTERS,
@@ -737,6 +738,28 @@ export async function getGymStaffMember(id: number): Promise<GymStaffRecord | un
   const db = await getDb();
   const rows = await db.select().from(gymStaff).where(eq(gymStaff.id, id)).limit(1);
   return rows[0];
+}
+
+/**
+ * One staff member's earnings across every saved month, assembled from History:
+ * commission runs (matched by staff_code or name) + coaching runs (by name /
+ * alias). Pure matching lives in lib/earnings/income (locked by income.test.ts).
+ */
+export async function getGymStaffEarnings(member: GymStaffRecord): Promise<StaffEarningsReport> {
+  const db = await getDb();
+  const [cRows, tRows] = await Promise.all([
+    db
+      .select({ periodLabel: commissionRuns.periodLabel, createdAt: commissionRuns.createdAt, summary: commissionRuns.summary })
+      .from(commissionRuns),
+    db
+      .select({ periodLabel: teachingRuns.periodLabel, createdAt: teachingRuns.createdAt, summary: teachingRuns.summary })
+      .from(teachingRuns),
+  ]);
+  return staffEarnings(
+    matcherFor(member),
+    cRows.map((r) => ({ periodLabel: r.periodLabel, createdAt: r.createdAt.getTime(), staff: r.summary.staff })),
+    tRows.map((r) => ({ periodLabel: r.periodLabel, createdAt: r.createdAt.getTime(), coaches: r.summary.coaches })),
+  );
 }
 
 export async function createGymStaff(input: GymStaffInput): Promise<number> {
