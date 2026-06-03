@@ -1,14 +1,25 @@
 name: CI
 
+# Run on every pull request (the PR gate) and on pushes to main (post-merge
+# verification). Feature-branch pushes don't run on their own — open a PR and
+# the full suite runs against it. workflow_dispatch allows a manual re-run.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel a superseded run when a PR gets a new push; let main runs finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
-  build:
+  test:
+    name: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +29,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run build
 
   e2e:
