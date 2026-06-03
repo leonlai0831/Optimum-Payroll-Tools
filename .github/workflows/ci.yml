@@ -29,7 +29,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm run typecheck
+      # Type-checking is enforced by `next build` (the build job): a standalone
+      # `tsc --noEmit` can't resolve Next's generated route types (RouteContext)
+      # without a prior build, so it doesn't belong here.
       - run: npm test
 
   build:
