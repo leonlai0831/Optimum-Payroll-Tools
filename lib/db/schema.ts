@@ -178,6 +178,20 @@ export const gymStaff = pgTable("gym_staff", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** A free-form HR note on a gym-staff member — the Optimum Fit parallel of `notes`. */
+export const gymNotes = pgTable("gym_notes", {
+  id: serial("id").primaryKey(),
+  gymStaffId: integer("gym_staff_id").notNull(),
+  noteDate: timestamp("note_date", { withTimezone: true }).defaultNow().notNull(),
+  type: text("type").$type<NoteType>().default("general").notNull(),
+  title: text("title").default("").notNull(),
+  body: text("body").default("").notNull(),
+  severity: text("severity").$type<NoteSeverity>(),
+  followUp: boolean("follow_up").default(false).notNull(),
+  authoredBy: text("authored_by").default("").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** Singleton appraisal configuration (one row, id = 1). */
 export const performanceConfig = pgTable("performance_config", {
   id: integer("id").primaryKey().default(1),
@@ -258,3 +272,4 @@ export type CommissionRunRecord = typeof commissionRuns.$inferSelect;
 export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;
 export type TeachingRunRecord = typeof teachingRuns.$inferSelect;
 export type GymStaffRecord = typeof gymStaff.$inferSelect;
+export type GymNoteRecord = typeof gymNotes.$inferSelect;

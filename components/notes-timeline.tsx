@@ -35,28 +35,35 @@ const TYPE_STYLES: Record<NoteType, string> = {
 };
 
 export function NotesTimeline({
-  coachId,
+  subjectId,
   notes,
   canEdit,
+  createUrl,
+  deleteBase = "/api/staff/notes",
 }: {
-  coachId: number;
+  subjectId: number;
   notes: NoteView[];
   canEdit: boolean;
+  /** POST endpoint for a new note. Defaults to the Swim coach route. */
+  createUrl?: string;
+  /** DELETE base; the note id is appended. Defaults to the Swim coach route. */
+  deleteBase?: string;
 }) {
+  const postUrl = createUrl ?? `/api/staff/${subjectId}/notes`;
   return (
     <Card className="p-4">
       <h3 className="mb-3 flex items-center gap-2 text-h3 text-gray-900">
         <MessageSquare className="h-4 w-4" /> Notes
       </h3>
 
-      {canEdit && <AddNote coachId={coachId} />}
+      {canEdit && <AddNote postUrl={postUrl} />}
 
       {notes.length === 0 ? (
         <p className="py-4 text-center text-sm text-gray-500">No notes yet.</p>
       ) : (
         <div className="mt-3 space-y-3">
           {notes.map((n) => (
-            <NoteCard key={n.id} note={n} canEdit={canEdit} />
+            <NoteCard key={n.id} note={n} canEdit={canEdit} deleteBase={deleteBase} />
           ))}
         </div>
       )}
@@ -64,7 +71,7 @@ export function NotesTimeline({
   );
 }
 
-function AddNote({ coachId }: { coachId: number }) {
+function AddNote({ postUrl }: { postUrl: string }) {
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -92,7 +99,7 @@ function AddNote({ coachId }: { coachId: number }) {
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/staff/${coachId}/notes`, {
+      const res = await fetch(postUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -227,7 +234,7 @@ function AddNote({ coachId }: { coachId: number }) {
   );
 }
 
-function NoteCard({ note, canEdit }: { note: NoteView; canEdit: boolean }) {
+function NoteCard({ note, canEdit, deleteBase }: { note: NoteView; canEdit: boolean; deleteBase: string }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -237,7 +244,7 @@ function NoteCard({ note, canEdit }: { note: NoteView; canEdit: boolean }) {
     setConfirmDelete(false);
     setBusy(true);
     try {
-      const res = await fetch(`/api/staff/notes/${note.id}`, { method: "DELETE" });
+      const res = await fetch(`${deleteBase}/${note.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       router.refresh();
     } catch {

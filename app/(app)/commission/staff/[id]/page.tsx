@@ -3,10 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
-import { getGymStaffEarnings, getGymStaffMember } from "@/lib/db/queries";
+import { getGymStaffEarnings, getGymStaffMember, listGymNotes } from "@/lib/db/queries";
 import { gymEmploymentLabel, gymPositionLabel } from "@/lib/gym/types";
 import { Button, Card } from "@/components/ui";
 import { GymStaffDetailsCard } from "@/components/gym-staff-details-card";
+import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,17 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
   if (!member) notFound();
   const caps = await getCapabilities(user);
   const canEdit = caps.has("edit_staff");
-  const report = await getGymStaffEarnings(member);
+  const [report, noteRecords] = await Promise.all([getGymStaffEarnings(member), listGymNotes(member.id)]);
+  const notes: NoteView[] = noteRecords.map((n) => ({
+    id: n.id,
+    noteDate: n.noteDate.toISOString(),
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    severity: n.severity,
+    followUp: n.followUp,
+    authoredBy: n.authoredBy,
+  }));
 
   return (
     <div className="space-y-4">
@@ -49,6 +60,14 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
       </div>
 
       <GymStaffDetailsCard member={member} canEdit={canEdit} />
+
+      <NotesTimeline
+        subjectId={member.id}
+        notes={notes}
+        canEdit={caps.has("edit_notes")}
+        createUrl={`/api/gym/staff/${member.id}/notes`}
+        deleteBase="/api/gym/notes"
+      />
 
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
