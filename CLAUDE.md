@@ -205,3 +205,16 @@ npm run db:migrate   # apply migrations (run once against prod DB)   npm run db:
 Import to Vercel → add Postgres (Neon) → set `APP_PASSWORD` / `SESSION_SECRET` /
 `ANTHROPIC_API_KEY` → run `npm run db:migrate` against the prod DB → deploy. See `README.md` for
 step-by-step details.
+
+## gstack (recommended)
+
+This project uses [gstack](https://github.com/garrytan/gstack) for AI-assisted workflows.
+Install it for the best experience:
+
+```bash
+git clone --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
+cd ~/.claude/skills/gstack && ./setup --team
+```
+
+Skills like /qa, /ship, /review, /investigate, and /browse become available after install.
+Use /browse for all web browsing. Use ~/.claude/skills/gstack/... for gstack file paths.
