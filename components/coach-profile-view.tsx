@@ -121,7 +121,7 @@ export function CoachProfileView({
         dimensions={dimensions}
         canEdit={canEditAppraisals}
       />
-      <NotesTimeline coachId={coach.id} notes={notes} canEdit={canEditNotes} />
+      <NotesTimeline subjectId={coach.id} notes={notes} canEdit={canEditNotes} />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
       <PayslipsCard coachId={coach.id} kpi={kpi} allowance={allowance} />

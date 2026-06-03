@@ -13,6 +13,7 @@ import {
   commissionRuns,
   teachingConfig,
   teachingRuns,
+  gymNotes,
   gymStaff,
   config,
   notes,
@@ -26,6 +27,7 @@ import {
   type AuditLogRecord,
   type CoachRecord,
   type CommissionRunRecord,
+  type GymNoteRecord,
   type GymStaffRecord,
   type TeachingRunRecord,
   type NoteRecord,
@@ -1530,6 +1532,31 @@ export async function createNote(input: {
 export async function deleteNote(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(notes).where(eq(notes.id, id));
+}
+
+export async function listGymNotes(gymStaffId: number): Promise<GymNoteRecord[]> {
+  const db = await getDb();
+  return db.select().from(gymNotes).where(eq(gymNotes.gymStaffId, gymStaffId)).orderBy(desc(gymNotes.noteDate));
+}
+
+export async function createGymNote(input: {
+  gymStaffId: number;
+  noteDate: Date;
+  type: NoteType;
+  title: string;
+  body: string;
+  severity: NoteSeverity | null;
+  followUp: boolean;
+  authoredBy: string;
+}): Promise<GymNoteRecord> {
+  const db = await getDb();
+  const [row] = await db.insert(gymNotes).values(input).returning();
+  return row;
+}
+
+export async function deleteGymNote(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(gymNotes).where(eq(gymNotes.id, id));
 }
 
 /** Latest appraisal overall (0–100) per coach, for prefilling the KPI mgmt assessment. */

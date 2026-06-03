@@ -168,4 +168,69 @@ describe("DB layer (PGlite in-memory)", () => {
     const names = await queries.listAllCsvAccountNames();
     expect(names).toContain("CHAM - YL [PJ]");
   });
+
+  it("creates, lists (newest first), and deletes gym-staff notes scoped to the member", async () => {
+    const aId = await queries.createGymStaff({
+      name: "Faisal Ramlee",
+      staffCode: "MMH9F737",
+      position: "personal_trainer",
+      employmentType: "full_time",
+      email: "",
+      phone: "",
+      aliases: [],
+      active: true,
+    });
+    const bId = await queries.createGymStaff({
+      name: "Other Coach",
+      staffCode: "",
+      position: "front_desk",
+      employmentType: "part_time",
+      email: "",
+      phone: "",
+      aliases: [],
+      active: true,
+    });
+
+    await queries.createGymNote({
+      gymStaffId: aId,
+      noteDate: new Date("2026-01-01"),
+      type: "coaching",
+      title: "Older",
+      body: "",
+      severity: null,
+      followUp: false,
+      authoredBy: "mgr@x.com",
+    });
+    const recent = await queries.createGymNote({
+      gymStaffId: aId,
+      noteDate: new Date("2026-05-01"),
+      type: "disciplinary",
+      title: "Newer",
+      body: "late",
+      severity: "high",
+      followUp: true,
+      authoredBy: "mgr@x.com",
+    });
+    // A note on a different member must not leak into A's timeline.
+    await queries.createGymNote({
+      gymStaffId: bId,
+      noteDate: new Date("2026-06-01"),
+      type: "general",
+      title: "B note",
+      body: "",
+      severity: null,
+      followUp: false,
+      authoredBy: "mgr@x.com",
+    });
+
+    const aNotes = await queries.listGymNotes(aId);
+    expect(aNotes.map((n) => n.title)).toEqual(["Newer", "Older"]); // newest first
+    expect(aNotes[0].severity).toBe("high");
+
+    await queries.deleteGymNote(recent.id);
+    const after = await queries.listGymNotes(aId);
+    expect(after.map((n) => n.title)).toEqual(["Older"]);
+    // B's note untouched.
+    expect((await queries.listGymNotes(bId)).map((n) => n.title)).toEqual(["B note"]);
+  });
 });
