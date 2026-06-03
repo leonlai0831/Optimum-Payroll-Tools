@@ -10,8 +10,8 @@ const nunito = Nunito({
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Optimum Swim School — KPI Dashboard",
-  description: "Monthly KPI & bonus calculator",
+  title: "Optimum Payroll Tools",
+  description: "Allowance & KPI bonus calculators for Optimum Swim School",
 };
 
 export default function RootLayout({

@@ -1,8 +1,62 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
-import { listCoaches } from "@/lib/db/queries";
+import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
+import { createCoach, listCoaches, recordAudit } from "@/lib/db/queries";
+import {
+  EMPLOYEE_ROLES,
+  EMPLOYMENT_TYPES,
+  type EmployeeRole,
+  type EmploymentType,
+} from "@/lib/performance/types";
+import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
 export async function GET() {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return NextResponse.json(await listCoaches());
+}
+
+export async function POST(req: Request) {
+  const denied = await requireCapability("edit_staff");
+  if (denied) return denied;
+  const body = (await req.json().catch(() => ({}))) as {
+    canonicalName?: string;
+    jobRole?: string;
+    employmentType?: string;
+    center?: string;
+    allowanceTier?: string | null;
+  };
+  const name = body.canonicalName?.trim();
+  if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
+
+  const jobRole = (EMPLOYEE_ROLES as readonly string[]).includes(body.jobRole ?? "")
+    ? (body.jobRole as EmployeeRole)
+    : "instructor";
+  const employmentType = (EMPLOYMENT_TYPES as readonly string[]).includes(body.employmentType ?? "")
+    ? (body.employmentType as EmploymentType)
+    : "full_time";
+  const allowanceTier =
+    typeof body.allowanceTier === "string" &&
+    (ALLOWANCE_TIERS as readonly string[]).includes(body.allowanceTier)
+      ? (body.allowanceTier as AllowanceTier)
+      : null;
+
+  const coach = await createCoach({
+    canonicalName: name,
+    jobRole,
+    employmentType,
+    center: body.center,
+    allowanceTier,
+  });
+  const actor = await getCurrentUser();
+  if (actor) {
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "coach.create",
+      entity: "coach",
+      entityId: coach.id,
+      summary: `Created employee "${name}" (${jobRole})`,
+    });
+  }
+  return NextResponse.json({ ok: true, id: coach.id });
 }

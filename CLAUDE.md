@@ -173,7 +173,7 @@ npm run build        # next build       npm run start
 npm run lint         # eslint           npm run typecheck   # tsc --noEmit
 npm test             # vitest run (KPI engine + DB queries)
 npm run db:generate  # drizzle-kit generate
-npm run db:migrate   # apply migrations (run once against prod DB)   npm run db:push
+npm run db:migrate   # apply migrations explicitly (optional; auto-applied on first connect)   npm run db:push
 ```
 
 ## Conventions & gotchas
@@ -191,6 +191,24 @@ npm run db:migrate   # apply migrations (run once against prod DB)   npm run db:
 - **CSV headers** are mapped flexibly (`tr_name→Instructor`, `cr_name→Center`, `TTL-COLOR→TotalColor`,
   `UP→LevelUp`, `STUDENT_STOP→Stop`, `STUDENT_ATTENDED_CLASS→Attended`, …) in `lib/kpi/csv.ts`.
 
+## Settings IA — frozen rules (don't move things again)
+
+The three sections (Allowance / KPI / Staff) and their per-section settings pages
+are intentionally stable. When a "where should X go?" question comes up, resolve it with the
+rule below rather than relocating UI:
+
+- **Entities live under Staff.** Centers (`/staff/settings`), Appraisal dimensions
+  (`/staff/settings`), Users / accounts (`/staff/users`), Permissions matrix
+  (`/staff/permissions`, super_admin only).
+- **Calculator math lives under its calculator.** Allowance tiers + rate tables
+  (`/allowance/settings`), KPI metrics + weights + min/max (`/kpi/settings`).
+- **All three section tabs are labeled "Settings"** — Allowance, KPI, and Staff — never
+  "Options". Section nav is `components/section-nav.tsx`.
+- **Cross-page writes are guarded server-side.** Centers are stored in
+  `allowanceConfig.centers` but edited via Staff; the dedicated `saveCenters` /
+  `saveAllowanceRates` helpers in `lib/db/queries.ts` keep the two pages from
+  clobbering each other (locked by `lib/allowance/queries.test.ts`).
+
 ## Divergences from the original plan
 
 - **Next.js 16** (plan said 15) → the gate is `proxy.ts`, not `middleware.ts`.
@@ -203,8 +221,9 @@ npm run db:migrate   # apply migrations (run once against prod DB)   npm run db:
 ## Deploy
 
 Import to Vercel → add Postgres (Neon) → set `APP_PASSWORD` / `SESSION_SECRET` /
-`ANTHROPIC_API_KEY` → run `npm run db:migrate` against the prod DB → deploy. See `README.md` for
-step-by-step details.
+`ANTHROPIC_API_KEY` → deploy. **Migrations auto-apply on first DB connect** (`lib/db/index.ts`), so
+a fresh prod database needs no manual SQL; you can still run `npm run db:migrate` against the prod
+DB to apply them explicitly ahead of traffic. See `README.md` for step-by-step details.
 
 ## gstack (recommended)
 

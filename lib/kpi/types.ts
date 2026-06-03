@@ -1,5 +1,7 @@
 // Core domain types for the KPI engine. Ported from KPI_Calculator_v11.1.html.
 
+import type { ClassifyConfig } from "./classify";
+
 /** A single parsed CSV row, after header mapping to canonical fields. */
 export interface InstructorRow {
   Center: string;
@@ -87,4 +89,6 @@ export interface AppConfig {
   centerKpi: MetricConfig[];
   centerTargets: CenterTargets;
   gradeThresholds: GradeThresholds;
+  /** Account-classification rules for the CSV name pass (whitelists). */
+  classify: ClassifyConfig;
 }

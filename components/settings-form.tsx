@@ -3,19 +3,44 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Save, Settings, Trash2 } from "lucide-react";
-import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import { METRIC_LIBRARY } from "@/lib/kpi/metrics";
+import { DEFAULT_CLASSIFY_CONFIG } from "@/lib/kpi/classify";
 import type { AppConfig, MetricConfig } from "@/lib/kpi/types";
 import { cn } from "@/lib/utils";
 
 type ListKey = "personalKpi" | "centerKpi";
 
-export function SettingsForm({ initial }: { initial: AppConfig }) {
+/** Parse a comma/newline-separated list into trimmed, de-duped, non-empty entries. */
+const parseList = (s: string) => [
+  ...new Set(s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean)),
+];
+
+type ClassifyKey = "classCodes" | "placeholderMarkers" | "centerCodes";
+
+export function SettingsForm({
+  initial,
+  canEdit = true,
+}: {
+  initial: AppConfig;
+  canEdit?: boolean;
+}) {
   const router = useRouter();
+  const toast = useToast();
   const [cfg, setCfg] = useState<AppConfig>(() => structuredClone(initial));
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
+
+  // The classify whitelists are edited as free text and parsed back on save, so
+  // typing commas/spaces doesn't fight a normalized array.
+  const classify0 = initial.classify ?? DEFAULT_CLASSIFY_CONFIG;
+  const [classText, setClassText] = useState(() => ({
+    classCodes: (classify0.classCodes ?? []).join(", "),
+    placeholderMarkers: (classify0.placeholderMarkers ?? []).join(", "),
+    centerCodes: (classify0.centerCodes ?? []).join(", "),
+  }));
+  const setClass = (key: ClassifyKey, value: string) =>
+    setClassText((t) => ({ ...t, [key]: value }));
 
   function enabledWeight(list: MetricConfig[]) {
     return Math.round(list.filter((m) => m.enabled).reduce((s, m) => s + m.w, 0) * 100);
@@ -28,11 +53,9 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
       const list = c[key].map((m, i) => (i === idx ? { ...m, ...patch } : m));
       return { ...c, [key]: list };
     });
-    setSaved(false);
   }
   function removeMetric(key: ListKey, idx: number) {
     setCfg((c) => ({ ...c, [key]: c[key].filter((_, i) => i !== idx) }));
-    setSaved(false);
   }
   function addMetric(key: ListKey, id: string) {
     const def = METRIC_LIBRARY[id];
@@ -44,23 +67,33 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
         { id: def.id, name: def.name, min: def.defaultMin, max: def.defaultMax, w: 0, type: def.type, enabled: true },
       ],
     }));
-    setSaved(false);
   }
 
   async function save() {
     setSaving(true);
-    setError("");
     try {
+      const payload: AppConfig = {
+        ...cfg,
+        classify: {
+          ...cfg.classify,
+          classCodes: parseList(classText.classCodes),
+          placeholderMarkers: parseList(classText.placeholderMarkers),
+          centerCodes: parseList(classText.centerCodes),
+        },
+      };
       const res = await fetch("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Save failed");
-      setSaved(true);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Save failed");
+      }
+      toast.success("KPI settings saved.");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -72,7 +105,7 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
     return (
       <Card className="p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-indigo-700">
+          <h3 className="text-h3 text-gray-900">
             {key === "personalKpi" ? "Personal KPI metrics" : "Center KPI metrics"}
           </h3>
           <span className={cn("text-xs font-bold", ok ? "text-green-600" : "text-red-600")}>
@@ -161,20 +194,29 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
         <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
           <Settings className="h-5 w-5 text-indigo-500" /> Settings
         </h1>
-        <Button onClick={save} disabled={saving || !personalOk || !centerOk}>
-          {saving ? <Spinner /> : <Save className="h-4 w-4" />} {saved ? "Saved ✓" : "Save config"}
-        </Button>
+        {canEdit ? (
+          <Button onClick={save} disabled={saving || !personalOk || !centerOk}>
+            {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save config
+          </Button>
+        ) : (
+          <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-500">
+            Read-only
+          </span>
+        )}
       </div>
-      {(!personalOk || !centerOk) && (
+      {!canEdit && (
+        <p className="text-sm text-gray-500">You have read-only access to these settings.</p>
+      )}
+      {canEdit && (!personalOk || !centerOk) && (
         <p className="text-sm text-red-600">Enabled weights must total 100% in both sections to save.</p>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
 
+      <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
       {renderMetrics("personalKpi", personalOk)}
       {renderMetrics("centerKpi", centerOk)}
 
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="mb-3 text-h3 text-gray-900">
           Center student targets
         </h3>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -198,7 +240,7 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
       </Card>
 
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-700">
+        <h3 className="mb-3 text-h3 text-gray-900">
           Grade thresholds
         </h3>
         <div className="grid grid-cols-3 gap-3">
@@ -221,6 +263,57 @@ export function SettingsForm({ initial }: { initial: AppConfig }) {
           ))}
         </div>
       </Card>
+
+      <Card className="p-4">
+        <h3 className="mb-1 text-h3 text-gray-900">Account classification (name pass)</h3>
+        <p className="mb-3 text-[11px] text-gray-500">
+          How raw CSV account names are read before scoring. Comma- or newline-separated;
+          matched case-insensitively. Numbered overflow (e.g. “COBYS 2”) and co-teach classes
+          (“A / B”) are detected automatically.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <Label>Class-type codes</Label>
+            <p className="mb-1 text-[11px] text-gray-400">
+              Suffixes after “_” or “ - ” that mark a class type, not a person — stripped to find
+              the coach (e.g. LMHA, YL, FULL, LIFE SAVING, PRE-COMPETITIVE).
+            </p>
+            <Textarea
+              rows={3}
+              value={classText.classCodes}
+              onChange={(e) => setClass("classCodes", e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div>
+            <Label>Placeholder / promo markers</Label>
+            <p className="mb-1 text-[11px] text-gray-400">
+              An account containing any of these is a center/promo placeholder, kept out of
+              individual KPI by default (e.g. HARVEST, PAY-AS-YOU-GO, PROMO, NEW CLASS).
+            </p>
+            <Textarea
+              rows={2}
+              value={classText.placeholderMarkers}
+              onChange={(e) => setClass("placeholderMarkers", e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div>
+            <Label>Center codes</Label>
+            <p className="mb-1 text-[11px] text-gray-400">
+              Center abbreviations as written inside names, stripped as suffixes (e.g. HQ, USJ,
+              QSM, BK).
+            </p>
+            <Textarea
+              rows={2}
+              value={classText.centerCodes}
+              onChange={(e) => setClass("centerCodes", e.target.value)}
+              className="text-xs"
+            />
+          </div>
+        </div>
+      </Card>
+      </fieldset>
     </div>
   );
 }

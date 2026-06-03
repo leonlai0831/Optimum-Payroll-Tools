@@ -9,8 +9,14 @@ import { SESSION_COOKIE } from "@/lib/auth/session";
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Public paths.
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) {
+  // Public paths. `/setup` + `/api/health` stay open so a broken deploy can be
+  // diagnosed before anyone can sign in.
+  if (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/setup") ||
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/health")
+  ) {
     return NextResponse.next();
   }
 

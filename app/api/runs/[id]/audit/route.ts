@@ -1,0 +1,40 @@
+import { NextResponse } from "next/server";
+import { requireCapability } from "@/lib/auth/permissions";
+import { getRun, listAllowanceRuns } from "@/lib/db/queries";
+import { auditRun, type AuditCoach, type AuditAllowanceRec } from "@/lib/kpi/audit";
+import { narrateAudit } from "@/lib/ai/anthropic";
+
+/**
+ * GET a deterministic bonus/allowance audit for one run, plus an AI narration.
+ * The findings are computed in lib/kpi/audit.ts (pure, testable); the AI only
+ * summarizes them.
+ */
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await requireCapability("run_kpi");
+  if (denied) return denied;
+  const { id } = await ctx.params;
+  const run = await getRun(Number(id));
+  if (!run) return NextResponse.json({ error: "run not found" }, { status: 404 });
+
+  const coaches: AuditCoach[] = run.coachResults.map((c) => ({
+    canonicalName: c.canonicalName,
+    teachingAllowance: c.teachingAllowance,
+    finalScore: c.finalScore,
+    payout: c.payout,
+    isComplete: c.isComplete,
+  }));
+
+  // Same-month allowance records, reduced to the teaching subtotal per coach.
+  const allowanceRecs = await listAllowanceRuns(run.periodLabel);
+  const allowances: AuditAllowanceRec[] = allowanceRecs.map((a) => ({
+    canonicalName: a.canonicalName,
+    teaching: a.teaching,
+  }));
+
+  const findings = auditRun(coaches, allowances);
+  const summary = await narrateAudit(
+    findings.map((f) => ({ coach: f.coach, severity: f.severity, message: f.message })),
+  );
+
+  return NextResponse.json({ findings, summary });
+}

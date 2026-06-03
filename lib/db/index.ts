@@ -1,5 +1,7 @@
 import { drizzle as drizzlePg, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm";
 import * as schema from "./schema";
+import { logger } from "@/lib/log";
 
 /**
  * Single DB type used across the app. In production we connect to Postgres
@@ -17,11 +19,64 @@ declare global {
 const MIGRATIONS_FOLDER = "lib/db/migrations";
 
 /** SQLSTATE codes for "object already exists" (table/schema/column/constraint). */
+const ALREADY_EXISTS_CODES = ["42P07", "42P06", "42701", "42710"];
+
+/**
+ * True when an error — or anything in its `cause` chain — is a Postgres
+ * "already exists" error. Drizzle wraps the driver error, so the SQLSTATE `code`
+ * and the "… already exists" message live on `err.cause`, not on `err` itself;
+ * we must walk the chain or the check silently misses them.
+ */
 function isAlreadyExistsError(err: unknown): boolean {
-  const code = (err as { code?: string } | null)?.code;
-  if (code && ["42P07", "42P06", "42701", "42710"].includes(code)) return true;
-  const msg = err instanceof Error ? err.message : String(err);
-  return /already exists/i.test(msg);
+  let cur: unknown = err;
+  for (let depth = 0; cur != null && depth < 6; depth++) {
+    const e = cur as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && ALREADY_EXISTS_CODES.includes(e.code)) return true;
+    if (typeof e.message === "string" && /already exists/i.test(e.message)) return true;
+    cur = e.cause;
+  }
+  return false;
+}
+
+/**
+ * Re-apply every migration statement individually, swallowing "already exists".
+ * Used when the migration journal is out of sync with a database whose objects
+ * were created out-of-band (e.g. via `drizzle-kit push`, or a journal that was
+ * lost): the normal journal-based migrate() aborts on the first object that
+ * already exists and so never reaches statements that ARE missing (e.g. a newer
+ * table from a later migration). Applying statements one at a time creates only
+ * what's absent and skips what's present.
+ */
+async function reconcileSchema(db: Pick<DB, "execute">): Promise<void> {
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_FOLDER });
+  for (const migration of migrations) {
+    for (const statement of migration.sql) {
+      try {
+        await db.execute(sql.raw(statement));
+      } catch (err) {
+        if (!isAlreadyExistsError(err)) throw err;
+      }
+    }
+  }
+}
+
+/**
+ * Auto-migrate on first connect so a fresh database needs no manual SQL.
+ * Idempotent: drizzle's journal skips applied migrations. If the journal is out
+ * of sync (objects exist but aren't recorded), fall back to an idempotent
+ * statement-by-statement apply instead of wedging startup on "already exists".
+ */
+async function migrateWithFallback(
+  db: Pick<DB, "execute">,
+  runMigrate: () => Promise<void>,
+): Promise<void> {
+  try {
+    await runMigrate();
+  } catch (err) {
+    if (!isAlreadyExistsError(err)) throw err;
+    await reconcileSchema(db);
+  }
 }
 
 async function init(): Promise<DB> {
@@ -31,15 +86,8 @@ async function init(): Promise<DB> {
     // prepare:false keeps it compatible with transaction-pooled connections (Neon/PgBouncer).
     const client = postgres(url, { prepare: false, max: 5 });
     const db = drizzlePg(client, { schema });
-    // Auto-create tables on first connect so a fresh database needs no manual SQL.
-    // Idempotent: drizzle's journal skips applied migrations; we swallow
-    // "already exists" so tables created out-of-band (before the journal) don't wedge startup.
     const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-    try {
-      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-    } catch (err) {
-      if (!isAlreadyExistsError(err)) throw err;
-    }
+    await migrateWithFallback(db, () => migrate(db, { migrationsFolder: MIGRATIONS_FOLDER }));
     return db;
   }
 
@@ -59,7 +107,9 @@ async function init(): Promise<DB> {
   const { migrate } = await import("drizzle-orm/pglite/migrator");
   const client = new PGlite(process.env.PGLITE_PATH ?? ".pglite");
   const db = drizzlePglite(client, { schema });
-  await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+  await migrateWithFallback(db as unknown as DB, () =>
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER }),
+  );
   return db as unknown as DB;
 }
 
@@ -69,6 +119,7 @@ export function getDb(): Promise<DB> {
       // Don't cache a failed init (e.g. a transient connect error on cold start) —
       // clear it so the next request retries instead of reusing a rejected promise.
       globalThis.__kpiDb = undefined;
+      logger.error("database init failed", { err });
       throw err;
     });
   }
