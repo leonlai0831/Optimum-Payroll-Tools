@@ -1,4 +1,6 @@
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+"use client";
+
+import { AlertTriangle, CheckCircle2, UserPlus } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { rm } from "@/lib/utils";
 import type { UnmatchedEarner } from "@/lib/earnings/income";
@@ -11,10 +13,19 @@ const SOURCE_LABEL: Record<UnmatchedEarner["source"], string> = {
 
 /**
  * Coverage check: earners in saved months that match no roster member, so their
- * income never surfaces under any staff page. Add them above (commission keys on
- * staff code; coaching on name / aliases) to close the gap.
+ * income never surfaces under any staff page. The per-row "Add" pre-fills the
+ * roster form above (commission keys on staff code; coaching on name / aliases).
  */
-export function UnmatchedEarners({ earners }: { earners: UnmatchedEarner[] }) {
+export function UnmatchedEarners({
+  earners,
+  canEdit = false,
+  onAdd,
+}: {
+  earners: UnmatchedEarner[];
+  canEdit?: boolean;
+  onAdd?: (earner: UnmatchedEarner) => void;
+}) {
+  const showAdd = canEdit && !!onAdd;
   if (earners.length === 0) {
     return (
       <Card className="flex items-center gap-2 p-3 text-sm text-green-700">
@@ -45,6 +56,7 @@ export function UnmatchedEarners({ earners }: { earners: UnmatchedEarner[] }) {
               <th className="px-3 py-2 text-right">Commission</th>
               <th className="px-3 py-2 text-right">Coaching</th>
               <th className="px-3 py-2 text-right">Total</th>
+              {showAdd && <th className="px-3 py-2 text-right">Action</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -61,6 +73,17 @@ export function UnmatchedEarners({ earners }: { earners: UnmatchedEarner[] }) {
                 <td className="px-3 py-2 text-right text-gray-600">{rm(e.totalCommission)}</td>
                 <td className="px-3 py-2 text-right text-gray-600">{rm(e.totalCoaching)}</td>
                 <td className="px-3 py-2 text-right font-bold text-amber-700">{rm(e.total)}</td>
+                {showAdd && (
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => onAdd!(e)}
+                      title={`Pre-fill the roster form to add ${e.name}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-brand/30 px-2 py-1 text-xs font-medium text-brand hover:bg-brand/5"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" /> Add
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
