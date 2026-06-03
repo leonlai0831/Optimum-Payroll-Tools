@@ -173,7 +173,7 @@ npm run build        # next build       npm run start
 npm run lint         # eslint           npm run typecheck   # tsc --noEmit
 npm test             # vitest run (KPI engine + DB queries)
 npm run db:generate  # drizzle-kit generate
-npm run db:migrate   # apply migrations (run once against prod DB)   npm run db:push
+npm run db:migrate   # apply migrations explicitly (optional; auto-applied on first connect)   npm run db:push
 ```
 
 ## Conventions & gotchas
@@ -221,5 +221,6 @@ rule below rather than relocating UI:
 ## Deploy
 
 Import to Vercel → add Postgres (Neon) → set `APP_PASSWORD` / `SESSION_SECRET` /
-`ANTHROPIC_API_KEY` → run `npm run db:migrate` against the prod DB → deploy. See `README.md` for
-step-by-step details.
+`ANTHROPIC_API_KEY` → deploy. **Migrations auto-apply on first DB connect** (`lib/db/index.ts`), so
+a fresh prod database needs no manual SQL; you can still run `npm run db:migrate` against the prod
+DB to apply them explicitly ahead of traffic. See `README.md` for step-by-step details.
