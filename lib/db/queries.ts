@@ -62,8 +62,10 @@ import {
   extractStaffMonth,
   matcherFor,
   staffEarnings,
+  unmatchedEarners,
   type StaffEarningsReport,
   type StaffMonthDetail,
+  type UnmatchedEarner,
 } from "@/lib/earnings/income";
 import type { RunCoach } from "@/lib/types";
 import {
@@ -795,6 +797,25 @@ export async function getGymStaffMonth(member: GymStaffRecord, period: string): 
   const detail = extractStaffMonth(matcherFor(member), cRows[0]?.summary.staff ?? [], tRows[0]?.summary.coaches ?? []);
   if (!detail.commission && !detail.coaching) return undefined;
   return { period, ...detail };
+}
+
+/** People earning in saved months who match no roster member (coverage gap). */
+export async function getUnmatchedEarners(): Promise<UnmatchedEarner[]> {
+  const db = await getDb();
+  const [roster, cRows, tRows] = await Promise.all([
+    db.select({ name: gymStaff.name, staffCode: gymStaff.staffCode, aliases: gymStaff.aliases }).from(gymStaff),
+    db
+      .select({ periodLabel: commissionRuns.periodLabel, createdAt: commissionRuns.createdAt, summary: commissionRuns.summary })
+      .from(commissionRuns),
+    db
+      .select({ periodLabel: teachingRuns.periodLabel, createdAt: teachingRuns.createdAt, summary: teachingRuns.summary })
+      .from(teachingRuns),
+  ]);
+  return unmatchedEarners(
+    roster,
+    cRows.map((r) => ({ periodLabel: r.periodLabel, createdAt: r.createdAt.getTime(), staff: r.summary.staff })),
+    tRows.map((r) => ({ periodLabel: r.periodLabel, createdAt: r.createdAt.getTime(), coaches: r.summary.coaches })),
+  );
 }
 
 export async function createGymStaff(input: GymStaffInput): Promise<number> {
