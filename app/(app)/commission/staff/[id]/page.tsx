@@ -64,7 +64,14 @@ export default async function GymStaffEarningsPage({ params }: { params: Promise
             <tbody className="divide-y divide-gray-100">
               {report.months.map((m) => (
                 <tr key={m.period} className="tabular-nums">
-                  <td className="px-3 py-2 font-medium text-gray-900">{m.period}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <Link
+                      href={`/commission/staff/${member.id}/${encodeURIComponent(m.period)}`}
+                      className="text-gray-900 hover:text-brand hover:underline"
+                    >
+                      {m.period}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2 text-right text-gray-600">{rm(m.commission)}</td>
                   <td className="px-3 py-2 text-right text-gray-600">{rm(m.coachingIncome)}</td>
                   <td className="px-3 py-2 text-right font-bold text-green-700">{rm(m.total)}</td>

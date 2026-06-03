@@ -36,6 +36,16 @@ export function matcherFor(member: { name: string; staffCode: string; aliases?: 
   return { staffCode: member.staffCode.trim(), names };
 }
 
+/** Commission matches on exact staff_code (when set) or normalised name. */
+export function matchesCommission(m: EarningsMatcher, s: { staffCode: string; staffName: string }): boolean {
+  return (m.staffCode !== "" && s.staffCode === m.staffCode) || m.names.has(normName(s.staffName));
+}
+
+/** Coaching only carries a name, so it matches on normalised name / alias. */
+export function matchesCoaching(m: EarningsMatcher, c: { staffName: string }): boolean {
+  return m.names.has(normName(c.staffName));
+}
+
 /** One saved commission month, reduced to what earnings matching needs. */
 export interface CommissionRunSlice {
   periodLabel: string;
@@ -64,15 +74,12 @@ export function staffEarnings(
     if (cur === undefined || ms < cur) firstSeen.set(period, ms);
   };
 
-  const matchesCommission = (s: { staffCode: string; staffName: string }) =>
-    (matcher.staffCode !== "" && s.staffCode === matcher.staffCode) || matcher.names.has(normName(s.staffName));
-
   // Ascending by save time, so a later save of the same period overwrites.
   for (const run of [...commissionRuns].sort((a, b) => a.createdAt - b.createdAt)) {
     let sum = 0;
     let matched = false;
     for (const s of run.staff) {
-      if (matchesCommission(s)) {
+      if (matchesCommission(matcher, s)) {
         sum += s.commission;
         matched = true;
       }
@@ -86,7 +93,7 @@ export function staffEarnings(
     let sum = 0;
     let matched = false;
     for (const c of run.coaches) {
-      if (matcher.names.has(normName(c.staffName))) {
+      if (matchesCoaching(matcher, c)) {
         sum += c.totalIncome;
         matched = true;
       }
@@ -117,4 +124,57 @@ export function staffEarnings(
   );
 
   return { months, totals };
+}
+
+export interface StaffMonthDetail {
+  /** The member's commission line for the month (aggregated if >1 match), or null. */
+  commission: StaffCommission | null;
+  /** The member's coaching line incl. per-class breakdown, or null. */
+  coaching: CoachIncome | null;
+  total: number;
+}
+
+/** One member's detail for a single month: their commission line + coaching line. */
+export function extractStaffMonth(
+  matcher: EarningsMatcher,
+  commissionStaff: StaffCommission[],
+  coaches: CoachIncome[],
+): StaffMonthDetail {
+  const matchedC = commissionStaff.filter((s) => matchesCommission(matcher, s));
+  const matchedT = coaches.filter((c) => matchesCoaching(matcher, c));
+
+  const commission = matchedC.length
+    ? matchedC.reduce<StaffCommission>(
+        (a, s) => ({
+          staffCode: a.staffCode || s.staffCode,
+          staffName: a.staffName || s.staffName,
+          transactions: a.transactions + s.transactions,
+          subscriptionBase: a.subscriptionBase + s.subscriptionBase,
+          packageBase: a.packageBase + s.packageBase,
+          registrationBase: a.registrationBase + s.registrationBase,
+          totalBase: a.totalBase + s.totalBase,
+          commission: a.commission + s.commission,
+        }),
+        { staffCode: "", staffName: "", transactions: 0, subscriptionBase: 0, packageBase: 0, registrationBase: 0, totalBase: 0, commission: 0 },
+      )
+    : null;
+
+  const coaching = matchedT.length
+    ? matchedT.reduce<CoachIncome>(
+        (a, c) => ({
+          staffName: a.staffName || c.staffName,
+          ptSessions: a.ptSessions + c.ptSessions,
+          ptAttendees: a.ptAttendees + c.ptAttendees,
+          groupSessions: a.groupSessions + c.groupSessions,
+          groupAttendees: a.groupAttendees + c.groupAttendees,
+          ptIncome: a.ptIncome + c.ptIncome,
+          groupIncome: a.groupIncome + c.groupIncome,
+          totalIncome: a.totalIncome + c.totalIncome,
+          classes: [...a.classes, ...c.classes],
+        }),
+        { staffName: "", ptSessions: 0, ptAttendees: 0, groupSessions: 0, groupAttendees: 0, ptIncome: 0, groupIncome: 0, totalIncome: 0, classes: [] },
+      )
+    : null;
+
+  return { commission, coaching, total: (commission?.commission ?? 0) + (coaching?.totalIncome ?? 0) };
 }

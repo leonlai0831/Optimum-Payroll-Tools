@@ -58,7 +58,13 @@ import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/c
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymStaffInput } from "@/lib/gym/types";
-import { matcherFor, staffEarnings, type StaffEarningsReport } from "@/lib/earnings/income";
+import {
+  extractStaffMonth,
+  matcherFor,
+  staffEarnings,
+  type StaffEarningsReport,
+  type StaffMonthDetail,
+} from "@/lib/earnings/income";
 import type { RunCoach } from "@/lib/types";
 import {
   CENTERS,
@@ -760,6 +766,35 @@ export async function getGymStaffEarnings(member: GymStaffRecord): Promise<Staff
     cRows.map((r) => ({ periodLabel: r.periodLabel, createdAt: r.createdAt.getTime(), staff: r.summary.staff })),
     tRows.map((r) => ({ periodLabel: r.periodLabel, createdAt: r.createdAt.getTime(), coaches: r.summary.coaches })),
   );
+}
+
+export interface StaffMonthRecord extends StaffMonthDetail {
+  period: string;
+}
+
+/**
+ * One staff member's detail for a single saved month — the latest commission and
+ * coaching run for that period label (later saves win), reduced to this person.
+ */
+export async function getGymStaffMonth(member: GymStaffRecord, period: string): Promise<StaffMonthRecord | undefined> {
+  const db = await getDb();
+  const [cRows, tRows] = await Promise.all([
+    db
+      .select({ summary: commissionRuns.summary })
+      .from(commissionRuns)
+      .where(eq(commissionRuns.periodLabel, period))
+      .orderBy(desc(commissionRuns.createdAt))
+      .limit(1),
+    db
+      .select({ summary: teachingRuns.summary })
+      .from(teachingRuns)
+      .where(eq(teachingRuns.periodLabel, period))
+      .orderBy(desc(teachingRuns.createdAt))
+      .limit(1),
+  ]);
+  const detail = extractStaffMonth(matcherFor(member), cRows[0]?.summary.staff ?? [], tRows[0]?.summary.coaches ?? []);
+  if (!detail.commission && !detail.coaching) return undefined;
+  return { period, ...detail };
 }
 
 export async function createGymStaff(input: GymStaffInput): Promise<number> {
