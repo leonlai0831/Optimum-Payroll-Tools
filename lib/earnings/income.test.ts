@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeIncome, normName } from "./income";
+import { matcherFor, normName, staffEarnings, type CommissionRunSlice, type TeachingRunSlice } from "./income";
 
 describe("normName", () => {
   it("ignores spacing and case so commission/coaching names match", () => {
@@ -8,38 +8,68 @@ describe("normName", () => {
   });
 });
 
-describe("mergeIncome", () => {
-  const commission = [
-    { staffCode: "CAMRG836", staffName: "DharmeshSundara Raju", commission: 441 },
-    { staffCode: "NOAXA740", staffName: "Kah HuiFong", commission: 622 },
-    { staffCode: "MMH9F737", staffName: "FaisalRamlee", commission: 2640 },
+describe("staffEarnings", () => {
+  // Dharmesh: commission keyed by staff_code, coaching keyed by name (spelt differently).
+  const commissionRuns: CommissionRunSlice[] = [
+    {
+      periodLabel: "Apr 2026",
+      createdAt: 1,
+      staff: [
+        { staffCode: "CAMRG836", staffName: "DharmeshSundara Raju", commission: 441 },
+        { staffCode: "MMH9F737", staffName: "Faisal Ramlee", commission: 2640 },
+      ],
+    },
+    {
+      periodLabel: "May 2026",
+      createdAt: 2,
+      staff: [{ staffCode: "CAMRG836", staffName: "Dharmesh S. Raju", commission: 500 }],
+    },
   ];
-  const coaching = [
-    { staffName: "Dharmesh Sundara Raju", totalIncome: 1000 },
-    { staffName: "Kah Hui Fong", totalIncome: 2000 },
-    { staffName: "New Freelancer", totalIncome: 500 },
+  const teachingRuns: TeachingRunSlice[] = [
+    { periodLabel: "Apr 2026", createdAt: 1, coaches: [{ staffName: "Dharmesh Sundara Raju", totalIncome: 1000 }] },
+    { periodLabel: "May 2026", createdAt: 2, coaches: [{ staffName: "Dharmesh Sundara Raju", totalIncome: 1200 }] },
   ];
-  const report = mergeIncome(commission, coaching);
 
-  it("combines commission + coaching for the same person across spelling differences", () => {
-    const dharmesh = report.rows.find((r) => r.staffCode === "CAMRG836")!;
-    expect(dharmesh.commission).toBe(441);
-    expect(dharmesh.coachingIncome).toBe(1000);
-    expect(dharmesh.total).toBe(1441);
-    expect(dharmesh.inCommission && dharmesh.inCoaching).toBe(true);
+  it("matches commission by staff_code and coaching by normalised name, per month", () => {
+    const r = staffEarnings(
+      matcherFor({ name: "Dharmesh Sundara Raju", staffCode: "CAMRG836", aliases: [] }),
+      commissionRuns,
+      teachingRuns,
+    );
+    expect(r.months.map((m) => m.period)).toEqual(["Apr 2026", "May 2026"]); // ordered by first save
+    const apr = r.months[0];
+    expect(apr.commission).toBe(441);
+    expect(apr.coachingIncome).toBe(1000);
+    expect(apr.total).toBe(1441);
+    expect(r.totals).toEqual({ commission: 941, coachingIncome: 2200, total: 3141 });
   });
 
-  it("keeps coaching-only people (e.g. freelancers) with no commission", () => {
-    const fl = report.rows.find((r) => r.name === "New Freelancer")!;
-    expect(fl.commission).toBe(0);
-    expect(fl.coachingIncome).toBe(500);
-    expect(fl.inCommission).toBe(false);
+  it("matches coaching by alias when the roster name differs from the export", () => {
+    const r = staffEarnings(
+      matcherFor({ name: "Faisal Ramlee", staffCode: "MMH9F737", aliases: ["Coach Faisal"] }),
+      commissionRuns,
+      [{ periodLabel: "Apr 2026", createdAt: 1, coaches: [{ staffName: "Coach Faisal", totalIncome: 300 }] }],
+    );
+    expect(r.months).toHaveLength(1);
+    expect(r.months[0]).toMatchObject({ period: "Apr 2026", commission: 2640, coachingIncome: 300, total: 2940 });
   });
 
-  it("sorts by total desc and totals correctly", () => {
-    expect(report.rows[0].name).toBe("FaisalRamlee"); // 2640
-    expect(report.totals.commission).toBe(3703);
-    expect(report.totals.coachingIncome).toBe(3500);
-    expect(report.totals.total).toBe(7203);
+  it("a later save of the same period wins; months with no match are omitted", () => {
+    const r = staffEarnings(
+      matcherFor({ name: "Dharmesh Sundara Raju", staffCode: "CAMRG836", aliases: [] }),
+      [
+        ...commissionRuns,
+        // Re-save of Apr with a corrected figure — latest createdAt wins.
+        { periodLabel: "Apr 2026", createdAt: 9, staff: [{ staffCode: "CAMRG836", staffName: "Dharmesh", commission: 450 }] },
+      ],
+      teachingRuns,
+    );
+    expect(r.months.find((m) => m.period === "Apr 2026")!.commission).toBe(450);
+  });
+
+  it("excludes people who never appear in any run", () => {
+    const r = staffEarnings(matcherFor({ name: "Nobody Here", staffCode: "", aliases: [] }), commissionRuns, teachingRuns);
+    expect(r.months).toHaveLength(0);
+    expect(r.totals.total).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
@@ -191,7 +192,11 @@ export function GymStaffRoster({ staff, canEdit }: { staff: GymStaffRecord[]; ca
           <tbody className="divide-y divide-gray-100">
             {staff.map((m) => (
               <tr key={m.id} className={m.active ? "" : "opacity-50"}>
-                <td className="px-3 py-2 font-medium text-gray-900">{m.name}</td>
+                <td className="px-3 py-2 font-medium">
+                  <Link href={`/commission/staff/${m.id}`} className="text-gray-900 hover:text-brand hover:underline">
+                    {m.name}
+                  </Link>
+                </td>
                 <td className="px-3 py-2 font-mono text-xs text-gray-500">{m.staffCode || "—"}</td>
                 <td className="px-3 py-2 text-gray-700">{gymPositionLabel(m.position)}</td>
                 <td className="px-3 py-2">
