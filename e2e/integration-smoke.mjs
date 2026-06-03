@@ -88,7 +88,63 @@ async function main() {
     Array.isArray(runs) && runs.some((r) => r.periodLabel === periodLabel),
   );
 
-  // 5. Logout returns 200 and clears the session cookie. (iron-session is
+  // 5. Gym-staff module: create a member, confirm the Directory + profile render
+  //    the new sections (search box, Details/Notes/Earnings), add an HR note and
+  //    see it on the profile, then delete the member to keep the smoke idempotent.
+  const tag = Math.floor(Math.random() * 1e6);
+  const staffName = `Smoke Trainer ${tag}`;
+  const createStaff = await fetch(`${BASE}/api/gym/staff`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      name: staffName,
+      staffCode: `SMOKE${tag}`,
+      position: "personal_trainer",
+      employmentType: "full_time",
+      email: "",
+      phone: "",
+      aliases: [],
+      active: true,
+    }),
+  });
+  const createdStaff = await createStaff.json();
+  const staffId = createdStaff.id;
+  check(
+    "POST /api/gym/staff returns 200 + id",
+    createStaff.status === 200 && typeof staffId === "number",
+    `status ${createStaff.status}`,
+  );
+
+  // The Directory (search/filter/sort) only renders once the roster is non-empty.
+  const dirHtml = await (await fetch(`${BASE}/commission/staff`, { headers: { Cookie: cookie } })).text();
+  check(
+    "staff Directory renders search box + new member",
+    dirHtml.includes("Directory") && dirHtml.includes("Search name or code") && dirHtml.includes(staffName),
+  );
+
+  const profHtml = await (await fetch(`${BASE}/commission/staff/${staffId}`, { headers: { Cookie: cookie } })).text();
+  check(
+    "profile renders Details + Notes + Earnings sections",
+    profHtml.includes("Details") && profHtml.includes("Notes") && profHtml.includes("Earnings"),
+  );
+
+  const addNote = await fetch(`${BASE}/api/gym/staff/${staffId}/notes`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ type: "coaching", title: "Smoke note", body: "", followUp: false }),
+  });
+  check("POST gym-staff note returns 200", addNote.status === 200, `status ${addNote.status}`);
+
+  const profHtml2 = await (await fetch(`${BASE}/commission/staff/${staffId}`, { headers: { Cookie: cookie } })).text();
+  check("the new note appears on the profile", profHtml2.includes("Smoke note"));
+
+  const delStaff = await fetch(`${BASE}/api/gym/staff/${staffId}`, {
+    method: "DELETE",
+    headers: { Cookie: cookie },
+  });
+  check("DELETE /api/gym/staff cleans up", delStaff.status === 200, `status ${delStaff.status}`);
+
+  // 6. Logout returns 200 and clears the session cookie. (iron-session is
   //    stateless — logout drops the cookie client-side rather than revoking the
   //    encrypted token server-side, so we assert the clearing Set-Cookie.)
   const logout = await fetch(`${BASE}/api/auth/logout`, {
