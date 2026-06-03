@@ -178,3 +178,85 @@ export function extractStaffMonth(
 
   return { commission, coaching, total: (commission?.commission ?? 0) + (coaching?.totalIncome ?? 0) };
 }
+
+export interface UnmatchedEarner {
+  /** Best-known display name (from the runs). */
+  name: string;
+  /** staff_code seen on the commission side, if any. */
+  staffCode: string;
+  source: "commission" | "coaching" | "both";
+  /** Distinct saved months this person appears in. */
+  months: number;
+  totalCommission: number;
+  totalCoaching: number;
+  total: number;
+  periods: string[];
+}
+
+/**
+ * People who earn in saved months but match NO roster member — so their income
+ * silently never surfaces under any staff page. Surfacing them lets you add them
+ * to the roster (commission keys on staff_code, coaching on name / aliases) so
+ * nobody's pay is dropped. Amounts reuse `staffEarnings` (per-month, last wins).
+ */
+export function unmatchedEarners(
+  roster: { name: string; staffCode: string; aliases?: string[] }[],
+  commissionRuns: CommissionRunSlice[],
+  teachingRuns: TeachingRunSlice[],
+): UnmatchedEarner[] {
+  const rosterCodes = new Set<string>();
+  const rosterNames = new Set<string>();
+  for (const m of roster) {
+    if (m.staffCode.trim()) rosterCodes.add(m.staffCode.trim());
+    for (const n of [m.name, ...(m.aliases ?? [])]) {
+      const k = normName(n);
+      if (k) rosterNames.add(k);
+    }
+  }
+  const commMatched = (s: { staffCode: string; staffName: string }) =>
+    (s.staffCode !== "" && rosterCodes.has(s.staffCode)) || rosterNames.has(normName(s.staffName));
+  const coachMatched = (c: { staffName: string }) => rosterNames.has(normName(c.staffName));
+
+  type Id = { name: string; code: string; inComm: boolean; inCoach: boolean };
+  const ids = new Map<string, Id>();
+  for (const run of commissionRuns) {
+    for (const s of run.staff) {
+      if (commMatched(s)) continue;
+      const key = normName(s.staffName) || s.staffCode;
+      if (!key) continue;
+      const id = ids.get(key) ?? { name: s.staffName, code: "", inComm: false, inCoach: false };
+      id.inComm = true;
+      if (!id.name && s.staffName) id.name = s.staffName;
+      if (!id.code && s.staffCode) id.code = s.staffCode;
+      ids.set(key, id);
+    }
+  }
+  for (const run of teachingRuns) {
+    for (const c of run.coaches) {
+      if (coachMatched(c)) continue;
+      const key = normName(c.staffName);
+      if (!key) continue;
+      const id = ids.get(key) ?? { name: c.staffName, code: "", inComm: false, inCoach: false };
+      id.inCoach = true;
+      if (!id.name) id.name = c.staffName;
+      ids.set(key, id);
+    }
+  }
+
+  const out: UnmatchedEarner[] = [];
+  for (const id of ids.values()) {
+    const r = staffEarnings(matcherFor({ name: id.name, staffCode: id.code, aliases: [] }), commissionRuns, teachingRuns);
+    out.push({
+      name: id.name,
+      staffCode: id.code,
+      source: id.inComm && id.inCoach ? "both" : id.inComm ? "commission" : "coaching",
+      months: r.months.length,
+      totalCommission: r.totals.commission,
+      totalCoaching: r.totals.coachingIncome,
+      total: r.totals.total,
+      periods: r.months.map((m) => m.period),
+    });
+  }
+  out.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  return out;
+}

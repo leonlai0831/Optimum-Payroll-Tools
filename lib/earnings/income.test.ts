@@ -4,6 +4,7 @@ import {
   matcherFor,
   normName,
   staffEarnings,
+  unmatchedEarners,
   type CommissionRunSlice,
   type TeachingRunSlice,
 } from "./income";
@@ -113,5 +114,46 @@ describe("extractStaffMonth", () => {
     expect(d.commission).toBeNull();
     expect(d.coaching?.totalIncome).toBe(165);
     expect(d.total).toBe(165);
+  });
+});
+
+describe("unmatchedEarners", () => {
+  const roster = [{ name: "Faisal Ramlee", staffCode: "MMH9F737", aliases: [] }];
+  const commissionRuns: CommissionRunSlice[] = [
+    {
+      periodLabel: "Apr 2026",
+      createdAt: 1,
+      staff: [
+        { staffCode: "MMH9F737", staffName: "Faisal Ramlee", commission: 2640 }, // roster-matched (code)
+        { staffCode: "GHOST1", staffName: "Ghost Person", commission: 100 }, // commission-only, unmatched
+        { staffCode: "DUO9", staffName: "Duo Coach", commission: 50 }, // also in coaching → both
+      ],
+    },
+  ];
+  const teachingRuns: TeachingRunSlice[] = [
+    {
+      periodLabel: "Apr 2026",
+      createdAt: 1,
+      coaches: [
+        { staffName: "Faisal Ramlee", totalIncome: 300 }, // roster-matched (name)
+        { staffName: "New Freelancer", totalIncome: 500 }, // coaching-only, unmatched
+        { staffName: "Duo Coach", totalIncome: 200 },
+      ],
+    },
+  ];
+  const result = unmatchedEarners(roster, commissionRuns, teachingRuns);
+
+  it("excludes roster-matched people (by code or by name)", () => {
+    expect(result.find((e) => e.name === "Faisal Ramlee")).toBeUndefined();
+  });
+
+  it("flags commission-only, coaching-only, and both — with amounts", () => {
+    expect(result.find((e) => e.name === "Ghost Person")).toMatchObject({ source: "commission", total: 100 });
+    expect(result.find((e) => e.name === "New Freelancer")).toMatchObject({ source: "coaching", totalCoaching: 500 });
+    expect(result.find((e) => e.name === "Duo Coach")).toMatchObject({ source: "both", total: 250, months: 1 });
+  });
+
+  it("sorts by total desc", () => {
+    expect(result.map((e) => e.name)).toEqual(["New Freelancer", "Duo Coach", "Ghost Person"]);
   });
 });
