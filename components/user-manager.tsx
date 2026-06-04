@@ -13,28 +13,83 @@ export interface SafeUser {
   email: string;
   role: Role;
   coachId: number | null;
+  gymStaffId: number | null;
   active: boolean;
 }
+/** An employee a login can link to — a Swim coach or an Optimum Fit gym-staff member. */
 export interface CoachOption {
   id: number;
   name: string;
+}
+export type GymStaffOption = CoachOption;
+
+/** A user links to at most one employee record (coach OR gym staff). */
+type EmployeeLink = { coachId: number | null; gymStaffId: number | null };
+
+/** Encode a link as a <select> token: "" (none) | "coach:ID" | "gym:ID". */
+function linkToken(link: EmployeeLink): string {
+  if (link.coachId != null) return `coach:${link.coachId}`;
+  if (link.gymStaffId != null) return `gym:${link.gymStaffId}`;
+  return "";
+}
+
+/** Decode a <select> token into the {coachId, gymStaffId} pair the API expects. */
+function parseLinkToken(token: string): EmployeeLink {
+  if (token.startsWith("coach:")) return { coachId: Number(token.slice(6)), gymStaffId: null };
+  if (token.startsWith("gym:")) return { coachId: null, gymStaffId: Number(token.slice(4)) };
+  return { coachId: null, gymStaffId: null };
+}
+
+/** Grouped <option>s shared by the add form and each row's link picker. */
+function EmployeeLinkOptions({
+  coaches,
+  gymStaff,
+}: {
+  coaches: CoachOption[];
+  gymStaff: GymStaffOption[];
+}) {
+  return (
+    <>
+      <option value="">— none —</option>
+      {coaches.length > 0 && (
+        <optgroup label="Swim School">
+          {coaches.map((c) => (
+            <option key={`coach:${c.id}`} value={`coach:${c.id}`}>
+              {c.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {gymStaff.length > 0 && (
+        <optgroup label="Optimum Fit">
+          {gymStaff.map((g) => (
+            <option key={`gym:${g.id}`} value={`gym:${g.id}`}>
+              {g.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  );
 }
 
 export function UserManager({
   users,
   coaches,
+  gymStaff,
   actorId,
   actorIsSuperAdmin,
 }: {
   users: SafeUser[];
   coaches: CoachOption[];
+  gymStaff: GymStaffOption[];
   actorId: number;
   actorIsSuperAdmin: boolean;
 }) {
   const roleOptions = ROLES.filter((r) => r !== "super_admin" || actorIsSuperAdmin);
   return (
     <div className="space-y-4">
-      <AddUser coaches={coaches} roleOptions={roleOptions} />
+      <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
       <Card className="overflow-hidden">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-bold text-gray-900">
           User accounts · {users.length}
@@ -56,6 +111,7 @@ export function UserManager({
                   key={u.id}
                   user={u}
                   coaches={coaches}
+                  gymStaff={gymStaff}
                   roleOptions={roleOptions}
                   isSelf={u.id === actorId}
                   actorIsSuperAdmin={actorIsSuperAdmin}
@@ -69,21 +125,29 @@ export function UserManager({
   );
 }
 
-function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions: Role[] }) {
+function AddUser({
+  coaches,
+  gymStaff,
+  roleOptions,
+}: {
+  coaches: CoachOption[];
+  gymStaff: GymStaffOption[];
+  roleOptions: Role[];
+}) {
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("staff");
-  const [coachId, setCoachId] = useState("");
+  const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
 
   function reset() {
     setEmail("");
     setPassword("");
     setRole("staff");
-    setCoachId("");
+    setLink("");
   }
 
   async function submit() {
@@ -100,7 +164,7 @@ function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions
           email: email.trim(),
           password,
           role,
-          coachId: coachId ? Number(coachId) : null,
+          ...parseLinkToken(link),
         }),
       });
       if (!res.ok) {
@@ -186,15 +250,10 @@ function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions
           <Select
             id="u-coach"
             className="mt-1"
-            value={coachId}
-            onChange={(e) => setCoachId(e.target.value)}
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
           >
-            <option value="">— none —</option>
-            {coaches.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
+            <EmployeeLinkOptions coaches={coaches} gymStaff={gymStaff} />
           </Select>
         </div>
       </div>
@@ -210,12 +269,14 @@ function AddUser({ coaches, roleOptions }: { coaches: CoachOption[]; roleOptions
 function UserRow({
   user,
   coaches,
+  gymStaff,
   roleOptions,
   isSelf,
   actorIsSuperAdmin,
 }: {
   user: SafeUser;
   coaches: CoachOption[];
+  gymStaff: GymStaffOption[];
   roleOptions: Role[];
   isSelf: boolean;
   actorIsSuperAdmin: boolean;
@@ -294,16 +355,11 @@ function UserRow({
       <td className="px-4 py-2">
         <Select
           className="w-44 py-1 text-xs"
-          value={user.coachId ?? ""}
+          value={linkToken(user)}
           disabled={busy}
-          onChange={(e) => patch({ coachId: e.target.value ? Number(e.target.value) : null })}
+          onChange={(e) => patch(parseLinkToken(e.target.value))}
         >
-          <option value="">— none —</option>
-          {coaches.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
+          <EmployeeLinkOptions coaches={coaches} gymStaff={gymStaff} />
         </Select>
       </td>
       <td className="px-4 py-2 text-center">

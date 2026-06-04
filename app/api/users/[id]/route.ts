@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
+import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { deleteUser, getUserById, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
 import { ROLES, type Role } from "@/lib/auth/types";
 
@@ -25,6 +26,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     role?: string;
     active?: boolean;
     coachId?: number | null;
+    gymStaffId?: number | null;
     password?: string;
   };
 
@@ -40,8 +42,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     patch.role = body.role as Role;
   }
   if (typeof body.active === "boolean") patch.active = body.active;
-  if (body.coachId !== undefined) {
-    patch.coachId = body.coachId == null ? null : Number(body.coachId);
+  // Only touch the employee link when the request actually carries it; setting one
+  // side (or both to null) clears the other, keeping coach/gym links exclusive.
+  if (body.coachId !== undefined || body.gymStaffId !== undefined) {
+    const link = resolveEmployeeLink(body);
+    if ("error" in link) return link.error;
+    patch.coachId = link.coachId;
+    patch.gymStaffId = link.gymStaffId;
   }
   if (typeof body.password === "string" && body.password) patch.password = body.password;
 
@@ -61,7 +68,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   const changed = [
     patch.role !== undefined && `role→${patch.role}`,
     patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
-    patch.coachId !== undefined && "linked employee",
+    (patch.coachId !== undefined || patch.gymStaffId !== undefined) && "linked employee",
     patch.password !== undefined && "password reset",
   ].filter(Boolean);
   await recordAudit({

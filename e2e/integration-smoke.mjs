@@ -138,6 +138,36 @@ async function main() {
   const profHtml2 = await (await fetch(`${BASE}/commission/staff/${staffId}`, { headers: { Cookie: cookie } })).text();
   check("the new note appears on the profile", profHtml2.includes("Smoke note"));
 
+  // 5b. Phase 4 — link a login account + role to the gym-staff record, confirm
+  //     the User-accounts API reports the link, then remove the login.
+  const linkEmail = `smoke-link-${tag}@local`;
+  const createLink = await fetch(`${BASE}/api/users`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ email: linkEmail, password: "smoke-pass", role: "staff", gymStaffId: staffId }),
+  });
+  const linkedUser = await createLink.json();
+  check(
+    "POST /api/users links a login to the gym-staff record",
+    createLink.status === 200 && typeof linkedUser.id === "number",
+    `status ${createLink.status}`,
+  );
+
+  const usersList = await (await fetch(`${BASE}/api/users`, { headers: { Cookie: cookie } })).json();
+  const linkedRow = Array.isArray(usersList) && usersList.find((u) => u.id === linkedUser.id);
+  check(
+    "the linked login carries gymStaffId + role (and no coach link)",
+    !!linkedRow && linkedRow.gymStaffId === staffId && linkedRow.coachId === null && linkedRow.role === "staff",
+  );
+
+  if (typeof linkedUser?.id === "number") {
+    const delUser = await fetch(`${BASE}/api/users/${linkedUser.id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie },
+    });
+    check("DELETE /api/users cleans up the linked login", delUser.status === 200, `status ${delUser.status}`);
+  }
+
   const delStaff = await fetch(`${BASE}/api/gym/staff/${staffId}`, {
     method: "DELETE",
     headers: { Cookie: cookie },

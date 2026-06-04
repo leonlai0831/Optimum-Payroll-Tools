@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
+import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { createUser, listUsers, recordAudit } from "@/lib/db/queries";
 import { ROLES, type Role } from "@/lib/auth/types";
 import type { UserRecord } from "@/lib/db/schema";
 
 /** Never expose the password hash to the client. */
 function safeUser(u: UserRecord) {
-  return { id: u.id, email: u.email, role: u.role, coachId: u.coachId, active: u.active };
+  return {
+    id: u.id,
+    email: u.email,
+    role: u.role,
+    coachId: u.coachId,
+    gymStaffId: u.gymStaffId,
+    active: u.active,
+  };
 }
 
 export async function GET() {
@@ -27,6 +35,7 @@ export async function POST(req: Request) {
     password?: string;
     role?: string;
     coachId?: number | null;
+    gymStaffId?: number | null;
   };
   const email = body.email?.trim();
   const password = body.password ?? "";
@@ -41,13 +50,16 @@ export async function POST(req: Request) {
   if (role === "super_admin" && actor.role !== "super_admin") {
     return NextResponse.json({ error: "Only a super admin can create a super admin." }, { status: 403 });
   }
+  const link = resolveEmployeeLink(body);
+  if ("error" in link) return link.error;
 
   try {
     const created = await createUser({
       email,
       password,
       role,
-      coachId: body.coachId == null ? null : Number(body.coachId),
+      coachId: link.coachId,
+      gymStaffId: link.gymStaffId,
     });
     await recordAudit({
       actorId: actor.id,

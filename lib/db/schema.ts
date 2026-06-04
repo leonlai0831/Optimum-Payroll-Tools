@@ -74,7 +74,10 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: text("role").$type<Role>().default("staff").notNull(),
   // Optional link to the employee record this login belongs to (no FK, matches allowanceRuns).
+  // A login belongs to at most one employee: a Swim coach (`coachId`) OR an Optimum Fit
+  // gym-staff member (`gymStaffId`) — the two are mutually exclusive, enforced at the API.
   coachId: integer("coach_id"),
+  gymStaffId: integer("gym_staff_id"),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
