@@ -24,6 +24,7 @@ export default async function StaffDirectoryPage() {
     jobRole: c.jobRole,
     employmentType: c.employmentType,
     center: c.center,
+    allowanceTier: c.allowanceTier,
     active: c.active,
   }));
 

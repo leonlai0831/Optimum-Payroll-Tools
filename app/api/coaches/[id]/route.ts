@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { deleteCoach, getCoach, recordAudit, updateCoach } from "@/lib/db/queries";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
+import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import {
   EMPLOYEE_ROLES,
   EMPLOYMENT_TYPES,
@@ -39,6 +40,12 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
   if (typeof body.active === "boolean") patch.active = body.active;
   if ((EMPLOYEE_ROLES as readonly string[]).includes(body.jobRole ?? "")) {
     patch.jobRole = body.jobRole as EmployeeRole;
+  }
+  // Rule: when the pay tier changes and no explicit role was sent, the role
+  // follows the tier (A1/A2/A3 → front desk, else instructor). An explicit
+  // jobRole in the same request always wins, so manual overrides stick.
+  if (patch.allowanceTier !== undefined && patch.jobRole === undefined) {
+    patch.jobRole = jobRoleForTier(patch.allowanceTier);
   }
   if ((EMPLOYMENT_TYPES as readonly string[]).includes(body.employmentType ?? "")) {
     patch.employmentType = body.employmentType as EmploymentType;

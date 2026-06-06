@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
+import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import {
   EMPLOYEE_ROLES,
   EMPLOYEE_ROLE_LABELS,
@@ -26,6 +27,7 @@ export interface EmployeeRow {
   jobRole: EmployeeRole;
   employmentType: EmploymentType;
   center: string;
+  allowanceTier: AllowanceTier | null;
   active: boolean;
 }
 
@@ -63,6 +65,7 @@ export function StaffDirectory({
     center1: (e) => splitCenters(e.center)[0] ?? "",
     center2: (e) => splitCenters(e.center)[1] ?? "",
     center3: (e) => splitCenters(e.center)[2] ?? "",
+    tier: (e) => e.allowanceTier ?? "",
     active: (e) => (e.active ? 1 : 0),
   });
 
@@ -141,6 +144,7 @@ export function StaffDirectory({
                     <SortTh label="Center 1" sortKey="center1" sort={sort} onSort={toggleSort} />
                     <SortTh label="Center 2" sortKey="center2" sort={sort} onSort={toggleSort} />
                     <SortTh label="Center 3" sortKey="center3" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Tier" sortKey="tier" sort={sort} onSort={toggleSort} />
                     <SortTh label="Active" sortKey="active" sort={sort} onSort={toggleSort} align="center" />
                     <th className="px-4 py-2"></th>
                   </tr>
@@ -148,14 +152,14 @@ export function StaffDirectory({
                 <tbody className="divide-y divide-gray-100">
                   {sorted.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
+                      <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
                         No employees match the current filters.
                       </td>
                     </tr>
                   ) : (
                     sorted.map((e) => (
                       <DirectoryRow
-                        key={`${e.id}-${e.center}`}
+                        key={`${e.id}-${e.jobRole}-${e.employmentType}-${e.allowanceTier ?? ""}-${e.active}-${e.center}`}
                         employee={e}
                         centers={centers}
                         canEdit={canEdit}
@@ -189,16 +193,32 @@ function DirectoryRow({
     initial[1] ?? "",
     initial[2] ?? "",
   ]);
+  const [jobRole, setJobRole] = useState<EmployeeRole>(employee.jobRole);
+  const [employmentType, setEmploymentType] = useState<EmploymentType>(employee.employmentType);
+  const [tier, setTier] = useState<AllowanceTier | "">(employee.allowanceTier ?? "");
+  const [active, setActive] = useState(employee.active);
   const [busy, setBusy] = useState(false);
 
   const joinedCenters = rowCenters
     .map((c) => c.trim())
     .filter(Boolean)
     .join(", ");
-  const dirty = joinedCenters !== splitCenters(employee.center).join(", ");
+  const dirty =
+    joinedCenters !== splitCenters(employee.center).join(", ") ||
+    jobRole !== employee.jobRole ||
+    employmentType !== employee.employmentType ||
+    (tier || null) !== employee.allowanceTier ||
+    active !== employee.active;
 
   function setCenter(i: number, value: string) {
     setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
+  }
+
+  // Rule: changing the pay tier defaults the role (A1/A2/A3 → front desk, else
+  // instructor). The role stays editable below, so an exception can be set by hand.
+  function onTierChange(value: AllowanceTier | "") {
+    setTier(value);
+    setJobRole(jobRoleForTier(value || null));
   }
 
   async function save() {
@@ -207,13 +227,19 @@ function DirectoryRow({
       const res = await fetch(`/api/coaches/${employee.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ center: joinedCenters }),
+        body: JSON.stringify({
+          center: joinedCenters,
+          jobRole,
+          employmentType,
+          allowanceTier: tier || null,
+          active,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error || "Save failed");
       }
-      toast.success("Centers updated.");
+      toast.success("Saved.");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -223,14 +249,46 @@ function DirectoryRow({
   }
 
   return (
-    <tr className={cn(!employee.active && "bg-gray-50/60 opacity-60")}>
+    <tr className={cn(!active && "bg-gray-50/60 opacity-60")}>
       <td className="px-4 py-2 font-medium">
         <Link href={`/staff/${employee.id}`} className="text-indigo-700 hover:underline">
           {employee.name}
         </Link>
       </td>
-      <td className="px-4 py-2 text-gray-700">{EMPLOYEE_ROLE_LABELS[employee.jobRole]}</td>
-      <td className="px-4 py-2 text-gray-700">{EMPLOYMENT_TYPE_LABELS[employee.employmentType]}</td>
+      <td className="px-4 py-1.5">
+        {canEdit ? (
+          <Select
+            className="w-32 py-1 text-xs"
+            value={jobRole}
+            onChange={(e) => setJobRole(e.target.value as EmployeeRole)}
+          >
+            {EMPLOYEE_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {EMPLOYEE_ROLE_LABELS[r]}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <span className="text-gray-700">{EMPLOYEE_ROLE_LABELS[employee.jobRole]}</span>
+        )}
+      </td>
+      <td className="px-4 py-1.5">
+        {canEdit ? (
+          <Select
+            className="w-28 py-1 text-xs"
+            value={employmentType}
+            onChange={(e) => setEmploymentType(e.target.value as EmploymentType)}
+          >
+            {EMPLOYMENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {EMPLOYMENT_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <span className="text-gray-700">{EMPLOYMENT_TYPE_LABELS[employee.employmentType]}</span>
+        )}
+      </td>
       {[0, 1, 2].map((i) =>
         canEdit ? (
           <td key={i} className="px-4 py-1.5">
@@ -248,8 +306,34 @@ function DirectoryRow({
           </td>
         ),
       )}
+      <td className="px-4 py-1.5">
+        {canEdit ? (
+          <Select
+            className="w-20 py-1 text-xs"
+            value={tier}
+            onChange={(e) => onTierChange(e.target.value as AllowanceTier | "")}
+          >
+            <option value="">—</option>
+            {ALLOWANCE_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <span className="text-gray-700">{employee.allowanceTier ?? "—"}</span>
+        )}
+      </td>
       <td className="px-4 py-2 text-center">
-        {employee.active ? (
+        {canEdit ? (
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-indigo-600"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            title={active ? "Active" : "Inactive"}
+          />
+        ) : active ? (
           <span className="text-green-600">●</span>
         ) : (
           <span className="text-gray-300">●</span>
@@ -408,7 +492,11 @@ function AddEmployee({ centers }: { centers: string[] }) {
             id="emp-tier"
             className="mt-1"
             value={tier}
-            onChange={(e) => setTier(e.target.value as AllowanceTier | "")}
+            onChange={(e) => {
+              const v = e.target.value as AllowanceTier | "";
+              setTier(v);
+              setJobRole(jobRoleForTier(v || null));
+            }}
           >
             <option value="">—</option>
             {ALLOWANCE_TIERS.map((t) => (

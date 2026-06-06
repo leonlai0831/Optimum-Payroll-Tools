@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ALLOWANCE_TIERS } from "./types";
-import { isLinkableTier, NON_TEACHING_TIERS, nonLinkableReason } from "./tier-rules";
+import {
+  FRONT_DESK_TIERS,
+  isLinkableTier,
+  jobRoleForTier,
+  NON_TEACHING_TIERS,
+  nonLinkableReason,
+} from "./tier-rules";
 
 describe("isLinkableTier", () => {
   it("blocks the non-teaching tiers A1/A2/A3/PA/T0", () => {
@@ -36,5 +42,29 @@ describe("nonLinkableReason", () => {
   });
   it("explains admin tiers as attendance-only", () => {
     expect(nonLinkableReason("A1")).toMatch(/admin|attendance/i);
+  });
+});
+
+describe("jobRoleForTier (A1/A2/A3 → front desk, else instructor)", () => {
+  it("maps A1/A2/A3 to front desk", () => {
+    expect(FRONT_DESK_TIERS).toEqual(["A1", "A2", "A3"]);
+    for (const t of FRONT_DESK_TIERS) {
+      expect(jobRoleForTier(t), t).toBe("front_desk");
+    }
+  });
+
+  it("maps every other tier to instructor", () => {
+    const others = ALLOWANCE_TIERS.filter(
+      (t) => !(FRONT_DESK_TIERS as readonly string[]).includes(t),
+    );
+    expect(others.length).toBeGreaterThan(0);
+    for (const t of others) {
+      expect(jobRoleForTier(t), t).toBe("instructor");
+    }
+  });
+
+  it("treats an unset tier as instructor", () => {
+    expect(jobRoleForTier(null)).toBe("instructor");
+    expect(jobRoleForTier(undefined)).toBe("instructor");
   });
 });

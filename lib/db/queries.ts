@@ -79,6 +79,7 @@ import {
   type OtherAllowanceItem,
 } from "@/lib/allowance/types";
 import { previousPeriod } from "@/lib/allowance/period";
+import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 
 export function defaultConfig(): AppConfig {
   return {
@@ -228,7 +229,9 @@ export async function createCoach(input: {
     .insert(coaches)
     .values({
       canonicalName: input.canonicalName.trim(),
-      jobRole: input.jobRole ?? "instructor",
+      // Rule: A1/A2/A3 are front desk, every other tier is an instructor. The
+      // tier-derived role is only a default — an explicit jobRole always wins.
+      jobRole: input.jobRole ?? jobRoleForTier(input.allowanceTier ?? null),
       employmentType: input.employmentType ?? "full_time",
       center: input.center?.trim() ?? "",
       allowanceTier: input.allowanceTier ?? null,

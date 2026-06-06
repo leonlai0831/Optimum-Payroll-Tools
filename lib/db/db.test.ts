@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import type { RunCoach } from "../types";
 
 // Use an in-memory PGlite for tests (no POSTGRES_URL, no on-disk dev DB).
@@ -167,6 +169,46 @@ describe("DB layer (PGlite in-memory)", () => {
 
     const names = await queries.listAllCsvAccountNames();
     expect(names).toContain("CHAM - YL [PJ]");
+  });
+
+  it("derives the job role from the pay tier on create (A1/A2/A3 → front desk)", async () => {
+    const fd = await queries.createCoach({ canonicalName: "FRONT DESK A1", allowanceTier: "A1" });
+    expect(fd.jobRole).toBe("front_desk");
+
+    const inst = await queries.createCoach({ canonicalName: "TEACHER T1", allowanceTier: "T1" });
+    expect(inst.jobRole).toBe("instructor");
+
+    const noTier = await queries.createCoach({ canonicalName: "NO TIER YET" });
+    expect(noTier.jobRole).toBe("instructor");
+
+    // An explicit role always wins over the tier-derived default.
+    const override = await queries.createCoach({
+      canonicalName: "A1 BUT INSTRUCTOR",
+      allowanceTier: "A1",
+      jobRole: "instructor",
+    });
+    expect(override.jobRole).toBe("instructor");
+  });
+
+  it("migration 0016 backfills the job role from the pay tier on existing rows", async () => {
+    // Seed rows whose role is WRONG for their tier (forced past the create rule).
+    await queries.createCoach({ canonicalName: "MIG A2 WRONG", allowanceTier: "A2", jobRole: "instructor" });
+    await queries.createCoach({ canonicalName: "MIG T2 WRONG", allowanceTier: "T2", jobRole: "front_desk" });
+    await queries.createCoach({ canonicalName: "MIG NONE WRONG", jobRole: "front_desk" });
+
+    // Run the actual migration SQL file (catches typos in the shipped statements).
+    const { getDb } = await import("./index");
+    const db = await getDb();
+    const file = readFileSync("lib/db/migrations/0016_front_desk_tier_rule.sql", "utf8");
+    for (const chunk of file.split("--> statement-breakpoint")) {
+      const stmt = chunk.replace(/^\s*--.*$/gm, "").trim();
+      if (stmt) await db.execute(sql.raw(stmt));
+    }
+
+    const byName = Object.fromEntries((await queries.listCoaches()).map((c) => [c.canonicalName, c.jobRole]));
+    expect(byName["MIG A2 WRONG"]).toBe("front_desk"); // A2 → front desk
+    expect(byName["MIG T2 WRONG"]).toBe("instructor"); // T2 → instructor
+    expect(byName["MIG NONE WRONG"]).toBe("instructor"); // no tier → instructor
   });
 
   it("creates, lists (newest first), and deletes gym-staff notes scoped to the member", async () => {
