@@ -3,7 +3,6 @@ import { ScrollText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { listAuditLog } from "@/lib/db/queries";
-import { SectionNav } from "@/components/section-nav";
 import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 
@@ -18,9 +17,7 @@ export default async function AuditPage() {
   const entries = await listAuditLog();
 
   return (
-    <div className="fade-in space-y-4">
-      <SectionNav section="staff" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
-
+    <>
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
           <ScrollText className="h-4 w-4 text-indigo-500" />
@@ -68,6 +65,6 @@ export default async function AuditPage() {
           </div>
         )}
       </Card>
-    </div>
+    </>
   );
 }

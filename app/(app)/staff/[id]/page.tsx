@@ -8,7 +8,6 @@ import {
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
-import { SectionNav } from "@/components/section-nav";
 import {
   CoachProfileView,
   type AllowancePoint,
@@ -78,21 +77,18 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
   }));
 
   return (
-    <div className="fade-in space-y-4">
-      <SectionNav section="staff" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
-      <CoachProfileView
-        coach={coachProfile}
-        centers={config.centers}
-        canEdit={caps.has("edit_staff")}
-        backHref={canViewAll ? "/staff" : undefined}
-        kpi={kpi}
-        allowance={allowancePoints}
-        appraisals={appraisalViews}
-        dimensions={perfConfig.dimensions}
-        canEditAppraisals={caps.has("edit_appraisals")}
-        notes={noteViews}
-        canEditNotes={caps.has("edit_notes")}
-      />
-    </div>
+    <CoachProfileView
+      coach={coachProfile}
+      centers={config.centers}
+      canEdit={caps.has("edit_staff")}
+      backHref={canViewAll ? "/staff" : undefined}
+      kpi={kpi}
+      allowance={allowancePoints}
+      appraisals={appraisalViews}
+      dimensions={perfConfig.dimensions}
+      canEditAppraisals={caps.has("edit_appraisals")}
+      notes={noteViews}
+      canEditNotes={caps.has("edit_notes")}
+    />
   );
 }

@@ -5,8 +5,6 @@ import { getRun } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
 import { Badge, Card } from "@/components/ui";
-import { SectionNav } from "@/components/section-nav";
-import { sectionNavProps } from "@/lib/auth/section-nav-props";
 import { DeleteRunButton } from "@/components/delete-run-button";
 import { RunReview } from "@/components/run-review";
 import { RunDigest } from "@/components/run-digest";
@@ -28,7 +26,6 @@ export default async function RunDetailPage({
 
   const isDraft = run.status === "draft";
   const canFinalize = await userCan(user, "finalize_kpi");
-  const navProps = await sectionNavProps();
   const coaches = [...run.coachResults].sort((a, b) => b.finalScore - a.finalScore);
   const totalPayout = coaches.reduce((s, c) => s + (c.payout || 0), 0);
 
@@ -60,8 +57,7 @@ export default async function RunDetailPage({
   // Editable management review — admin / super_admin on a draft month.
   if (isDraft && canFinalize) {
     return (
-      <div className="fade-in space-y-4">
-        <SectionNav section="kpi" {...navProps} />
+      <>
         {header}
         <RunReview
           run={{
@@ -73,14 +69,13 @@ export default async function RunDetailPage({
             coachResults: run.coachResults,
           }}
         />
-      </div>
+      </>
     );
   }
 
   // Read-only snapshot (finalized, or a draft viewed without finalize rights).
   return (
-    <div className="fade-in space-y-4">
-      <SectionNav section="kpi" {...navProps} />
+    <>
       {header}
 
       {isDraft && !canFinalize && (
@@ -149,6 +144,6 @@ export default async function RunDetailPage({
           </tbody>
         </table>
       </Card>
-    </div>
+    </>
   );
 }

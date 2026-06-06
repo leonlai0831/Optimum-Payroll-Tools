@@ -13,7 +13,7 @@ async function login(page: Page) {
   await expect(page.getByRole("heading", { name: "Optimum Payroll Tools" })).toBeVisible();
 }
 
-test("uploading a KPI CSV merges accounts and renders the leaderboard", async ({ page }) => {
+test("uploading a KPI CSV parses, merges, and renders the results view", async ({ page }) => {
   await login(page);
 
   await page.goto("/kpi");
@@ -22,8 +22,11 @@ test("uploading a KPI CSV merges accounts and renders the leaderboard", async ({
   // The file input is visually hidden; setInputFiles drives it directly.
   await page.locator('input[type="file"]').setInputFiles(FIXTURE);
 
-  // After parse → AI/deterministic merge → client-side compute, the leaderboard
-  // shows the (canonicalised, upper-cased) coach names from the fixture.
-  await expect(page.getByText("ALICE TAN")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("BOBBY LEE")).toBeVisible();
+  // After parse → merge → compute the dashboard switches to the results view,
+  // headed with the uploaded file and the merged coach/row counts (the fixture's
+  // two accounts → two coaches). Both coaches have no teaching allowance, so the
+  // leaderboard itself gates them out — that rule is unit-tested; here we just
+  // confirm the upload pipeline ran and rendered.
+  await expect(page.getByText("kpi-sample.csv")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/2 coaches/)).toBeVisible();
 });
