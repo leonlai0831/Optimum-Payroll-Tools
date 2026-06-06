@@ -4,13 +4,13 @@ Working notes for in-flight initiatives — enough for a fresh session (or a
 teammate) to pick up without replaying chat history. `main` is the source of
 truth; this file only records **intent** and **what's left**.
 
-## Gym-staff module → Swim-School staff parity
+## Gym-staff module → Swim-School staff parity — ✅ COMPLETE
 
-Bring the Optimum Fit gym-staff module (`/commission/staff`) up to the same shape
-as the Swim-School staff module (`/staff`). Scope agreed with the owner:
-**directory + profile + HR notes + audit + login links** — **no appraisals**.
+Brought the Optimum Fit gym-staff module (`/commission/staff`) up to the same
+shape as the Swim-School staff module (`/staff`): **directory + profile + HR
+notes + audit + login links** — **no appraisals** (as agreed with the owner).
 
-### Architecture decisions (don't re-litigate)
+### Architecture decisions (kept, for reference)
 
 - Gym data stays **isolated** from the test-locked Swim HR tables: gym notes live
   in their own `gym_notes` table (not a polymorphic generalization of `notes`),
@@ -19,25 +19,37 @@ as the Swim-School staff module (`/staff`). Scope agreed with the owner:
   parameterized (`subjectId` + `createUrl` / `deleteBase`) so both modules render
   the same UI against their own routes/tables.
 
-### Done (merged)
+### Done (all merged)
 
 - Phase 1 — searchable / filterable / sortable directory — #50
 - Phase 2 — per-staff profile page (editable Details + Earnings) — #51
 - Phase 3 — HR notes timeline (`gym_notes`, gated by `edit_notes`, audited) — #52
+- Phase 4 — link a `gym_staff` row to a `users` login + role, in Staff → Users — #57
+- Phase 5 — gym-staff create/update/delete + note create/delete write to the
+  shared `audit_log` (surfaced at `/staff/audit`) — confirmed wired
 - CI — full suite on every PR as a visible `test` check — #53
-- Test — HTTP smoke covers the gym-staff flow (gating, browser-free) — #54
+- Tests — HTTP smoke covers the gym-staff directory/profile/notes + login-link
+  flow (browser-free) — #54, #57
 
-### Remaining
+## No active initiative
 
-- **Phase 4 — login links**: let a `gym_staff` row link to a `users` account +
-  role (mirrors how Swim coaches link to logins). Org-wide users/permissions
-  already exist; this adds the per-record link.
-- **Phase 5 — audit**: mostly already wired — gym staff update/delete and note
-  create/delete write to the shared `audit_log` (surfaced at `/staff/audit`).
-  Confirm the gym-staff **create** path is audited too; otherwise small.
+The parity work above is closed. Other things shipped to `main` recently (no
+follow-up owed):
 
-### To continue in a new session
+- **KPI CSV** — `TTL-LVL` accepted as the Total Student header — #58
+- **Pay-tier role rule** — a Swim coach's job role is **derived from the pay tier**
+  (A1/A2/A3 → Front Desk, else Instructor), not hand-set; the staff directory
+  edits Type / Pay tier / Active / Center inline. Existing rows corrected by
+  migration `0016` (applies on deploy) — #59
+- **Browser E2E re-gated** — the Playwright suite is green and **gating** again
+  (`continue-on-error` dropped); the `kpi-upload` spec was updated for the
+  allowance-gated leaderboard — #60
+- **Section-nav flicker fixed** — the KPI/Staff section nav renders in a section
+  `layout.tsx` (like commission already did), so it persists across
+  sub-navigation and permission-gated tabs no longer flicker out on load — #60
+- **Optimum Fit earnings** — the commission + coaching-income calculators were
+  dogfooded end-to-end on real exports (compute → report → save → History/Trends)
+  with no defects. Data note: commission "unattributed sales" are simply source
+  rows exported with a blank `staff_code`.
 
-> Continue the gym-staff ↔ Swim parity work. Phases 1–3 + CI + smoke are merged
-> to `main`. Next: Phase 4 = link a `gym_staff` record to a `users` account +
-> role. Keep gym data isolated; reuse/parameterize the Swim UI.
+Pick the next initiative from the owner or from `HANDOFF.md`'s suggestions.

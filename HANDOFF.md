@@ -38,13 +38,11 @@ The app is feature-complete for a first production rollout:
 
 ## Open / needs attention
 
-- **Playwright browser E2E is currently NON-GATING in CI and red.** The dev
-  sandbox can't download a browser (CDN blocked), so it couldn't be debugged
-  here. The CI `e2e` job runs it with `continue-on-error: true` and uploads the
-  HTML report + traces; the **HTTP smoke is the real gate**. **Next step:** run
-  `npm run test:e2e` on a machine with a browser, read the failing assertion (or
-  download the CI trace artifact), fix it, then drop `continue-on-error` in
-  `.github/workflows/ci.yml` to make it gating again.
+- **Playwright browser E2E is gating and green again — resolved in #60.** The
+  stale `kpi-upload` spec (it asserted coach names on the leaderboard, which now
+  hides coaches without a teaching allowance) was rewritten to assert the upload
+  → results view, and `continue-on-error` was dropped so the `e2e` job gates. CI
+  downloads its own browser; the HTTP smoke still gates alongside it.
 - **Three old branches couldn't be deleted from the sandbox** (`git push
   --delete` is rejected by this git proxy): `claude/brave-hopper-Ld9GO`,
   `claude/laughing-wright-Zj9Ri`, `claude/phase-3-continuation-DAy4I`. Delete
@@ -79,8 +77,8 @@ check is green → sign in. Migrations auto-apply on first DB connect.
 
 ## Suggested next development (priority order)
 
-1. **Finish browser E2E** — make the Playwright suite green (debug locally), then
-   re-gate it. Small, finishes in-flight work.
+1. **Browser E2E — done (#60).** The Playwright suite is green and gating; the
+   `continue-on-error` escape hatch is gone. This item is closed.
 2. **Reporting & exports** *(highest net-new value)* — **done in PR #9** (pending
    merge): per-coach PDF payslip (`GET /api/coaches/[id]/payslip?period=…` via
    `pdf-lib` + a "Payslips" card on the staff profile) **and** the monthly
