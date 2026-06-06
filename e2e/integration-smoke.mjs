@@ -174,6 +174,39 @@ async function main() {
   });
   check("DELETE /api/gym/staff cleans up", delStaff.status === 200, `status ${delStaff.status}`);
 
+  // 5c. Swim-coach role rule: the job role is derived from the pay tier and is
+  //     never set by hand. Creating on tier A1 (with a contradictory client
+  //     role) yields front_desk; moving the tier to a teaching tier (T1) flips
+  //     the role to instructor. Cleaned up after.
+  const coachName = `Smoke Coach ${tag}`;
+  const mkCoach = await fetch(`${BASE}/api/coaches`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ canonicalName: coachName, allowanceTier: "A1", jobRole: "instructor" }),
+  });
+  const mkCoachBody = await mkCoach.json();
+  const coachId = mkCoachBody.id;
+  check("POST /api/coaches returns 200 + id", mkCoach.status === 200 && typeof coachId === "number", `status ${mkCoach.status}`);
+
+  const coachRole = async () => {
+    const all = await (await fetch(`${BASE}/api/coaches`, { headers: { Cookie: cookie } })).json();
+    return (Array.isArray(all) && all.find((c) => c.id === coachId))?.jobRole;
+  };
+  check("A1 tier forces front_desk role (client jobRole ignored)", (await coachRole()) === "front_desk");
+
+  const patchTier = await fetch(`${BASE}/api/coaches/${coachId}`, {
+    method: "PATCH",
+    headers: auth,
+    body: JSON.stringify({ allowanceTier: "T1" }),
+  });
+  check("PATCH /api/coaches tier change returns 200", patchTier.status === 200, `status ${patchTier.status}`);
+  check("changing the tier to T1 makes the role follow to instructor", (await coachRole()) === "instructor");
+
+  if (typeof coachId === "number") {
+    const delCoach = await fetch(`${BASE}/api/coaches/${coachId}`, { method: "DELETE", headers: { Cookie: cookie } });
+    check("DELETE /api/coaches cleans up", delCoach.status === 200, `status ${delCoach.status}`);
+  }
+
   // 6. Logout returns 200 and clears the session cookie. (iron-session is
   //    stateless — logout drops the cookie client-side rather than revoking the
   //    encrypted token server-side, so we assert the clearing Set-Cookie.)

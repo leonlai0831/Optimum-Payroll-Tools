@@ -230,7 +230,8 @@ export async function createCoach(input: {
     .values({
       canonicalName: input.canonicalName.trim(),
       // Rule: A1/A2/A3 are front desk, every other tier is an instructor. The
-      // tier-derived role is only a default — an explicit jobRole always wins.
+      // user-facing API never passes jobRole, so the role follows the tier; an
+      // explicit jobRole is accepted only for seeding (e.g. the migration test).
       jobRole: input.jobRole ?? jobRoleForTier(input.allowanceTier ?? null),
       employmentType: input.employmentType ?? "full_time",
       center: input.center?.trim() ?? "",

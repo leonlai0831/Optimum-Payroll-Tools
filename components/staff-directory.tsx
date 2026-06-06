@@ -193,7 +193,6 @@ function DirectoryRow({
     initial[1] ?? "",
     initial[2] ?? "",
   ]);
-  const [jobRole, setJobRole] = useState<EmployeeRole>(employee.jobRole);
   const [employmentType, setEmploymentType] = useState<EmploymentType>(employee.employmentType);
   const [tier, setTier] = useState<AllowanceTier | "">(employee.allowanceTier ?? "");
   const [active, setActive] = useState(employee.active);
@@ -203,22 +202,18 @@ function DirectoryRow({
     .map((c) => c.trim())
     .filter(Boolean)
     .join(", ");
+  // Rule: the role is derived from the pay tier (A1/A2/A3 → front desk, else
+  // instructor) and is not editable — change the tier and the role follows.
+  const derivedRole = jobRoleForTier(tier || null);
+
   const dirty =
     joinedCenters !== splitCenters(employee.center).join(", ") ||
-    jobRole !== employee.jobRole ||
     employmentType !== employee.employmentType ||
     (tier || null) !== employee.allowanceTier ||
     active !== employee.active;
 
   function setCenter(i: number, value: string) {
     setRowCenters((prev) => prev.map((c, idx) => (idx === i ? value : c)));
-  }
-
-  // Rule: changing the pay tier defaults the role (A1/A2/A3 → front desk, else
-  // instructor). The role stays editable below, so an exception can be set by hand.
-  function onTierChange(value: AllowanceTier | "") {
-    setTier(value);
-    setJobRole(jobRoleForTier(value || null));
   }
 
   async function save() {
@@ -229,7 +224,6 @@ function DirectoryRow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           center: joinedCenters,
-          jobRole,
           employmentType,
           allowanceTier: tier || null,
           active,
@@ -255,22 +249,8 @@ function DirectoryRow({
           {employee.name}
         </Link>
       </td>
-      <td className="px-4 py-1.5">
-        {canEdit ? (
-          <Select
-            className="w-32 py-1 text-xs"
-            value={jobRole}
-            onChange={(e) => setJobRole(e.target.value as EmployeeRole)}
-          >
-            {EMPLOYEE_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {EMPLOYEE_ROLE_LABELS[r]}
-              </option>
-            ))}
-          </Select>
-        ) : (
-          <span className="text-gray-700">{EMPLOYEE_ROLE_LABELS[employee.jobRole]}</span>
-        )}
+      <td className="px-4 py-2 text-gray-700" title="Set by the pay tier (A1/A2/A3 → Front Desk)">
+        {EMPLOYEE_ROLE_LABELS[derivedRole]}
       </td>
       <td className="px-4 py-1.5">
         {canEdit ? (
@@ -311,7 +291,7 @@ function DirectoryRow({
           <Select
             className="w-20 py-1 text-xs"
             value={tier}
-            onChange={(e) => onTierChange(e.target.value as AllowanceTier | "")}
+            onChange={(e) => setTier(e.target.value as AllowanceTier | "")}
           >
             <option value="">—</option>
             {ALLOWANCE_TIERS.map((t) => (
@@ -369,7 +349,6 @@ function AddEmployee({ centers }: { centers: string[] }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [jobRole, setJobRole] = useState<EmployeeRole>("instructor");
   const [employmentType, setEmploymentType] = useState<EmploymentType>("full_time");
   const [center, setCenter] = useState("");
   const [tier, setTier] = useState<AllowanceTier | "">("");
@@ -377,7 +356,6 @@ function AddEmployee({ centers }: { centers: string[] }) {
 
   function reset() {
     setName("");
-    setJobRole("instructor");
     setEmploymentType("full_time");
     setCenter("");
     setTier("");
@@ -395,7 +373,6 @@ function AddEmployee({ centers }: { centers: string[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           canonicalName: name.trim(),
-          jobRole,
           employmentType,
           center: center.trim(),
           allowanceTier: tier || null,
@@ -454,18 +431,10 @@ function AddEmployee({ centers }: { centers: string[] }) {
         </div>
         <div>
           <Label htmlFor="emp-role">Role</Label>
-          <Select
-            id="emp-role"
-            className="mt-1"
-            value={jobRole}
-            onChange={(e) => setJobRole(e.target.value as EmployeeRole)}
-          >
-            {EMPLOYEE_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {EMPLOYEE_ROLE_LABELS[r]}
-              </option>
-            ))}
-          </Select>
+          <div className="mt-1 flex h-[38px] items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-600">
+            {EMPLOYEE_ROLE_LABELS[jobRoleForTier(tier || null)]}
+            <span className="text-xs text-gray-400">· from pay tier</span>
+          </div>
         </div>
         <div>
           <Label htmlFor="emp-type">Employment</Label>
@@ -492,11 +461,7 @@ function AddEmployee({ centers }: { centers: string[] }) {
             id="emp-tier"
             className="mt-1"
             value={tier}
-            onChange={(e) => {
-              const v = e.target.value as AllowanceTier | "";
-              setTier(v);
-              setJobRole(jobRoleForTier(v || null));
-            }}
+            onChange={(e) => setTier(e.target.value as AllowanceTier | "")}
           >
             <option value="">—</option>
             {ALLOWANCE_TIERS.map((t) => (

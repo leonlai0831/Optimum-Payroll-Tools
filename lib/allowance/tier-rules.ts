@@ -24,9 +24,9 @@ export const FRONT_DESK_TIERS: readonly AllowanceTier[] = ["A1", "A2", "A3"];
 
 /**
  * The employee job role implied by a pay tier: A1/A2/A3 are front-desk staff,
- * everything else (and an unset tier) is an instructor. This is the default the
- * rule applies on create and when a tier changes; a coach's role can still be
- * overridden by hand in the staff directory/profile.
+ * everything else (and an unset tier) is an instructor. The staff APIs apply
+ * this rule on create and whenever the tier changes — the role is derived, not
+ * set by hand, so it always follows the tier.
  */
 export function jobRoleForTier(tier: AllowanceTier | null | undefined): EmployeeRole {
   return tier && (FRONT_DESK_TIERS as readonly string[]).includes(tier) ? "front_desk" : "instructor";
