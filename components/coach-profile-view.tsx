@@ -17,7 +17,6 @@ import {
 } from "recharts";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
-import { AppraisalsSection, type AppraisalView } from "@/components/appraisals-section";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
@@ -26,7 +25,6 @@ import {
   EMPLOYEE_ROLE_LABELS,
   EMPLOYMENT_TYPES,
   EMPLOYMENT_TYPE_LABELS,
-  type AppraisalDimension,
   type EmployeeRole,
   type EmploymentType,
 } from "@/lib/performance/types";
@@ -65,9 +63,6 @@ export function CoachProfileView({
   backHref,
   kpi,
   allowance,
-  appraisals,
-  dimensions,
-  canEditAppraisals,
   notes,
   canEditNotes,
 }: {
@@ -77,9 +72,6 @@ export function CoachProfileView({
   backHref?: string;
   kpi: KpiPoint[];
   allowance: AllowancePoint[];
-  appraisals: AppraisalView[];
-  dimensions: AppraisalDimension[];
-  canEditAppraisals: boolean;
   notes: NoteView[];
   canEditNotes: boolean;
 }) {
@@ -114,12 +106,6 @@ export function CoachProfileView({
         coach={coach}
         centers={centers}
         canEdit={canEdit}
-      />
-      <AppraisalsSection
-        coachId={coach.id}
-        appraisals={appraisals}
-        dimensions={dimensions}
-        canEdit={canEditAppraisals}
       />
       <NotesTimeline subjectId={coach.id} notes={notes} canEdit={canEditNotes} />
       <KpiHistoryCard kpi={kpi} />
@@ -464,7 +450,7 @@ function DetailsCard({
         onClose={() => setConfirmDelete(false)}
         onConfirm={remove}
         title={`Delete ${coach.name}?`}
-        message="Saved KPI and allowance records are kept. This profile and its appraisals/notes will be removed."
+        message="Saved KPI and allowance records are kept. This profile and its notes will be removed."
         confirmLabel="Delete profile"
         busy={busy}
       />
