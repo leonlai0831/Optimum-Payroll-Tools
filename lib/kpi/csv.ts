@@ -11,7 +11,7 @@ const HEADER_MAP: Record<keyof InstructorRow | "_skip", string[]> = {
     "instructor", "instructorname", "coach", "coachname", "trainer",
     "name", "instructor name", "tr_name", "trname",
   ],
-  TotalStudent: ["totalstudent", "totalstudents", "students", "pax", "total student", "total_student"],
+  TotalStudent: ["totalstudent", "totalstudents", "students", "pax", "total student", "total_student", "ttllvl", "ttl-lvl"],
   TotalColor: ["totalcolor", "totalcolour", "colour", "color", "total color", "ttlcolor", "ttl-color"],
   Black: ["black", "blackcap"],
   LevelUp: ["levelup", "levelups", "upgrade", "upgrades", "level up", "up"],

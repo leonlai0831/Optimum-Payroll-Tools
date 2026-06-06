@@ -48,3 +48,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# gstack browse tooling (local QA artifacts: logs, tokens, pids)
+.gstack/
