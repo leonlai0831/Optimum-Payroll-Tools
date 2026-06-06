@@ -52,6 +52,12 @@ describe("CSV mapping (ported v11.1 mapCsvHeaders)", () => {
     expect(row.Stop).toBe(4);
     expect(row.Attended).toBe(503);
   });
+
+  it("accepts TTL-LVL as a Total Student header (distinct from TTL-COLOR)", () => {
+    const [row] = mapCsvRows([{ tr_name: "X", "TTL-LVL": 88, "TTL-COLOR": 10 }]);
+    expect(row.TotalStudent).toBe(88);
+    expect(row.TotalColor).toBe(10);
+  });
 });
 
 describe("calculateScores (full integration, default personal KPI)", () => {
