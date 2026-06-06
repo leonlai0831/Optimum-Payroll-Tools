@@ -13,10 +13,24 @@
  * re-surfaced because the person moved up to a teaching tier).
  */
 
+import type { EmployeeRole } from "@/lib/performance/types";
 import type { AllowanceTier } from "./types";
 
 /** Tiers that structurally cannot hold a class, so are never KPI-linkable. */
 export const NON_TEACHING_TIERS: readonly AllowanceTier[] = ["A1", "A2", "A3", "PA", "T0"];
+
+/** Pay tiers that map to a front-desk position; every other tier is an instructor. */
+export const FRONT_DESK_TIERS: readonly AllowanceTier[] = ["A1", "A2", "A3"];
+
+/**
+ * The employee job role implied by a pay tier: A1/A2/A3 are front-desk staff,
+ * everything else (and an unset tier) is an instructor. The staff APIs apply
+ * this rule on create and whenever the tier changes — the role is derived, not
+ * set by hand, so it always follows the tier.
+ */
+export function jobRoleForTier(tier: AllowanceTier | null | undefined): EmployeeRole {
+  return tier && (FRONT_DESK_TIERS as readonly string[]).includes(tier) ? "front_desk" : "instructor";
+}
 
 /** Whether a tier is allowed to link its teaching allowance to a KPI coach. */
 export function isLinkableTier(tier: AllowanceTier | null | undefined): boolean {

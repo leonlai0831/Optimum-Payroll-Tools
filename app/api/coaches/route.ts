@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, isAuthed } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createCoach, listCoaches, recordAudit } from "@/lib/db/queries";
-import {
-  EMPLOYEE_ROLES,
-  EMPLOYMENT_TYPES,
-  type EmployeeRole,
-  type EmploymentType,
-} from "@/lib/performance/types";
+import { EMPLOYMENT_TYPES, type EmploymentType } from "@/lib/performance/types";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
 export async function GET() {
@@ -20,7 +15,6 @@ export async function POST(req: Request) {
   if (denied) return denied;
   const body = (await req.json().catch(() => ({}))) as {
     canonicalName?: string;
-    jobRole?: string;
     employmentType?: string;
     center?: string;
     allowanceTier?: string | null;
@@ -28,9 +22,6 @@ export async function POST(req: Request) {
   const name = body.canonicalName?.trim();
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
-  const jobRole = (EMPLOYEE_ROLES as readonly string[]).includes(body.jobRole ?? "")
-    ? (body.jobRole as EmployeeRole)
-    : "instructor";
   const employmentType = (EMPLOYMENT_TYPES as readonly string[]).includes(body.employmentType ?? "")
     ? (body.employmentType as EmploymentType)
     : "full_time";
@@ -40,9 +31,10 @@ export async function POST(req: Request) {
       ? (body.allowanceTier as AllowanceTier)
       : null;
 
+  // Role is not set by hand — it's derived from the pay tier (A1/A2/A3 → front
+  // desk, else instructor). `createCoach` applies the rule when no jobRole is given.
   const coach = await createCoach({
     canonicalName: name,
-    jobRole,
     employmentType,
     center: body.center,
     allowanceTier,
@@ -55,7 +47,7 @@ export async function POST(req: Request) {
       action: "coach.create",
       entity: "coach",
       entityId: coach.id,
-      summary: `Created employee "${name}" (${jobRole})`,
+      summary: `Created employee "${name}" (${coach.jobRole})`,
     });
   }
   return NextResponse.json({ ok: true, id: coach.id });

@@ -21,8 +21,8 @@ import { AppraisalsSection, type AppraisalView } from "@/components/appraisals-s
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
+import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import {
-  EMPLOYEE_ROLES,
   EMPLOYEE_ROLE_LABELS,
   EMPLOYMENT_TYPES,
   EMPLOYMENT_TYPE_LABELS,
@@ -262,7 +262,6 @@ function DetailsCard({
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(coach.name);
-  const [jobRole, setJobRole] = useState<EmployeeRole>(coach.jobRole);
   const [employmentType, setEmploymentType] = useState<EmploymentType>(coach.employmentType);
   const initialCenters = splitCenters(coach.center);
   const [rowCenters, setRowCenters] = useState<string[]>([
@@ -281,9 +280,12 @@ function DetailsCard({
     .join(", ");
   const normalizedOriginal = splitCenters(coach.center).join(", ");
 
+  // Rule: the role is derived from the pay tier (A1/A2/A3 → front desk, else
+  // instructor) and is not editable — change the tier and the role follows.
+  const derivedRole = jobRoleForTier(tier || null);
+
   const dirty =
     name.trim() !== coach.name ||
-    jobRole !== coach.jobRole ||
     employmentType !== coach.employmentType ||
     joinedCenters !== normalizedOriginal ||
     (tier || null) !== (coach.allowanceTier ?? null) ||
@@ -305,7 +307,6 @@ function DetailsCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           canonicalName: name.trim(),
-          jobRole,
           employmentType,
           center: joinedCenters,
           allowanceTier: tier || null,
@@ -357,20 +358,10 @@ function DetailsCard({
           </div>
           <div>
             <Label htmlFor="p-role">Role</Label>
-            <Select
-              id="p-role"
-              className="mt-1"
-              value={jobRole}
-              onChange={(e) => {
-                setJobRole(e.target.value as EmployeeRole);
-              }}
-            >
-              {EMPLOYEE_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {EMPLOYEE_ROLE_LABELS[r]}
-                </option>
-              ))}
-            </Select>
+            <div className="mt-1 flex h-[38px] items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-600">
+              {EMPLOYEE_ROLE_LABELS[derivedRole]}
+              <span className="text-xs text-gray-400">· from pay tier</span>
+            </div>
           </div>
           <div>
             <Label htmlFor="p-type">Employment</Label>
@@ -427,9 +418,7 @@ function DetailsCard({
               id="p-tier"
               className="mt-1"
               value={tier}
-              onChange={(e) => {
-                setTier(e.target.value as AllowanceTier | "");
-              }}
+              onChange={(e) => setTier(e.target.value as AllowanceTier | "")}
             >
               <option value="">—</option>
               {ALLOWANCE_TIERS.map((t) => (
