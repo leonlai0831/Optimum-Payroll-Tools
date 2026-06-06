@@ -21,6 +21,7 @@ import { AppraisalsSection, type AppraisalView } from "@/components/appraisals-s
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
+import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import {
   EMPLOYEE_ROLES,
   EMPLOYEE_ROLE_LABELS,
@@ -428,7 +429,11 @@ function DetailsCard({
               className="mt-1"
               value={tier}
               onChange={(e) => {
-                setTier(e.target.value as AllowanceTier | "");
+                const v = e.target.value as AllowanceTier | "";
+                setTier(v);
+                // Rule: role follows the tier (A1/A2/A3 → front desk, else
+                // instructor). Still editable above, so it can be overridden.
+                setJobRole(jobRoleForTier(v || null));
               }}
             >
               <option value="">—</option>
