@@ -88,6 +88,30 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(verifyPassword("new-pw", reread!.passwordHash)).toBe(true);
     expect(verifyPassword("old-pw", reread!.passwordHash)).toBe(false);
   });
+
+  it("links a login to a gym-staff record and switches coach/gym exclusively", async () => {
+    // Create linked to an Optimum Fit gym-staff record (Phase 4).
+    const u = await queries.createUser({
+      email: "fit-link@x.io",
+      password: "pw",
+      role: "staff",
+      gymStaffId: 42,
+    });
+    expect(u.gymStaffId).toBe(42);
+    expect(u.coachId).toBeNull();
+
+    // Switching to a Swim coach clears the gym link…
+    await queries.updateUser(u.id, { coachId: 7, gymStaffId: null });
+    let reread = await queries.getUserById(u.id);
+    expect(reread!.coachId).toBe(7);
+    expect(reread!.gymStaffId).toBeNull();
+
+    // …and switching back to gym clears the coach link.
+    await queries.updateUser(u.id, { coachId: null, gymStaffId: 99 });
+    reread = await queries.getUserById(u.id);
+    expect(reread!.gymStaffId).toBe(99);
+    expect(reread!.coachId).toBeNull();
+  });
 });
 
 describe("capability matrix (default permission config)", () => {

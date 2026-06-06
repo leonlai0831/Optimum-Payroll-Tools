@@ -1349,6 +1349,7 @@ export async function createUser(input: {
   password: string;
   role: Role;
   coachId?: number | null;
+  gymStaffId?: number | null;
 }): Promise<UserRecord> {
   const db = await getDb();
   const email = normalizeEmail(input.email);
@@ -1362,6 +1363,7 @@ export async function createUser(input: {
       passwordHash: hashPassword(input.password),
       role: input.role,
       coachId: input.coachId ?? null,
+      gymStaffId: input.gymStaffId ?? null,
     })
     .returning();
   return row;
@@ -1374,6 +1376,7 @@ export async function updateUser(
     role?: Role;
     active?: boolean;
     coachId?: number | null;
+    gymStaffId?: number | null;
     password?: string;
   },
 ): Promise<void> {
@@ -1390,6 +1393,7 @@ export async function updateUser(
   if (patch.role !== undefined) set.role = patch.role;
   if (patch.active !== undefined) set.active = patch.active;
   if (patch.coachId !== undefined) set.coachId = patch.coachId;
+  if (patch.gymStaffId !== undefined) set.gymStaffId = patch.gymStaffId;
   if (patch.password) set.passwordHash = hashPassword(patch.password);
   await db.update(users).set(set).where(eq(users.id, id));
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "gym_staff_id" integer;
