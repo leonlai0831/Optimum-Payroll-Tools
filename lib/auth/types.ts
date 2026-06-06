@@ -34,7 +34,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   edit_staff: "Edit staff profiles",
   view_all_staff: "View all staff",
   view_own: "View own profile",
-  edit_appraisals: "Create/edit appraisals",
+  edit_appraisals: "Create instructor assessments",
   edit_notes: "Create/edit notes",
   run_kpi: "Run KPI bonus",
   finalize_kpi: "Finalize KPI bonus (management review)",

@@ -1,12 +1,14 @@
-import { getLatestAppraisalOverallByCoach } from "@/lib/db/queries";
+import { getLatestAssessmentFinalByCoach } from "@/lib/db/queries";
 import { Dashboard } from "@/components/dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function KpiDashboardPage() {
-  const overallMap = await getLatestAppraisalOverallByCoach();
+  // The latest instructor-assessment final % prefills each coach's management
+  // assessment (Mgmt %). Replaces the old appraisal-overall source.
+  const finalMap = await getLatestAssessmentFinalByCoach();
   const appraisalOverall: Record<string, number> = Object.fromEntries(
-    [...overallMap.entries()].map(([coachId, overall]) => [String(coachId), overall]),
+    [...finalMap.entries()].map(([coachId, final]) => [String(coachId), Math.round(final)]),
   );
   return <Dashboard appraisalOverall={appraisalOverall} />;
 }

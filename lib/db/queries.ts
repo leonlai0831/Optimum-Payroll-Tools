@@ -7,6 +7,7 @@ import {
   allowancePeriodLocks,
   allowanceRuns,
   appraisals,
+  assessments,
   auditLog,
   coaches,
   commissionConfig,
@@ -24,6 +25,7 @@ import {
   type AllowancePeriodLockRecord,
   type AllowanceRunRecord,
   type AppraisalRecord,
+  type AssessmentRecord,
   type AuditLogRecord,
   type CoachRecord,
   type CommissionRunRecord,
@@ -45,6 +47,7 @@ import type {
   NoteType,
   PerformanceConfig,
 } from "@/lib/performance/types";
+import type { GradeKey, RatingMap } from "@/lib/assessment/types";
 import {
   DEFAULT_CENTER_KPI,
   DEFAULT_CENTER_TARGETS,
@@ -1515,6 +1518,59 @@ export async function updateAppraisal(
 export async function deleteAppraisal(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(appraisals).where(eq(appraisals.id, id));
+}
+
+// ── Instructor assessments (observation form; successor to appraisals) ────────
+
+export async function listAssessmentsForCoach(coachId: number): Promise<AssessmentRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.coachId, coachId))
+    .orderBy(desc(assessments.observedOn));
+}
+
+export async function getAssessment(id: number): Promise<AssessmentRecord | undefined> {
+  const db = await getDb();
+  const [row] = await db.select().from(assessments).where(eq(assessments.id, id)).limit(1);
+  return row;
+}
+
+export async function createAssessment(input: {
+  coachId: number;
+  observedOn: Date;
+  assessor: string;
+  classType: string;
+  poolType: string;
+  pax: number | null;
+  ratings: RatingMap;
+  totalPercent: number;
+  finalGrade: GradeKey;
+  comments: string;
+}): Promise<AssessmentRecord> {
+  const db = await getDb();
+  const [row] = await db.insert(assessments).values(input).returning();
+  return row;
+}
+
+export async function deleteAssessment(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(assessments).where(eq(assessments.id, id));
+}
+
+/** Latest assessment final % (0–100) per coach, for prefilling the KPI mgmt assessment. */
+export async function getLatestAssessmentFinalByCoach(): Promise<Map<number, number>> {
+  const db = await getDb();
+  const rows = await db
+    .select({ coachId: assessments.coachId, totalPercent: assessments.totalPercent })
+    .from(assessments)
+    .orderBy(desc(assessments.observedOn));
+  const map = new Map<number, number>();
+  for (const r of rows) {
+    if (!map.has(r.coachId)) map.set(r.coachId, r.totalPercent); // desc ⇒ first seen is latest
+  }
+  return map;
 }
 
 export async function listNotesForCoach(coachId: number): Promise<NoteRecord[]> {
