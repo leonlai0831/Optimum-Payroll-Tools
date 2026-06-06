@@ -1,13 +1,7 @@
-import { SectionNav } from "@/components/section-nav";
 import { BrandedLoader } from "@/components/branded-loader";
 
-// Must render instantly — see kpi/loading.tsx. Nav is rendered without caps for
-// this one frame; the loaded page renders the full caps-aware nav.
+// The staff layout renders the SectionNav above this Suspense boundary, so the
+// loader only replaces the page body — the nav stays put (no flicker).
 export default function Loading() {
-  return (
-    <div className="fade-in space-y-4">
-      <SectionNav section="staff" />
-      <BrandedLoader />
-    </div>
-  );
+  return <BrandedLoader />;
 }

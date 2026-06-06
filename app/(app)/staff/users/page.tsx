@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { listCoaches, listGymStaff, listUsers } from "@/lib/db/queries";
-import { SectionNav } from "@/components/section-nav";
 import {
   UserManager,
   type CoachOption,
@@ -35,15 +34,12 @@ export default async function UsersPage() {
   const gymStaffOptions: GymStaffOption[] = gymStaff.map((g) => ({ id: g.id, name: g.name }));
 
   return (
-    <div className="fade-in space-y-4">
-      <SectionNav section="staff" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
-      <UserManager
-        users={users}
-        coaches={coachOptions}
-        gymStaff={gymStaffOptions}
-        actorId={user.id}
-        actorIsSuperAdmin={user.role === "super_admin"}
-      />
-    </div>
+    <UserManager
+      users={users}
+      coaches={coachOptions}
+      gymStaff={gymStaffOptions}
+      actorId={user.id}
+      actorIsSuperAdmin={user.role === "super_admin"}
+    />
   );
 }
