@@ -19,9 +19,8 @@ export default async function RunDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const [user, run] = await Promise.all([getCurrentUser(), getRun(Number(id))]);
   if (!user) redirect("/login");
-  const run = await getRun(Number(id));
   if (!run) notFound();
 
   const isDraft = run.status === "draft";

@@ -19,16 +19,17 @@ export default async function AllowanceRunDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const run = await getAllowanceRun(Number(id));
+  const [run, user] = await Promise.all([getAllowanceRun(Number(id)), getCurrentUser()]);
   if (!run) notFound();
-  const user = await getCurrentUser();
-  const locked = await isPeriodLocked(run.periodLabel);
-  // A locked month is read-only; the Edit affordance disappears.
-  const canEdit = !locked && !!user && (await getCapabilities(user)).has("run_allowance");
   // Edit attribution + the month-relabel tool are for admins + super admins only.
   const canSeeEditor = user?.role === "admin" || user?.role === "super_admin";
   const canManage = canSeeEditor;
-  const editedBy = canSeeEditor ? (await getAllowanceSavers())[run.id] : undefined;
+  const [locked, editedBy] = await Promise.all([
+    isPeriodLocked(run.periodLabel),
+    canSeeEditor ? getAllowanceSavers().then((s) => s[run.id]) : Promise.resolve(undefined),
+  ]);
+  // A locked month is read-only; the Edit affordance disappears.
+  const canEdit = !locked && !!user && (await getCapabilities(user)).has("run_allowance");
 
   const { input, result } = run;
   const rates = run.configSnapshot.teaching[run.tier];
