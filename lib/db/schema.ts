@@ -223,7 +223,11 @@ export const assessments = pgTable("assessments", {
   finalGrade: text("final_grade").$type<GradeKey>().notNull(),
   comments: text("comments").default("").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => [index("assessments_coach_idx").on(t.coachId)]);
+}, (t) => [
+  index("assessments_coach_idx").on(t.coachId),
+  // Supports the "latest assessment per coach" lookup (filter coach_id, order observed_on).
+  index("assessments_coach_observed_idx").on(t.coachId, t.observedOn),
+]);
 
 /** A free-form HR note (recognition / disciplinary / coaching / general) on an employee. */
 export const notes = pgTable("notes", {
@@ -254,7 +258,13 @@ export const auditLog = pgTable("audit_log", {
   entityId: text("entity_id"),
   summary: text("summary").default("").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [
+  // The "who last did <action> on <entity>" attribution lookup filters by
+  // (entity, action) and orders by created_at.
+  index("audit_log_entity_action_created_idx").on(t.entity, t.action, t.createdAt),
+  // The recent-activity feed orders by created_at desc.
+  index("audit_log_created_idx").on(t.createdAt.desc()),
+]);
 
 /**
  * A finalized (locked) allowance month. One row per locked `periodLabel`; the

@@ -19,33 +19,36 @@ declare global {
 const MIGRATIONS_FOLDER = "lib/db/migrations";
 
 /** SQLSTATE codes for "object already exists" (table/schema/column/constraint). */
-const ALREADY_EXISTS_CODES = ["42P07", "42P06", "42701", "42710"];
+const ALREADY_EXISTS_CODES = new Set(["42P07", "42P06", "42701", "42710"]);
 
 /**
  * True when an error — or anything in its `cause` chain — is a Postgres
  * "already exists" error. Drizzle wraps the driver error, so the SQLSTATE `code`
- * and the "… already exists" message live on `err.cause`, not on `err` itself;
- * we must walk the chain or the check silently misses them.
+ * lives on `err.cause`, not on `err` itself; we must walk the chain or the check
+ * silently misses it. We match the `code` ONLY (not the message): a message
+ * regex is too broad and would silently swallow a genuinely-failed statement
+ * whose unrelated message happens to contain "already exists".
  */
 function isAlreadyExistsError(err: unknown): boolean {
   let cur: unknown = err;
   for (let depth = 0; cur != null && depth < 6; depth++) {
-    const e = cur as { code?: unknown; message?: unknown; cause?: unknown };
-    if (typeof e.code === "string" && ALREADY_EXISTS_CODES.includes(e.code)) return true;
-    if (typeof e.message === "string" && /already exists/i.test(e.message)) return true;
+    const e = cur as { code?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && ALREADY_EXISTS_CODES.has(e.code)) return true;
     cur = e.cause;
   }
   return false;
 }
 
 /**
- * Re-apply every migration statement individually, swallowing "already exists".
- * Used when the migration journal is out of sync with a database whose objects
- * were created out-of-band (e.g. via `drizzle-kit push`, or a journal that was
- * lost): the normal journal-based migrate() aborts on the first object that
- * already exists and so never reaches statements that ARE missing (e.g. a newer
- * table from a later migration). Applying statements one at a time creates only
- * what's absent and skips what's present.
+ * Re-apply every migration statement individually, skipping only "already
+ * exists" (matched by SQLSTATE code). Used when the migration journal is out of
+ * sync with a database whose objects were created out-of-band (e.g. via
+ * `drizzle-kit push`, or a journal that was lost): the normal journal-based
+ * migrate() aborts on the first object that already exists and so never reaches
+ * statements that ARE missing (e.g. a newer table from a later migration).
+ * Applying statements one at a time creates only what's absent and skips what's
+ * present — and every skip is logged so a genuinely-failed statement can't be
+ * swallowed unnoticed.
  */
 async function reconcileSchema(db: Pick<DB, "execute">): Promise<void> {
   const { readMigrationFiles } = await import("drizzle-orm/migrator");
@@ -56,6 +59,10 @@ async function reconcileSchema(db: Pick<DB, "execute">): Promise<void> {
         await db.execute(sql.raw(statement));
       } catch (err) {
         if (!isAlreadyExistsError(err)) throw err;
+        logger.warn("reconcileSchema skipped an already-existing object", {
+          statement,
+          err,
+        });
       }
     }
   }
