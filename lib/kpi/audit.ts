@@ -7,8 +7,13 @@
  * and flags inconsistencies a human should resolve before paying out.
  */
 
+import { linkAllowance } from "./allowance-link";
+
 export interface AuditCoach {
+  coachId: number | null;
   canonicalName: string;
+  /** The raw CSV account names merged into this coach (for alias matching). */
+  accounts: string[];
   /** The teaching allowance the KPI run actually used to compute payout. */
   teachingAllowance: number | null;
   finalScore: number;
@@ -17,9 +22,12 @@ export interface AuditCoach {
 }
 
 export interface AuditAllowanceRec {
+  coachId: number | null;
   canonicalName: string;
   /** The teaching subtotal from the allowance calculator (what *should* link). */
   teaching: number;
+  /** Account names this allowance's coach was saved under (for alias matching). */
+  aliases?: string[];
 }
 
 export type AuditKind =
@@ -41,16 +49,15 @@ function money(n: number): number {
 }
 
 /**
- * Compare a run's coaches against the month's allowance records. `allowances` is
- * keyed by canonical name (case-insensitive) to the teaching subtotal.
+ * Compare a run's coaches against the month's allowance records. Records are
+ * matched to coaches with the same deterministic ladder the leaderboard uses
+ * (`linkAllowance`: coachId / exact / normalized / account alias), so a short
+ * KPI name still finds its full-name allowance record.
  */
 export function auditRun(
   coaches: AuditCoach[],
   allowances: AuditAllowanceRec[],
 ): AuditFinding[] {
-  const byName = new Map<string, number>();
-  for (const a of allowances) byName.set(a.canonicalName.trim().toLowerCase(), a.teaching);
-
   const findings: AuditFinding[] = [];
 
   for (const c of coaches) {
@@ -79,20 +86,24 @@ export function auditRun(
 
     // 3. cross-check the teaching allowance against the allowance calculator.
     if (used > 0) {
-      const rec = byName.get(c.canonicalName.trim().toLowerCase());
-      if (rec === undefined) {
+      const rec = linkAllowance(allowances, {
+        coachId: c.coachId,
+        canonicalName: c.canonicalName,
+        accounts: c.accounts,
+      }).rec;
+      if (rec === null) {
         findings.push({
           coach: c.canonicalName,
           kind: "no_allowance_record",
           severity: "medium",
           message: `Used a teaching allowance of ${used} but has no matching allowance record this month.`,
         });
-      } else if (money(rec) !== money(used)) {
+      } else if (money(rec.teaching) !== money(used)) {
         findings.push({
           coach: c.canonicalName,
           kind: "allowance_mismatch",
           severity: "high",
-          message: `KPI used allowance ${used}, but the allowance calculator has ${money(rec)} for this coach — payout may be wrong.`,
+          message: `KPI used allowance ${used}, but the allowance calculator has ${money(rec.teaching)} for this coach — payout may be wrong.`,
         });
       }
     }
