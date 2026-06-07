@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -57,7 +58,7 @@ export const coaches = pgTable("coaches", {
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [index("coaches_name_idx").on(t.canonicalName)]);
 
 /** Singleton role→capability matrix (one row, id = 1). super_admin is not stored. */
 export const permissionConfig = pgTable("permission_config", {
@@ -95,7 +96,7 @@ export const runs = pgTable("runs", {
   configSnapshot: jsonb("config_snapshot").$type<AppConfig>().notNull(),
   coachResults: jsonb("coach_results").$type<RunCoach[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [index("runs_created_idx").on(t.createdAt)]);
 
 /** Singleton allowance rate tables (one row, id = 1). */
 export const allowanceConfig = pgTable("allowance_config", {
@@ -116,7 +117,11 @@ export const allowanceRuns = pgTable("allowance_runs", {
   result: jsonb("result").$type<AllowanceResult>().notNull(),
   configSnapshot: jsonb("config_snapshot").$type<AllowanceConfig>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [
+  index("allowance_runs_period_idx").on(t.periodLabel),
+  index("allowance_runs_period_name_idx").on(t.periodLabel, t.canonicalName),
+  index("allowance_runs_coach_idx").on(t.coachId),
+]);
 
 /** Singleton Optimum Fit commission rate bands (one row, id = 1). */
 export const commissionConfig = pgTable("commission_config", {
@@ -139,7 +144,7 @@ export const commissionRuns = pgTable("commission_runs", {
   configSnapshot: jsonb("config_snapshot").$type<CommissionConfig>().notNull(),
   summary: jsonb("summary").$type<CommissionSummary>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [index("commission_runs_period_idx").on(t.periodLabel)]);
 
 /** Singleton Optimum Fit coaching-income rates (one row, id = 1). */
 export const teachingConfig = pgTable("teaching_config", {
@@ -162,7 +167,7 @@ export const teachingRuns = pgTable("teaching_runs", {
   configSnapshot: jsonb("config_snapshot").$type<TeachingConfig>().notNull(),
   summary: jsonb("summary").$type<TeachingSummary>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [index("teaching_runs_period_idx").on(t.periodLabel)]);
 
 /**
  * Optimum Fit gym-staff roster: position (sales consultant / personal trainer /
@@ -181,7 +186,7 @@ export const gymStaff = pgTable("gym_staff", {
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [index("gym_staff_name_idx").on(t.name)]);
 
 /** A free-form HR note on a gym-staff member — the Optimum Fit parallel of `notes`. */
 export const gymNotes = pgTable("gym_notes", {
@@ -218,7 +223,7 @@ export const assessments = pgTable("assessments", {
   finalGrade: text("final_grade").$type<GradeKey>().notNull(),
   comments: text("comments").default("").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [index("assessments_coach_idx").on(t.coachId)]);
 
 /** A free-form HR note (recognition / disciplinary / coaching / general) on an employee. */
 export const notes = pgTable("notes", {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Papa from "papaparse";
 import { Download, FileUp, Link2, Save, Sparkles, TriangleAlert } from "lucide-react";
 import { Drawer } from "@/components/drawer";
 import { useToast } from "@/components/toast";
@@ -148,6 +147,8 @@ export function Dashboard({
 
   async function onFile(file: File) {
     setParsing(true);
+    // Lazy-load PapaParse (~45 KB) only when a file is actually parsed.
+    const Papa = (await import("papaparse")).default;
     Papa.parse<Record<string, unknown>>(file, {
       header: true,
       skipEmptyLines: true,
