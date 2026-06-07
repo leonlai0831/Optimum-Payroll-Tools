@@ -211,6 +211,111 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(byName["MIG NONE WRONG"]).toBe("instructor"); // no tier → instructor
   });
 
+  it("deep-merges a key missing from a nested config object (shallow spread would miss it)", async () => {
+    // Simulate an older stored config: complete at the top level, but missing a
+    // key INSIDE a nested object (`centerTargets`) — the case a one-level
+    // `{ ...defaults(), ...stored }` spread would silently drop.
+    const base = queries.defaultConfig();
+    const sampleCenter = Object.keys(base.centerTargets)[0];
+    const stored = structuredClone(base);
+    delete (stored.centerTargets as Record<string, number>)[sampleCenter];
+    // Override another nested value so we can prove stored values still win.
+    const keptCenter = Object.keys(stored.centerTargets)[0];
+    stored.centerTargets[keptCenter] = 12345;
+    await queries.saveConfig(stored);
+
+    const got = await queries.getConfig();
+    // The missing nested key is backfilled from defaults…
+    expect(got.centerTargets[sampleCenter]).toBe(base.centerTargets[sampleCenter]);
+    // …while the stored value for an existing nested key still wins.
+    expect(got.centerTargets[keptCenter]).toBe(12345);
+
+    // A config that already has every key round-trips byte-for-byte unchanged.
+    const full = queries.defaultConfig();
+    await queries.saveConfig(full);
+    expect(await queries.getConfig()).toEqual(full);
+  });
+
+  it("migration 0023 dedups + repoints coaches and dedups allowance_runs, then makes them unique", async () => {
+    const { getDb } = await import("./index");
+    const db = await getDb();
+
+    // The unique indexes already exist (the test DB ran every migration on
+    // connect), so drop them to seed the duplicates this migration must clean up.
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "coaches_name_idx"`));
+    await db.execute(sql.raw(`DROP INDEX IF EXISTS "allowance_runs_period_name_idx"`));
+
+    // Two duplicate "DUP DAN" coach rows + one unique control coach.
+    const dan1 = await queries.createCoach({ canonicalName: "DUP DAN" });
+    const dan2 = await queries.createCoach({ canonicalName: "DUP DAN" });
+    const ctrl = await queries.createCoach({ canonicalName: "SOLO SUE" });
+    const survivor = Math.min(dan1.id, dan2.id); // dedup keeps MIN(id)
+    const loser = Math.max(dan1.id, dan2.id);
+
+    // References pointing at the LOSER must be repointed to the survivor.
+    await db.execute(
+      sql.raw(`INSERT INTO "users" (email, password_hash, coach_id) VALUES ('dup@x.io', 'h', ${loser})`),
+    );
+    await db.execute(
+      sql.raw(`INSERT INTO "assessments" (coach_id, total_percent, final_grade) VALUES (${loser}, 80, 'B')`),
+    );
+    await db.execute(
+      sql.raw(`INSERT INTO "notes" (coach_id) VALUES (${loser})`),
+    );
+
+    // Two duplicate allowance_runs for the same (period, name); dedup keeps NEWEST.
+    // (PGlite's drizzle `execute` returns `{ rows }`; this test only runs there.)
+    const insertAr = async (cid: number): Promise<number> => {
+      const res = (await db.execute(
+        sql.raw(
+          `INSERT INTO "allowance_runs" (period_label, coach_id, canonical_name, tier, center, input, result, config_snapshot) ` +
+            `VALUES ('2099-01', ${cid}, 'DUP DAN', 'I3', 'HQ', '{}'::jsonb, '{}'::jsonb, '{}'::jsonb) RETURNING id`,
+        ),
+      )) as unknown as { rows: { id: number }[] };
+      return res.rows[0].id;
+    };
+    const arOldId = await insertAr(loser);
+    const arNewId = await insertAr(loser);
+    const newestArId = Math.max(arOldId, arNewId);
+
+    // Run the actual shipped migration SQL (catches typos in the statements).
+    const file = readFileSync("lib/db/migrations/0023_panoramic_changeling.sql", "utf8");
+    for (const chunk of file.split("--> statement-breakpoint")) {
+      const stmt = chunk.replace(/^\s*--.*$/gm, "").trim();
+      if (stmt) await db.execute(sql.raw(stmt));
+    }
+
+    // Exactly one DUP DAN coach remains — the survivor (MIN id).
+    const dans = (await queries.listCoaches()).filter((c) => c.canonicalName === "DUP DAN");
+    expect(dans.map((c) => c.id)).toEqual([survivor]);
+    // The control coach is untouched.
+    expect((await queries.listCoaches()).some((c) => c.id === ctrl.id)).toBe(true);
+
+    // Every reference was repointed to the survivor (nothing orphaned at the loser).
+    const orphanCounts = await Promise.all(
+      ["users", "assessments", "notes"].map(async (t) => {
+        const res = (await db.execute(
+          sql.raw(`SELECT coach_id FROM "${t}" WHERE coach_id = ${loser}`),
+        )) as unknown as { rows: unknown[] };
+        return res.rows.length;
+      }),
+    );
+    for (const n of orphanCounts) expect(n).toBe(0);
+
+    // The surviving allowance_runs row is the NEWEST and now points at the survivor coach.
+    const ar = (await db.execute(
+      sql.raw(`SELECT id, coach_id FROM "allowance_runs" WHERE period_label = '2099-01' AND canonical_name = 'DUP DAN'`),
+    )) as unknown as { rows: { id: number; coach_id: number }[] };
+    expect(ar.rows.length).toBe(1);
+    expect(ar.rows[0].id).toBe(newestArId);
+    expect(ar.rows[0].coach_id).toBe(survivor);
+
+    // The unique indexes now exist again — a fresh duplicate is rejected.
+    await expect(
+      db.execute(sql.raw(`INSERT INTO "coaches" (canonical_name) VALUES ('DUP DAN')`)),
+    ).rejects.toThrow();
+  });
+
   it("creates, lists (newest first), and deletes gym-staff notes scoped to the member", async () => {
     const aId = await queries.createGymStaff({
       name: "Faisal Ramlee",

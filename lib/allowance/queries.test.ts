@@ -166,6 +166,84 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     expect(await queries.isPeriodLocked("2026-08")).toBe(false);
   });
 
+  it("createAllowanceRunIfUnlocked: saves when unlocked, refuses (atomically) when locked", async () => {
+    const cfg = await queries.getAllowanceConfig();
+    const data = {
+      periodLabel: "2027-01",
+      input: {
+        coachId: null,
+        name: "LOCK LARRY",
+        tier: "I3" as const,
+        center: "HQ",
+        opHours: 160,
+        leaveHours: 0,
+        teachingRows: [],
+        otherItems: [],
+      },
+      result: perfect,
+      configSnapshot: cfg,
+    };
+
+    // Unlocked → saved.
+    const ok = await queries.createAllowanceRunIfUnlocked(data);
+    expect(ok.locked).toBe(false);
+    expect((await queries.listAllowanceRuns("2027-01")).length).toBe(1);
+
+    // Lock the month, then a save is refused atomically (sentinel, nothing written).
+    await queries.lockPeriod("2027-01", "boss@opt.page");
+    const blocked = await queries.createAllowanceRunIfUnlocked({
+      ...data,
+      input: { ...data.input, name: "SHOULD NOT APPEAR" },
+    });
+    expect(blocked).toEqual({ locked: true });
+    expect((await queries.listAllowanceRuns("2027-01")).map((r) => r.canonicalName)).toEqual([
+      "LOCK LARRY",
+    ]);
+
+    // Unlock → saves resume.
+    await queries.unlockPeriod("2027-01");
+    const again = await queries.createAllowanceRunIfUnlocked({
+      ...data,
+      input: { ...data.input, name: "NOW ALLOWED" },
+    });
+    expect(again.locked).toBe(false);
+    expect((await queries.listAllowanceRuns("2027-01")).map((r) => r.canonicalName).sort()).toEqual([
+      "LOCK LARRY",
+      "NOW ALLOWED",
+    ]);
+  });
+
+  it("upserts the same (period, coach) via the unique index without duplicating", async () => {
+    const cfg = await queries.getAllowanceConfig();
+    const base = {
+      periodLabel: "2027-02",
+      input: {
+        coachId: null,
+        name: "UPSERT UMA",
+        tier: "T1" as const,
+        center: "PJ",
+        opHours: 100,
+        leaveHours: 0,
+        teachingRows: [],
+        otherItems: [],
+      },
+      configSnapshot: cfg,
+    };
+    const id1 = await queries.createAllowanceRunIfUnlocked({
+      ...base,
+      result: { attendancePct: 1, attendance: 300, teaching: 0, other: 0, grandTotal: 300 },
+    });
+    const id2 = await queries.createAllowanceRunIfUnlocked({
+      ...base,
+      result: { attendancePct: 1, attendance: 300, teaching: 150, other: 0, grandTotal: 450 },
+    });
+    expect(id1.locked).toBe(false);
+    expect(id2.locked).toBe(false);
+    const list = await queries.listAllowanceRuns("2027-02");
+    expect(list.length).toBe(1); // upserted, not duplicated
+    expect(list[0].teaching).toBe(150);
+  });
+
   it("builds allowance trend data; center slices sum back to the staff total", async () => {
     const cfg = await queries.getAllowanceConfig();
     // A two-center month: teaching split across HQ and BK.
