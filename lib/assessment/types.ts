@@ -204,7 +204,7 @@ export const POOL_TYPES = ["Big pool", "Small pool"] as const;
 export type PoolType = (typeof POOL_TYPES)[number];
 
 /** Swim levels present in the class (ticked, no per-level count). */
-export const LEVELS = ["YS", "N", "B", "1", "2", "3", "4", "5", "6", "7", "A"] as const;
+export const LEVELS = ["Y1", "Y2", "N", "B", "1", "2", "3", "4", "5", "6", "7", "A"] as const;
 export type Level = (typeof LEVELS)[number];
 
 /** No. of pax dropdown range (1–MAX_PAX). */
