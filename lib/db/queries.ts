@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { and, desc, eq } from "drizzle-orm";
-import { getDb } from "./index";
+import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
   allowanceConfig,
@@ -78,6 +78,16 @@ import {
 import { previousPeriod } from "@/lib/allowance/period";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 
+/**
+ * A query executor: either the pooled `DB` or a transaction handle. The tx type
+ * is derived from `db.transaction(...)`'s callback so it's exactly compatible.
+ * Read-modify-write helpers accept this so they can run standalone (own
+ * connection) or be threaded into a caller's transaction, making the whole
+ * read→write atomic. PGlite supports `transaction` too.
+ */
+type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
+type DbOrTx = DB | Tx;
+
 export function defaultConfig(): AppConfig {
   return {
     personalKpi: structuredClone(DEFAULT_PERSONAL_KPI),
@@ -91,22 +101,37 @@ export function defaultConfig(): AppConfig {
 /** Read the singleton config, seeding defaults on first use. */
 // ── Cached singletons ─────────────────────────────────────────────────────────
 /**
- * Per-process cache for the rarely-changing singleton config rows. They're read
- * on most page loads; without this every navigation re-hits the DB (a network
- * round-trip on Neon — a big chunk of TTFB). A save invalidates this instance
- * immediately; other instances refresh within the TTL. `structuredClone` on read
- * keeps the shared cached value immutable to callers.
+ * Per-process cache for the rarely-changing singleton config rows AND the
+ * heavier run-list / trend aggregations. They're read on most page loads;
+ * without this every navigation re-hits the DB (a network round-trip on Neon — a
+ * big chunk of TTFB). A save invalidates this instance immediately; other
+ * instances refresh within the TTL.
+ *
+ * The cached value is deep-frozen once at store time and returned directly (no
+ * per-read clone). Freezing — not cloning — is what guarantees callers can't
+ * corrupt the shared value, and it's free on every subsequent read, which
+ * matters for the large run-list/trend arrays that used to be `structuredClone`d
+ * on every hit. Callers treat these results as read-only.
  */
 const SINGLETON_TTL_MS = 60_000;
 const singletonCache = new Map<string, { value: unknown; at: number }>();
 
+/** Recursively freeze an object graph so a shared cached value can't be mutated. */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value as Record<string, unknown>)) deepFreeze(v);
+  }
+  return value;
+}
+
 function memoizedSingleton<T>(key: string, read: () => Promise<T>): () => Promise<T> {
   return async () => {
     const hit = singletonCache.get(key);
-    if (hit && Date.now() - hit.at < SINGLETON_TTL_MS) return structuredClone(hit.value) as T;
-    const value = await read();
+    if (hit && Date.now() - hit.at < SINGLETON_TTL_MS) return hit.value as T;
+    const value = deepFreeze(await read());
     singletonCache.set(key, { value, at: Date.now() });
-    return structuredClone(value);
+    return value;
   };
 }
 
@@ -134,9 +159,14 @@ export async function saveConfig(data: AppConfig): Promise<void> {
   invalidateSingleton("kpi-config");
 }
 
+/** List coach profiles on a given executor (the pool or an open transaction). */
+function listCoachesWith(exec: DbOrTx): Promise<CoachRecord[]> {
+  return exec.select().from(coaches).orderBy(coaches.canonicalName);
+}
+
 export async function listCoaches(): Promise<CoachRecord[]> {
   const db = await getDb();
-  return db.select().from(coaches).orderBy(coaches.canonicalName);
+  return listCoachesWith(db);
 }
 
 /** Known aliases for merge reconciliation. */
@@ -311,10 +341,21 @@ export async function setCoachKpiLinkNa(
     .where(eq(coaches.id, id));
 }
 
-/** Permanently remove a staff profile. Saved allowance/KPI records are kept. */
+/**
+ * Permanently remove a staff profile and clean up its dependents in one
+ * transaction (no DB-level FKs exist, so we cascade by hand): unlink any login
+ * that pointed at this coach (`users.coachId → null`) and delete the coach's
+ * assessments + HR notes. Saved allowance/KPI run history and the audit log are
+ * intentionally kept — those orphans are documented as deliberate.
+ */
 export async function deleteCoach(id: number): Promise<void> {
   const db = await getDb();
-  await db.delete(coaches).where(eq(coaches.id, id));
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ coachId: null, updatedAt: new Date() }).where(eq(users.coachId, id));
+    await tx.delete(assessments).where(eq(assessments.coachId, id));
+    await tx.delete(notes).where(eq(notes.coachId, id));
+    await tx.delete(coaches).where(eq(coaches.id, id));
+  });
 }
 
 /**
@@ -323,44 +364,48 @@ export async function deleteCoach(id: number): Promise<void> {
  */
 export async function upsertCoachesFromRun(coachResults: RunCoach[]): Promise<void> {
   const db = await getDb();
-  const existing = await listCoaches();
+  // One transaction so the `listCoaches` read + conditional insert is atomic:
+  // two concurrent finalized runs can't both miss the same coach and each insert
+  // a duplicate profile.
+  await db.transaction(async (tx) => {
+    const existing = await listCoachesWith(tx);
+    for (const rc of coachResults) {
+      const match =
+        (rc.coachId && existing.find((c) => c.id === rc.coachId)) ||
+        existing.find((c) => c.canonicalName === rc.canonicalName) ||
+        existing.find((c) => c.aliases?.some((a) => rc.accounts.includes(a)));
 
-  for (const rc of coachResults) {
-    const match =
-      (rc.coachId && existing.find((c) => c.id === rc.coachId)) ||
-      existing.find((c) => c.canonicalName === rc.canonicalName) ||
-      existing.find((c) => c.aliases?.some((a) => rc.accounts.includes(a)));
+      const mergedAliases = [...new Set([...(match?.aliases ?? []), ...rc.accounts])].sort();
+      const mgmtUpdate =
+        rc.mgmtAssessment != null
+          ? { lastMgmtAssessment: rc.mgmtAssessment, lastMgmtAssessmentAt: new Date() }
+          : {};
 
-    const mergedAliases = [...new Set([...(match?.aliases ?? []), ...rc.accounts])].sort();
-    const mgmtUpdate =
-      rc.mgmtAssessment != null
-        ? { lastMgmtAssessment: rc.mgmtAssessment, lastMgmtAssessmentAt: new Date() }
-        : {};
-
-    if (match) {
-      await db
-        .update(coaches)
-        .set({
+      if (match) {
+        await tx
+          .update(coaches)
+          .set({
+            aliases: mergedAliases,
+            center: rc.center || match.center,
+            defaultPosition: rc.position,
+            lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
+            ...mgmtUpdate,
+            updatedAt: new Date(),
+          })
+          .where(eq(coaches.id, match.id));
+      } else {
+        await tx.insert(coaches).values({
+          canonicalName: rc.canonicalName,
           aliases: mergedAliases,
-          center: rc.center || match.center,
+          center: rc.center,
           defaultPosition: rc.position,
-          lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
-          ...mgmtUpdate,
-          updatedAt: new Date(),
-        })
-        .where(eq(coaches.id, match.id));
-    } else {
-      await db.insert(coaches).values({
-        canonicalName: rc.canonicalName,
-        aliases: mergedAliases,
-        center: rc.center,
-        defaultPosition: rc.position,
-        lastAllowance: rc.teachingAllowance,
-        lastMgmtAssessment: rc.mgmtAssessment ?? null,
-        lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
-      });
+          lastAllowance: rc.teachingAllowance,
+          lastMgmtAssessment: rc.mgmtAssessment ?? null,
+          lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
+        });
+      }
     }
-  }
+  });
 }
 
 /** One coach's headline result within a saved month (for the History accordion). */
@@ -615,12 +660,14 @@ export async function createCommissionRun(input: {
       summary: input.summary,
     })
     .returning({ id: commissionRuns.id });
+  invalidateSingleton("commission-trend");
   return row.id;
 }
 
 export async function deleteCommissionRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(commissionRuns).where(eq(commissionRuns.id, id));
+  invalidateSingleton("commission-trend");
 }
 
 export interface CommissionTrendData {
@@ -630,7 +677,10 @@ export interface CommissionTrendData {
 }
 
 /** Company totals + per-staff commission across saved months, for the Trends page. */
-export async function getCommissionTrendData(): Promise<CommissionTrendData> {
+// Cached: commission trend aggregation (reads every run). Invalidated on
+// commission run create/delete; the TTL also bounds staleness for this view.
+export const getCommissionTrendData = memoizedSingleton("commission-trend", _getCommissionTrendData);
+async function _getCommissionTrendData(): Promise<CommissionTrendData> {
   const db = await getDb();
   const rows = await db
     .select({ periodLabel: commissionRuns.periodLabel, summary: commissionRuns.summary })
@@ -752,12 +802,14 @@ export async function createTeachingRun(input: {
       summary: input.summary,
     })
     .returning({ id: teachingRuns.id });
+  invalidateSingleton("teaching-trend");
   return row.id;
 }
 
 export async function deleteTeachingRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(teachingRuns).where(eq(teachingRuns.id, id));
+  invalidateSingleton("teaching-trend");
 }
 
 export interface TeachingTrendData {
@@ -767,7 +819,10 @@ export interface TeachingTrendData {
 }
 
 /** Company totals + per-coach income across saved coaching months, for Trends. */
-export async function getTeachingTrendData(): Promise<TeachingTrendData> {
+// Cached: coaching-income trend aggregation (reads every run). Invalidated on
+// teaching run create/delete; the TTL also bounds staleness for this view.
+export const getTeachingTrendData = memoizedSingleton("teaching-trend", _getTeachingTrendData);
+async function _getTeachingTrendData(): Promise<TeachingTrendData> {
   const db = await getDb();
   const rows = await db
     .select({ periodLabel: teachingRuns.periodLabel, summary: teachingRuns.summary })
@@ -925,9 +980,22 @@ export async function updateGymStaff(id: number, input: GymStaffInput): Promise<
     .where(eq(gymStaff.id, id));
 }
 
+/**
+ * Permanently remove a gym-staff profile and clean up its dependents in one
+ * transaction (analogous to `deleteCoach`): unlink any login that pointed at this
+ * member (`users.gymStaffId → null`) and delete their gym HR notes. Saved
+ * commission/coaching run history and the audit log are intentionally kept.
+ */
 export async function deleteGymStaff(id: number): Promise<void> {
   const db = await getDb();
-  await db.delete(gymStaff).where(eq(gymStaff.id, id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(users)
+      .set({ gymStaffId: null, updatedAt: new Date() })
+      .where(eq(users.gymStaffId, id));
+    await tx.delete(gymNotes).where(eq(gymNotes.gymStaffId, id));
+    await tx.delete(gymStaff).where(eq(gymStaff.id, id));
+  });
 }
 
 // ── Allowance ────────────────────────────────────────────────────────────────
@@ -1031,31 +1099,47 @@ export async function saveCenters(
  * matching in `upsertCoachesFromRun`, but only touches `allowanceTier`/`center`
  * — never the KPI carry-over fields (`lastAllowance` / `lastMgmtAssessment`).
  */
-export async function ensureCoachForAllowance(opts: {
+interface EnsureCoachOpts {
   coachId: number | null;
   canonicalName: string;
   center: string;
   tier: AllowanceTier;
-}): Promise<number> {
-  const db = await getDb();
-  const existing = await listCoaches();
+}
+
+/**
+ * Executor-threaded core of `ensureCoachForAllowance`: the read + conditional
+ * insert run on whatever `exec` is passed, so a caller can supply its open
+ * transaction to make the whole resolve-or-create atomic (no duplicate profile
+ * under two concurrent same-coach saves).
+ */
+async function ensureCoachForAllowanceWith(
+  exec: DbOrTx,
+  opts: EnsureCoachOpts,
+): Promise<number> {
+  const existing = await listCoachesWith(exec);
   const match =
     (opts.coachId ? existing.find((c) => c.id === opts.coachId) : undefined) ||
     existing.find((c) => c.canonicalName === opts.canonicalName);
 
   if (match) {
-    await db
+    await exec
       .update(coaches)
       .set({ allowanceTier: opts.tier, center: match.center || opts.center, updatedAt: new Date() })
       .where(eq(coaches.id, match.id));
     return match.id;
   }
 
-  const [row] = await db
+  const [row] = await exec
     .insert(coaches)
     .values({ canonicalName: opts.canonicalName, center: opts.center, allowanceTier: opts.tier })
     .returning({ id: coaches.id });
   return row.id;
+}
+
+export async function ensureCoachForAllowance(opts: EnsureCoachOpts): Promise<number> {
+  const db = await getDb();
+  // Standalone callers get their own transaction so the read→write is atomic.
+  return db.transaction((tx) => ensureCoachForAllowanceWith(tx, opts));
 }
 
 /**
@@ -1069,36 +1153,43 @@ export async function createAllowanceRun(data: {
   configSnapshot: AllowanceConfig;
 }): Promise<number> {
   const db = await getDb();
-  const coachId = await ensureCoachForAllowance({
-    coachId: data.input.coachId,
-    canonicalName: data.input.name,
-    center: data.input.center,
-    tier: data.input.tier,
-  });
-
-  await db
-    .delete(allowanceRuns)
-    .where(
-      and(
-        eq(allowanceRuns.periodLabel, data.periodLabel),
-        eq(allowanceRuns.canonicalName, data.input.name),
-      ),
-    );
-
-  const [row] = await db
-    .insert(allowanceRuns)
-    .values({
-      periodLabel: data.periodLabel,
-      coachId,
+  // One transaction so the resolve-coach, the "replace existing (period, name)"
+  // DELETE, and the INSERT are atomic. Without it two concurrent saves of the
+  // same coach+period could both DELETE-then-INSERT and leave a duplicate row.
+  const id = await db.transaction(async (tx) => {
+    const coachId = await ensureCoachForAllowanceWith(tx, {
+      coachId: data.input.coachId,
       canonicalName: data.input.name,
-      tier: data.input.tier,
       center: data.input.center,
-      input: { ...data.input, coachId },
-      result: data.result,
-      configSnapshot: data.configSnapshot,
-    })
-    .returning({ id: allowanceRuns.id });
-  return row.id;
+      tier: data.input.tier,
+    });
+
+    await tx
+      .delete(allowanceRuns)
+      .where(
+        and(
+          eq(allowanceRuns.periodLabel, data.periodLabel),
+          eq(allowanceRuns.canonicalName, data.input.name),
+        ),
+      );
+
+    const [row] = await tx
+      .insert(allowanceRuns)
+      .values({
+        periodLabel: data.periodLabel,
+        coachId,
+        canonicalName: data.input.name,
+        tier: data.input.tier,
+        center: data.input.center,
+        input: { ...data.input, coachId },
+        result: data.result,
+        configSnapshot: data.configSnapshot,
+      })
+      .returning({ id: allowanceRuns.id });
+    return row.id;
+  });
+  invalidateSingleton("allowance-trend");
+  return id;
 }
 
 export interface AllowanceRunSummary {
@@ -1266,6 +1357,7 @@ export async function getAllowanceRun(id: number): Promise<AllowanceRunRecord | 
 export async function deleteAllowanceRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(allowanceRuns).where(eq(allowanceRuns.id, id));
+  invalidateSingleton("allowance-trend");
 }
 
 // ── Sequential-month guard + month relabel ──────────────────────────────────────
@@ -1342,6 +1434,7 @@ export async function moveAllowancePeriod(
   const db = await getDb();
   const moved = await countAllowanceRunsForPeriod(from);
   await db.update(allowanceRuns).set({ periodLabel: to }).where(eq(allowanceRuns.periodLabel, from));
+  invalidateSingleton("allowance-trend");
   return { moved, clashes: [] };
 }
 
@@ -1362,6 +1455,7 @@ export async function moveAllowanceRun(
     .where(and(eq(allowanceRuns.periodLabel, to), eq(allowanceRuns.canonicalName, run.canonicalName)));
   if (existing.some((e) => e.id !== id)) return { ok: false, clash: true, name: run.canonicalName };
   await db.update(allowanceRuns).set({ periodLabel: to }).where(eq(allowanceRuns.id, id));
+  invalidateSingleton("allowance-trend");
   return { ok: true, from: run.periodLabel, name: run.canonicalName };
 }
 
