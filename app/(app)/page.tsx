@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ClipboardCheck,
   Dumbbell,
   ShieldCheck,
   Trophy,
@@ -47,6 +48,13 @@ const TOOLS: Tool[] = [
     subtitle: "Employee directory, appraisals & notes",
     icon: Users,
     cap: "view_all_staff",
+  },
+  {
+    href: "/assessment",
+    title: "Instructor Assessment",
+    subtitle: "Observation form · scores feed the KPI bonus",
+    icon: ClipboardCheck,
+    cap: "edit_appraisals",
   },
   {
     title: "Admin KPI Bonus",

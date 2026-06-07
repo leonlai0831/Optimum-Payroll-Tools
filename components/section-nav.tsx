@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Calculator,
+  ClipboardCheck,
   Dumbbell,
   History,
   Home,
@@ -15,6 +16,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   UserCog,
   Users,
   type LucideIcon,
@@ -32,7 +34,15 @@ type SectionItem = {
 };
 type SectionConfig = { title: string; items: SectionItem[] };
 
-const NAVS: Record<"allowance" | "kpi" | "staff" | "commission", SectionConfig> = {
+const NAVS: Record<"allowance" | "kpi" | "staff" | "commission" | "assessment", SectionConfig> = {
+  assessment: {
+    title: "Instructor Assessment",
+    items: [
+      { href: "/assessment", label: "New assessment", icon: ClipboardCheck, exact: true },
+      { href: "/assessment/recent", label: "Recent", icon: History },
+      { href: "/assessment/ai", label: "AI analysis", icon: Sparkles },
+    ],
+  },
   allowance: {
     title: "Staff Allowance",
     items: [

@@ -18,6 +18,7 @@ import type {
   PerformanceConfig,
 } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
+import type { GradeKey, RatingMap } from "@/lib/assessment/types";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymEmploymentType, GymPosition } from "@/lib/gym/types";
@@ -215,6 +216,27 @@ export const appraisals = pgTable("appraisals", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * An instructor assessment (observation form). The per-criterion `ratings` and
+ * the computed `totalPercent` / `finalGrade` are snapshotted so history survives
+ * later form changes; the latest `totalPercent` per coach feeds the KPI
+ * management assessment. The successor to `appraisals`.
+ */
+export const assessments = pgTable("assessments", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coach_id").notNull(),
+  observedOn: timestamp("observed_on", { withTimezone: true }).defaultNow().notNull(),
+  assessor: text("assessor").default("").notNull(),
+  classType: text("class_type").default("").notNull(),
+  poolType: text("pool_type").default("").notNull(),
+  pax: integer("pax"),
+  ratings: jsonb("ratings").$type<RatingMap>().notNull().default({}),
+  totalPercent: real("total_percent").notNull(),
+  finalGrade: text("final_grade").$type<GradeKey>().notNull(),
+  comments: text("comments").default("").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** A free-form HR note (recognition / disciplinary / coaching / general) on an employee. */
 export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
@@ -264,6 +286,7 @@ export type UserRecord = typeof users.$inferSelect;
 export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;
 export type PerformanceConfigRecord = typeof performanceConfig.$inferSelect;
 export type AppraisalRecord = typeof appraisals.$inferSelect;
+export type AssessmentRecord = typeof assessments.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
 export type CoachRecord = typeof coaches.$inferSelect;
 export type RunRecord = typeof runs.$inferSelect;

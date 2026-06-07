@@ -51,3 +51,7 @@ next-env.d.ts
 
 # gstack browse tooling (local QA artifacts: logs, tokens, pids)
 .gstack/
+
+# Playwright e2e output (uploaded as CI artifacts, never committed)
+/test-results/
+/playwright-report/
