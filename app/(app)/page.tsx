@@ -29,14 +29,15 @@ type Tool = {
 
 const TOOLS: Tool[] = [
   {
-    href: "/allowance",
+    // Land on History first; the Calculator stays a tab inside the module.
+    href: "/allowance/history",
     title: "Staff Allowance",
     subtitle: "Full-time staff monthly allowance · start of month",
     icon: Wallet,
     cap: "run_allowance",
   },
   {
-    href: "/kpi",
+    href: "/kpi/history",
     title: "Instructor KPI Bonus",
     subtitle: "Instructor KPI score & bonus · ~mid-month",
     icon: Trophy,
