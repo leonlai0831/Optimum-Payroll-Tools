@@ -1,6 +1,6 @@
 import { getAllowanceTrendData } from "@/lib/db/queries";
 import { SectionNav } from "@/components/section-nav";
-import { AllowanceTrendsView } from "@/components/allowance-trends-view";
+import { AllowanceTrendsView } from "@/components/trends-lazy";
 
 export const dynamic = "force-dynamic";
 

@@ -11,9 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function TeachingRunDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const [user, run] = await Promise.all([getCurrentUser(), getTeachingRun(Number(id))]);
   if (!user) redirect("/login");
-  const run = await getTeachingRun(Number(id));
   if (!run) notFound();
 
   return (

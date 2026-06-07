@@ -1,6 +1,6 @@
 import { getTrendData } from "@/lib/db/queries";
 import { sectionNavProps } from "@/lib/auth/section-nav-props";
-import { TrendsView } from "@/components/trends-view";
+import { TrendsView } from "@/components/trends-lazy";
 import { RetentionView } from "@/components/retention-view";
 
 export const dynamic = "force-dynamic";
