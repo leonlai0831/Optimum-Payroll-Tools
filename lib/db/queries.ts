@@ -388,7 +388,10 @@ export interface RunSummary {
   coaches: RunCoachRow[];
 }
 
-export async function listRuns(): Promise<RunSummary[]> {
+// Cached: KPI history list. Invalidated immediately on any run save/edit/delete
+// (below), with the TTL as a backstop.
+export const listRuns = memoizedSingleton("kpi-runs", _listRuns);
+async function _listRuns(): Promise<RunSummary[]> {
   const db = await getDb();
   const rows = await db
     .select({
@@ -431,7 +434,10 @@ export interface TrendData {
 }
 
 /** Per-coach final score + payout across all saved months, for the Trends page. */
-export async function getTrendData(): Promise<TrendData> {
+// Cached: KPI trend aggregation (reads every run). Invalidated on run changes;
+// the TTL also bounds staleness for this analytical view.
+export const getTrendData = memoizedSingleton("kpi-trend", _getTrendData);
+async function _getTrendData(): Promise<TrendData> {
   const db = await getDb();
   const rows = await db
     .select({
@@ -497,6 +503,8 @@ export async function createRun(input: {
   // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
   // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
   if (status === "finalized") await upsertCoachesFromRun(input.coachResults);
+  invalidateSingleton("kpi-runs");
+  invalidateSingleton("kpi-trend");
   return row.id;
 }
 
@@ -512,11 +520,15 @@ export async function updateRunReview(
   const db = await getDb();
   await db.update(runs).set({ coachResults, status }).where(eq(runs.id, id));
   if (status === "finalized") await upsertCoachesFromRun(coachResults);
+  invalidateSingleton("kpi-runs");
+  invalidateSingleton("kpi-trend");
 }
 
 export async function deleteRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(runs).where(eq(runs.id, id));
+  invalidateSingleton("kpi-runs");
+  invalidateSingleton("kpi-trend");
 }
 
 // ── Commission (Optimum Fit) ──────────────────────────────────────────────────
@@ -1138,7 +1150,10 @@ export interface AllowanceTrendData {
  * taught that month. A record with no teaching rows is attributed whole to its
  * center label. Per-period center slices therefore sum back to the staff total.
  */
-export async function getAllowanceTrendData(): Promise<AllowanceTrendData> {
+// Cached: allowance trend aggregation. TTL-bounded (≤60s) — fine for an
+// analytical view; the allowance history list itself is never cached.
+export const getAllowanceTrendData = memoizedSingleton("allowance-trend", _getAllowanceTrendData);
+async function _getAllowanceTrendData(): Promise<AllowanceTrendData> {
   const db = await getDb();
   const rows = await db
     .select({
