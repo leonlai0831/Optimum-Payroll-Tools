@@ -89,7 +89,32 @@ export function defaultConfig(): AppConfig {
 }
 
 /** Read the singleton config, seeding defaults on first use. */
-export const getConfig = cache(async (): Promise<AppConfig> => {
+// ── Cached singletons ─────────────────────────────────────────────────────────
+/**
+ * Per-process cache for the rarely-changing singleton config rows. They're read
+ * on most page loads; without this every navigation re-hits the DB (a network
+ * round-trip on Neon — a big chunk of TTFB). A save invalidates this instance
+ * immediately; other instances refresh within the TTL. `structuredClone` on read
+ * keeps the shared cached value immutable to callers.
+ */
+const SINGLETON_TTL_MS = 60_000;
+const singletonCache = new Map<string, { value: unknown; at: number }>();
+
+function memoizedSingleton<T>(key: string, read: () => Promise<T>): () => Promise<T> {
+  return async () => {
+    const hit = singletonCache.get(key);
+    if (hit && Date.now() - hit.at < SINGLETON_TTL_MS) return structuredClone(hit.value) as T;
+    const value = await read();
+    singletonCache.set(key, { value, at: Date.now() });
+    return structuredClone(value);
+  };
+}
+
+function invalidateSingleton(key: string): void {
+  singletonCache.delete(key);
+}
+
+export const getConfig = memoizedSingleton("kpi-config", async (): Promise<AppConfig> => {
   const db = await getDb();
   const rows = await db.select().from(config).where(eq(config.id, 1)).limit(1);
   // Backfill top-level keys added after a row was first written (e.g. `classify`)
@@ -106,6 +131,7 @@ export async function saveConfig(data: AppConfig): Promise<void> {
     .insert(config)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: config.id, set: { data, updatedAt: new Date() } });
+  invalidateSingleton("kpi-config");
 }
 
 export async function listCoaches(): Promise<CoachRecord[]> {
@@ -468,7 +494,7 @@ export async function deleteRun(id: number): Promise<void> {
 // ── Commission (Optimum Fit) ──────────────────────────────────────────────────
 
 /** Read the singleton commission rate bands, seeding spec defaults on first use. */
-export const getCommissionConfig = cache(async (): Promise<CommissionConfig> => {
+export const getCommissionConfig = memoizedSingleton("commission-config", async (): Promise<CommissionConfig> => {
   const db = await getDb();
   const rows = await db
     .select()
@@ -487,6 +513,7 @@ export async function saveCommissionConfig(data: CommissionConfig): Promise<void
     .insert(commissionConfig)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: commissionConfig.id, set: { data, updatedAt: new Date() } });
+  invalidateSingleton("commission-config");
 }
 
 export interface CommissionRunSummary {
@@ -606,7 +633,7 @@ export async function getCommissionTrendData(): Promise<CommissionTrendData> {
 // ── Coaching income (Optimum Fit) ─────────────────────────────────────────────
 
 /** Read the singleton coaching-income rates, seeding spec defaults on first use. */
-export const getTeachingConfig = cache(async (): Promise<TeachingConfig> => {
+export const getTeachingConfig = memoizedSingleton("teaching-config", async (): Promise<TeachingConfig> => {
   const db = await getDb();
   const rows = await db.select().from(teachingConfig).where(eq(teachingConfig.id, 1)).limit(1);
   if (rows[0]) return { ...defaultTeachingConfig(), ...rows[0].data };
@@ -621,6 +648,7 @@ export async function saveTeachingConfig(data: TeachingConfig): Promise<void> {
     .insert(teachingConfig)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: teachingConfig.id, set: { data, updatedAt: new Date() } });
+  invalidateSingleton("teaching-config");
 }
 
 // Saved coaching-income months (mirror of commission runs).
@@ -865,7 +893,7 @@ export async function deleteGymStaff(id: number): Promise<void> {
 // ── Allowance ────────────────────────────────────────────────────────────────
 
 /** Read the singleton allowance rate tables, seeding defaults on first use. */
-export const getAllowanceConfig = cache(async (): Promise<AllowanceConfig> => {
+export const getAllowanceConfig = memoizedSingleton("allowance-config", async (): Promise<AllowanceConfig> => {
   const db = await getDb();
   const rows = await db
     .select()
@@ -891,6 +919,7 @@ export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> 
     .insert(allowanceConfig)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: allowanceConfig.id, set: { data, updatedAt: new Date() } });
+  invalidateSingleton("allowance-config");
 }
 
 /**
@@ -899,6 +928,7 @@ export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> 
  * them, even if the payload carries a stale or empty `centers` array.
  */
 export async function saveAllowanceRates(payload: AllowanceConfig): Promise<void> {
+  invalidateSingleton("allowance-config"); // read-modify-write — never merge onto a stale cache
   const current = await getAllowanceConfig();
   await saveAllowanceConfig({ ...payload, centers: current.centers });
 }
@@ -908,6 +938,7 @@ export async function saveAllowanceRates(payload: AllowanceConfig): Promise<void
  * Trims, drops blanks, and dedupes (order-preserving).
  */
 export async function saveCenters(centers: readonly unknown[]): Promise<void> {
+  invalidateSingleton("allowance-config"); // read-modify-write — never merge onto a stale cache
   const normalized = [...new Set(centers.map((c) => String(c).trim()).filter(Boolean))];
   const current = await getAllowanceConfig();
   await saveAllowanceConfig({ ...current, centers: normalized });
@@ -1459,7 +1490,7 @@ export function normalizePermissionConfig(data: PermissionConfig): PermissionCon
 }
 
 /** Read the singleton permission matrix, seeding defaults on first use. */
-export const getPermissionConfig = cache(async (): Promise<PermissionConfig> => {
+export const getPermissionConfig = memoizedSingleton("permission-config", async (): Promise<PermissionConfig> => {
   const db = await getDb();
   const rows = await db
     .select()
@@ -1478,6 +1509,7 @@ export async function savePermissionConfig(data: PermissionConfig): Promise<void
     .insert(permissionConfig)
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: permissionConfig.id, set: { data, updatedAt: new Date() } });
+  invalidateSingleton("permission-config");
 }
 
 // ── Instructor assessments (observation form) ────────────────────────────────
