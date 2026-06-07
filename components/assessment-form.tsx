@@ -3,12 +3,16 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, RotateCcw, Save } from "lucide-react";
-import { Button, Card, Input, Label, Spinner, Textarea } from "@/components/ui";
+import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
 import {
   ASSESSMENT_FORM,
+  CLASS_TYPES,
   GRADE_LABEL,
+  LEVELS,
+  MAX_PAX,
+  POOL_TYPES,
   RATINGS,
   RATING_LABELS,
   type Rating,
@@ -28,24 +32,23 @@ export interface InstructorOption {
  * the 4-point scale (scores recompute live), add comments, and save. The server
  * recomputes + snapshots the score, which feeds that instructor's KPI Mgmt %.
  */
-export function AssessmentForm({
-  instructors,
-  assessorDefault,
-}: {
-  instructors: InstructorOption[];
-  assessorDefault: string;
-}) {
+export function AssessmentForm({ instructors }: { instructors: InstructorOption[] }) {
   const router = useRouter();
   const toast = useToast();
   const [coachId, setCoachId] = useState<number | null>(null);
   const [classType, setClassType] = useState("");
   const [poolType, setPoolType] = useState("");
+  const [levels, setLevels] = useState<string[]>([]);
   const [pax, setPax] = useState("");
-  const [assessor, setAssessor] = useState(assessorDefault);
+  const [hasHelper, setHasHelper] = useState(false);
   const [observedOn, setObservedOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [ratings, setRatings] = useState<RatingMap>({});
   const [comments, setComments] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function toggleLevel(lvl: string) {
+    setLevels((prev) => (prev.includes(lvl) ? prev.filter((l) => l !== lvl) : [...prev, lvl]));
+  }
 
   const result = useMemo(() => computeAssessment(ratings), [ratings]);
   const subScore = (key: string) =>
@@ -60,7 +63,9 @@ export function AssessmentForm({
     setCoachId(null);
     setClassType("");
     setPoolType("");
+    setLevels([]);
     setPax("");
+    setHasHelper(false);
     setObservedOn(new Date().toISOString().slice(0, 10));
     setRatings({});
     setComments("");
@@ -79,10 +84,11 @@ export function AssessmentForm({
         body: JSON.stringify({
           coachId,
           observedOn,
-          assessor: assessor.trim(),
-          classType: classType.trim(),
-          poolType: poolType.trim(),
-          pax: pax.trim() ? Number(pax) : null,
+          classType,
+          poolType,
+          levels,
+          pax: pax ? Number(pax) : null,
+          hasHelper,
           ratings,
           comments: comments.trim(),
         }),
@@ -117,24 +123,76 @@ export function AssessmentForm({
           />
         </div>
         <div>
-          <Label htmlFor="a-class">Class type / Level</Label>
-          <Input id="a-class" className="mt-1" value={classType} onChange={(e) => setClassType(e.target.value)} placeholder="LVL 1" />
+          <Label htmlFor="a-class">Class type</Label>
+          <Select id="a-class" className="mt-1" value={classType} onChange={(e) => setClassType(e.target.value)}>
+            <option value="">Select class type…</option>
+            {CLASS_TYPES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <Label htmlFor="a-pool">Pool type</Label>
-          <Input id="a-pool" className="mt-1" value={poolType} onChange={(e) => setPoolType(e.target.value)} placeholder="Big pool" />
+          <Select id="a-pool" className="mt-1" value={poolType} onChange={(e) => setPoolType(e.target.value)}>
+            <option value="">Select pool…</option>
+            {POOL_TYPES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <Label htmlFor="a-pax">No. of pax</Label>
-          <Input id="a-pax" type="number" min={0} className="mt-1" value={pax} onChange={(e) => setPax(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="a-assessor">Assessor</Label>
-          <Input id="a-assessor" className="mt-1" value={assessor} onChange={(e) => setAssessor(e.target.value)} />
+          <Select id="a-pax" className="mt-1" value={pax} onChange={(e) => setPax(e.target.value)}>
+            <option value="">—</option>
+            {Array.from({ length: MAX_PAX }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <Label htmlFor="a-date">Date</Label>
           <Input id="a-date" type="date" className="mt-1" value={observedOn} onChange={(e) => setObservedOn(e.target.value)} />
+        </div>
+        <div className="flex items-end">
+          <label className="flex cursor-pointer items-center gap-2 pb-1.5 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-indigo-600"
+              checked={hasHelper}
+              onChange={(e) => setHasHelper(e.target.checked)}
+            />
+            Has helper
+          </label>
+        </div>
+      </div>
+
+      {/* Levels present in the class (ticked, no per-level count) */}
+      <div className="mt-3">
+        <Label>Levels</Label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {LEVELS.map((lvl) => {
+            const on = levels.includes(lvl);
+            return (
+              <label
+                key={lvl}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-1 text-sm ${on ? "border-indigo-300 bg-indigo-50" : "border-gray-200"}`}
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-indigo-600"
+                  checked={on}
+                  onChange={() => toggleLevel(lvl)}
+                />
+                <span className="font-medium text-gray-800">{lvl}</span>
+              </label>
+            );
+          })}
         </div>
       </div>
 

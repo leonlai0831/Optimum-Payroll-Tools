@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createAssessment, recordAudit } from "@/lib/db/queries";
 import { computeAssessment } from "@/lib/assessment/calc";
-import type { RatingMap } from "@/lib/assessment/types";
+import { LEVELS, MAX_PAX, type RatingMap } from "@/lib/assessment/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,11 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     coachId?: number;
     observedOn?: string;
-    assessor?: string;
     classType?: string;
     poolType?: string;
+    levels?: unknown;
     pax?: number | null;
+    hasHelper?: boolean;
     ratings?: RatingMap;
     comments?: string;
   };
@@ -30,13 +31,23 @@ export async function POST(req: Request) {
   const { totalPercent, finalGrade } = computeAssessment(ratings);
   const observed = body.observedOn ? new Date(body.observedOn) : new Date();
 
+  // Keep only known levels (ticked, no per-level count); pax is a single 1–MAX total.
+  const rawLevels = Array.isArray(body.levels) ? body.levels : [];
+  const levels = LEVELS.filter((l) => rawLevels.includes(l));
+  const paxNum = Math.round(Number(body.pax));
+  const pax = Number.isFinite(paxNum) && paxNum >= 1 ? Math.min(MAX_PAX, paxNum) : null;
+  // The assessor is the signed-in submitter — never client-supplied.
+  const assessor = actor ? actor.displayName || actor.email : "";
+
   const row = await createAssessment({
     coachId: body.coachId,
     observedOn: Number.isNaN(observed.getTime()) ? new Date() : observed,
-    assessor: (body.assessor ?? "").trim(),
+    assessor,
     classType: (body.classType ?? "").trim(),
     poolType: (body.poolType ?? "").trim(),
-    pax: typeof body.pax === "number" ? body.pax : null,
+    pax,
+    levels,
+    hasHelper: Boolean(body.hasHelper),
     ratings,
     totalPercent,
     finalGrade,

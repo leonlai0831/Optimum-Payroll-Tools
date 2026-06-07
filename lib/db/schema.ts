@@ -211,6 +211,8 @@ export const assessments = pgTable("assessments", {
   classType: text("class_type").default("").notNull(),
   poolType: text("pool_type").default("").notNull(),
   pax: integer("pax"),
+  levels: jsonb("levels").$type<string[]>().notNull().default([]),
+  hasHelper: boolean("has_helper").default(false).notNull(),
   ratings: jsonb("ratings").$type<RatingMap>().notNull().default({}),
   totalPercent: real("total_percent").notNull(),
   finalGrade: text("final_grade").$type<GradeKey>().notNull(),

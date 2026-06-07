@@ -1504,6 +1504,8 @@ export async function createAssessment(input: {
   classType: string;
   poolType: string;
   pax: number | null;
+  levels: string[];
+  hasHelper: boolean;
   ratings: RatingMap;
   totalPercent: number;
   finalGrade: GradeKey;
