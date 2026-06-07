@@ -25,12 +25,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   const body = (await req.json().catch(() => ({}))) as {
     role?: string;
     active?: boolean;
+    displayName?: string;
     coachId?: number | null;
     gymStaffId?: number | null;
     password?: string;
   };
 
   const patch: Parameters<typeof updateUser>[1] = {};
+  if (typeof body.displayName === "string") patch.displayName = body.displayName;
   if (body.role !== undefined) {
     if (!(ROLES as readonly string[]).includes(body.role)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
@@ -66,6 +68,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
 
   await updateUser(userId, patch);
   const changed = [
+    patch.displayName !== undefined && "name",
     patch.role !== undefined && `role→${patch.role}`,
     patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
     (patch.coachId !== undefined || patch.gymStaffId !== undefined) && "linked employee",

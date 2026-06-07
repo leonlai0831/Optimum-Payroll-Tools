@@ -25,6 +25,7 @@ export default async function UsersPage() {
   const users: SafeUser[] = userRecords.map((u) => ({
     id: u.id,
     email: u.email,
+    displayName: u.displayName,
     role: u.role,
     coachId: u.coachId,
     gymStaffId: u.gymStaffId,

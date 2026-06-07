@@ -45,7 +45,7 @@ describe("audit log queries (PGlite in-memory)", () => {
     expect(one[0].action).toBe("settings.update");
   });
 
-  it("getAllowanceSavers maps each allowance run to its last saver's email", async () => {
+  it("getAllowanceSavers maps each allowance run to its last saver (email fallback)", async () => {
     await queries.recordAudit({
       actorId: 2,
       actorEmail: "m1@opt.page",
@@ -77,5 +77,34 @@ describe("audit log queries (PGlite in-memory)", () => {
     expect(savers[11]).toBe("m2@opt.page");
     // Non-allowance audit rows (e.g. the user.create above) are excluded.
     expect(savers[7]).toBeUndefined();
+  });
+
+  it("resolves savers to the actor's display name when set, for allowance + KPI", async () => {
+    const u = await queries.createUser({
+      email: "named@opt.page",
+      password: "pw",
+      role: "admin",
+      displayName: "Coach Mandy",
+    });
+    await queries.recordAudit({
+      actorId: u.id,
+      actorEmail: "named@opt.page",
+      action: "allowance.save",
+      entity: "allowance_run",
+      entityId: 20,
+      summary: "Saved allowance",
+    });
+    await queries.recordAudit({
+      actorId: u.id,
+      actorEmail: "named@opt.page",
+      action: "kpi_run.save",
+      entity: "run",
+      entityId: 30,
+      summary: "Saved KPI run",
+    });
+    expect((await queries.getAllowanceSavers())[20]).toBe("Coach Mandy");
+    expect((await queries.getKpiRunSavers())[30]).toBe("Coach Mandy");
+    // An actor with no matching user row still falls back to the snapshot email.
+    expect((await queries.getAllowanceSavers())[10]).toBe("m3@opt.page");
   });
 });

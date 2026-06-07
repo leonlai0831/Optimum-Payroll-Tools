@@ -118,6 +118,7 @@ describe("capability matrix (default permission config)", () => {
   const asRole = (role: CurrentUser["role"]): CurrentUser => ({
     id: 1,
     email: "x@x",
+    displayName: "",
     role,
     coachId: null,
     active: true,

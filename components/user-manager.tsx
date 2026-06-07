@@ -11,6 +11,7 @@ import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/types";
 export interface SafeUser {
   id: number;
   email: string;
+  displayName: string;
   role: Role;
   coachId: number | null;
   gymStaffId: number | null;
@@ -99,6 +100,7 @@ export function UserManager({
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-4 py-2 text-left">Email</th>
+                <th className="px-4 py-2 text-left">Name</th>
                 <th className="px-4 py-2 text-left">Role</th>
                 <th className="px-4 py-2 text-left">Linked employee</th>
                 <th className="px-4 py-2 text-center">Active</th>
@@ -138,6 +140,7 @@ function AddUser({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("staff");
   const [link, setLink] = useState("");
@@ -145,6 +148,7 @@ function AddUser({
 
   function reset() {
     setEmail("");
+    setName("");
     setPassword("");
     setRole("staff");
     setLink("");
@@ -162,6 +166,7 @@ function AddUser({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
+          displayName: name.trim(),
           password,
           role,
           ...parseLinkToken(link),
@@ -217,6 +222,16 @@ function AddUser({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@optimumtrain.page"
+          />
+        </div>
+        <div>
+          <Label htmlFor="u-name">Name</Label>
+          <Input
+            id="u-name"
+            className="mt-1"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Display name (optional)"
           />
         </div>
         <div>
@@ -338,6 +353,13 @@ function UserRow({
         {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
       </td>
       <td className="px-4 py-2">
+        <NameCell
+          initial={user.displayName}
+          busy={busy}
+          onSave={(v) => patch({ displayName: v })}
+        />
+      </td>
+      <td className="px-4 py-2">
         <Select
           className="w-36 py-1 text-xs"
           value={user.role}
@@ -404,5 +426,33 @@ function UserRow({
         busy={busy}
       />
     </tr>
+  );
+}
+
+/** Inline editable display name — saves on blur (or Enter) only when it changed. */
+function NameCell({
+  initial,
+  busy,
+  onSave,
+}: {
+  initial: string;
+  busy: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <Input
+      className="w-40 py-1 text-xs"
+      value={value}
+      disabled={busy}
+      placeholder="—"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value.trim() !== initial.trim()) onSave(value.trim());
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+    />
   );
 }

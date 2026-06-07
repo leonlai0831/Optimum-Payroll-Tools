@@ -70,6 +70,9 @@ export const permissionConfig = pgTable("permission_config", {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
+  // Friendly name shown as the submitter/editor across the app (assessments,
+  // allowance + KPI history). Empty falls back to the email.
+  displayName: text("display_name").default("").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").$type<Role>().default("staff").notNull(),
   // Optional link to the employee record this login belongs to (no FK, matches allowanceRuns).

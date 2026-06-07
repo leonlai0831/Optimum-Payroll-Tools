@@ -12,9 +12,12 @@ import { rm } from "@/lib/utils";
 export function KpiHistoryView({
   runs,
   canExport,
+  savers,
 }: {
   runs: RunSummary[];
   canExport: boolean;
+  /** run id → last saver's name, for admins; null hides the column. */
+  savers: Record<number, string> | null;
 }) {
   const [q, setQ] = useState("");
 
@@ -64,13 +67,14 @@ export function KpiHistoryView({
               <SortTh label="Coaches" sortKey="coaches" sort={sort} onSort={toggleSort} align="center" />
               <SortTh label="Total Payout" sortKey="payout" sort={sort} onSort={toggleSort} align="right" />
               <SortTh label="Saved" sortKey="saved" sort={sort} onSort={toggleSort} />
+              {savers && <th className="px-4 py-2 text-left">Saved by</th>}
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan={savers ? 8 : 7} className="px-4 py-8 text-center text-sm text-gray-500">
                   No saved months match the current filter.
                 </td>
               </tr>
@@ -97,6 +101,9 @@ export function KpiHistoryView({
                   <td className="px-4 py-2 text-gray-500">
                     {new Date(r.createdAt).toLocaleDateString()}
                   </td>
+                  {savers && (
+                    <td className="px-4 py-2 text-gray-500">{savers[r.id] ?? "—"}</td>
+                  )}
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-3">
                       {canExport && (

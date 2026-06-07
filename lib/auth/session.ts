@@ -31,6 +31,7 @@ export async function getSession() {
 export interface CurrentUser {
   id: number;
   email: string;
+  displayName: string;
   role: Role;
   coachId: number | null;
   active: boolean;
@@ -55,6 +56,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   return {
     id: user.id,
     email: user.email,
+    displayName: user.displayName,
     role: user.role,
     coachId: user.coachId,
     active: user.active,
