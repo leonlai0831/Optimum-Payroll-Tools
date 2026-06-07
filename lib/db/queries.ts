@@ -611,6 +611,30 @@ export async function updateRunReview(
   invalidateSingleton("kpi-trend");
 }
 
+/**
+ * Reopen a finalized month for correction: flip its status back to "draft" so the
+ * management-review screen becomes editable again (the KPI mirror of unlocking a
+ * Saved Allowances month). Coach results are left untouched. Scoped to a run that
+ * is currently "finalized", so it's a safe no-op on a draft; returns whether a row
+ * was actually reopened.
+ *
+ * Note: the carry-forward coach profiles written when the month was finalized
+ * (`upsertCoachesFromRun`) are NOT rolled back — they're "last known" hints and get
+ * overwritten when the month is re-finalized.
+ */
+export async function reopenRun(id: number): Promise<boolean> {
+  const db = await getDb();
+  const rows = await db
+    .update(runs)
+    .set({ status: "draft" })
+    .where(and(eq(runs.id, id), eq(runs.status, "finalized")))
+    .returning({ id: runs.id });
+  if (rows.length === 0) return false;
+  invalidateSingleton("kpi-runs");
+  invalidateSingleton("kpi-trend");
+  return true;
+}
+
 export async function deleteRun(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(runs).where(eq(runs.id, id));
