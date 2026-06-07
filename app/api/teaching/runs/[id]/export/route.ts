@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/permissions";
 import { getTeachingRun } from "@/lib/db/queries";
 import { buildTeachingWorkbook } from "@/lib/teaching/xlsx";
 
@@ -13,7 +13,10 @@ function fileName(monthLabel: string): string {
 
 /** Re-export a saved coaching month from its stored summary + config snapshot. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // The workbook contains per-coach earnings — gate on the same commission-module
+  // capability as the run's POST/DELETE siblings.
+  const denied = await requireCapability("run_commission");
+  if (denied) return denied;
   const { id } = await params;
   const run = await getTeachingRun(Number(id));
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });

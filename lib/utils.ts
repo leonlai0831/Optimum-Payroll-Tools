@@ -16,6 +16,18 @@ export function rm2(n: number): string {
 }
 
 /**
+ * Neutralize spreadsheet/CSV formula injection in user-derived TEXT values.
+ * If a string starts with a character a spreadsheet would treat as a formula
+ * (`=`, `+`, `-`, `@`) or a control character (tab, CR, LF) that can break out
+ * of a cell, prefix it with an apostrophe so it's rendered as literal text.
+ * Apply only to user-supplied text (names, plan labels) — never to numbers,
+ * headers, or values we generate ourselves.
+ */
+export function sanitizeSpreadsheetText(value: string): string {
+  return /^[=+\-@\t\r\n]/.test(value) ? `'${value}` : value;
+}
+
+/**
  * Centers are stored on a coach / saved-allowance row as a single comma-joined
  * string (e.g. "QSM, BK"); the UI / CSV split that into up to 3 slots. Trims
  * each piece and drops blanks.

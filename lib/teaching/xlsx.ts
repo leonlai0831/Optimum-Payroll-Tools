@@ -1,6 +1,7 @@
 // Server-only: build the Optimum Fit coaching-income report workbook (exceljs).
 
 import ExcelJS from "exceljs";
+import { sanitizeSpreadsheetText } from "@/lib/utils";
 import type { TeachingConfig, TeachingSummary } from "./types";
 
 const NAVY = "FF1F2A56";
@@ -40,7 +41,7 @@ export async function buildTeachingWorkbook(opts: {
 
   let r = 2;
   for (const co of summary.coaches) {
-    t1.getCell(r, 1).value = co.staffName;
+    t1.getCell(r, 1).value = sanitizeSpreadsheetText(co.staffName);
     t1.getCell(r, 2).value = co.ptSessions;
     t1.getCell(r, 3).value = co.ptAttendees;
     t1.getCell(r, 4).value = co.ptIncome;
@@ -83,8 +84,8 @@ export async function buildTeachingWorkbook(opts: {
   let rr = 2;
   for (const co of summary.coaches) {
     for (const cl of co.classes) {
-      t2.getCell(rr, 1).value = co.staffName;
-      t2.getCell(rr, 2).value = cl.className;
+      t2.getCell(rr, 1).value = sanitizeSpreadsheetText(co.staffName);
+      t2.getCell(rr, 2).value = sanitizeSpreadsheetText(cl.className);
       t2.getCell(rr, 3).value = cl.kind === "pt" ? "PT" : "Group";
       t2.getCell(rr, 4).value = cl.sessions;
       t2.getCell(rr, 5).value = cl.attendees;

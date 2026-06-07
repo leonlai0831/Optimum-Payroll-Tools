@@ -34,6 +34,7 @@ export interface CurrentUser {
   displayName: string;
   role: Role;
   coachId: number | null;
+  gymStaffId: number | null;
   active: boolean;
 }
 
@@ -59,6 +60,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     displayName: user.displayName,
     role: user.role,
     coachId: user.coachId,
+    gymStaffId: user.gymStaffId,
     active: user.active,
   };
 });

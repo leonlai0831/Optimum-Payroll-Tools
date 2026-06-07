@@ -2,6 +2,7 @@
 // so this must never be pulled into a client bundle — only route handlers use it.
 
 import ExcelJS from "exceljs";
+import { sanitizeSpreadsheetText } from "@/lib/utils";
 import type { CommissionConfig, CommissionRow, CommissionSummary, SalesType } from "./types";
 
 const NAVY = "FF1F2A56";
@@ -32,6 +33,9 @@ const TAB1_COLUMNS: { key: keyof CommissionRow; header: string; kind: "text" | "
   { key: "plan_identifier_at_purchased", header: "plan_identifier_at_purchased", kind: "text", width: 28 },
   { key: "plan_identifier_at_present", header: "plan_identifier_at_present", kind: "text", width: 28 },
 ];
+
+/** Text columns we generate ourselves — exempt from formula-injection neutralizing. */
+const GENERATED_TEXT_COLUMNS = new Set<keyof CommissionRow>(["sales_type", "paid_at"]);
 
 // ── parsing ───────────────────────────────────────────────────────────────────
 
@@ -264,7 +268,9 @@ export async function buildReportWorkbook(opts: {
         }
       } else {
         const s = String(v ?? "");
-        if (s) cell.value = s;
+        // `sales_type` / `paid_at` are app-generated; all other text columns are
+        // user-derived (names, plan labels) and get formula-injection neutralized.
+        if (s) cell.value = GENERATED_TEXT_COLUMNS.has(c.key) ? s : sanitizeSpreadsheetText(s);
       }
       cell.font = ARIAL;
     });

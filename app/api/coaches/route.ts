@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createCoach, listCoaches, recordAudit } from "@/lib/db/queries";
 import { EMPLOYMENT_TYPES, type EmploymentType } from "@/lib/performance/types";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
 export async function GET() {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Returns the full staff roster with pay-related fields — same data the Staff
+  // directory page gates behind `view_all_staff`. (The KPI dashboard, gated on
+  // `run_kpi`, also calls this; both admin + supervisor hold view_all_staff.)
+  const denied = await requireCapability("view_all_staff");
+  if (denied) return denied;
   return NextResponse.json(await listCoaches());
 }
 

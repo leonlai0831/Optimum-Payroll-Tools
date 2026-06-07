@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   checkAllowancePeriodAllowed,
@@ -14,7 +14,10 @@ import { isValidPeriod } from "@/lib/allowance/period";
 import type { AllowanceInput } from "@/lib/allowance/types";
 
 export async function GET(req: Request) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Saved allowance runs are staff pay records — gate on the allowance module's
+  // capability (matches the POST/DELETE siblings and the allowance pages).
+  const denied = await requireCapability("run_allowance");
+  if (denied) return denied;
   const period = new URL(req.url).searchParams.get("period") ?? undefined;
   return NextResponse.json(await listAllowanceRuns(period));
 }
@@ -23,7 +26,7 @@ export async function POST(req: Request) {
   const denied = await requireCapability("run_allowance");
   if (denied) return denied;
   const actor = await getCurrentUser();
-  const body = (await req.json()) as { periodLabel: string; input: AllowanceInput };
+  const body = (await req.json().catch(() => ({}))) as { periodLabel?: string; input?: AllowanceInput };
   if (!body.periodLabel || !isValidPeriod(body.periodLabel)) {
     return NextResponse.json({ error: "periodLabel must be a valid YYYY-MM month" }, { status: 400 });
   }

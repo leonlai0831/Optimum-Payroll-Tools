@@ -14,9 +14,9 @@ export async function POST(req: Request) {
   const denied = await requireCapability("run_commission");
   if (denied) return denied;
 
-  const body = (await req.json()) as {
+  const body = (await req.json().catch(() => ({}))) as {
     monthLabel?: string;
-    rows: CommissionRow[];
+    rows?: CommissionRow[];
     config?: CommissionConfig;
   };
   if (!Array.isArray(body.rows) || body.rows.length === 0) {
