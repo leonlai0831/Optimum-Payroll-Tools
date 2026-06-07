@@ -24,7 +24,14 @@ export function calcMetricScore(
   mode: MetricMode = "standard",
 ): number {
   if (mode === "growth") {
-    if (val <= min) return min === 0 ? 0 : val / min;
+    // Guard a non-positive baseline BEFORE the log branch: dividing by `min`
+    // when min <= 0 would yield Infinity/NaN. A 0 (or negative) min has no
+    // meaningful baseline to grow from, so treat any positive value as fully
+    // achieving the target (cap at 1.5, the same ceiling as `standard`) and a
+    // non-positive value as 0. The growth curve is "uncapped" only for a real
+    // positive baseline.
+    if (min <= 0) return val > 0 ? 1.5 : 0;
+    if (val <= min) return val / min;
     return 1 + 0.72 * Math.log((val - min) / min + 1);
   }
   if (mode === "lower") {
@@ -146,16 +153,38 @@ export function getGrade(
   return { grade: "C", className: "bg-red-100 text-red-800 border-red-300" };
 }
 
-/** Resolve a center's student target: exact (case-insensitive), then substring, else 140. */
+/**
+ * Resolve a center's student target: exact (case-insensitive), then a
+ * whole-word/token match in BOTH directions, else the documented default 140.
+ *
+ * Token matching (rather than raw substring) means "Puchong Kinrara" and
+ * "Kinrara" resolve to each other, while a short code like "HQ" no longer
+ * spuriously matches an unrelated key such as "PHQ".
+ */
 export function getCenterTarget(name: string, targets: CenterTargets): number {
-  if (!name) return 0;
   const key = name.toLowerCase().trim();
+  if (!key) return 140;
+
+  const tokens = (s: string) => s.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const nameTokens = new Set(tokens(key));
+
+  // 1. Exact (case-insensitive) match.
   for (const [k, v] of Object.entries(targets)) {
-    if (k.toLowerCase() === key) return v;
+    if (k.toLowerCase().trim() === key) return v;
   }
+
+  // 2. Whole-word/token match in both directions: the config key shares all of
+  //    its tokens with the name, or the name shares all of its tokens with the
+  //    key. Either side fully contained in the other (token-wise) is a match.
   for (const [k, v] of Object.entries(targets)) {
-    if (key.includes(k.toLowerCase())) return v;
+    const keyTokens = tokens(k);
+    if (keyTokens.length === 0) continue;
+    const keySet = new Set(keyTokens);
+    const keyInName = keyTokens.every((t) => nameTokens.has(t));
+    const nameInKey = [...nameTokens].every((t) => keySet.has(t));
+    if (keyInName || nameInKey) return v;
   }
+
   return 140;
 }
 

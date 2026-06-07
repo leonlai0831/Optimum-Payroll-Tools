@@ -97,4 +97,18 @@ describe("reconcileAllowances — full picture", () => {
     expect(links).toHaveLength(1);
     expect(unmatchedCoaches).toHaveLength(1);
   });
+
+  it("a strong coachId match beats an earlier weak exact-name match (regression for fix #5)", () => {
+    // SAM appears first and would grab the record by exact NAME (weak), but BOB
+    // is the record's true coachId owner (strong). Global best-match-first
+    // assignment must give the record to BOB and leave SAM unmatched, regardless
+    // of input order — the old input-order greedy loop got this wrong.
+    const list = [rec("SAM", { coachId: 9 })];
+    const coaches = [coach("SAM"), coach("BOB", { coachId: 9 })];
+    const { links, unmatchedCoaches } = reconcileAllowances(list, coaches);
+    expect(links).toHaveLength(1);
+    expect(links[0].coach.canonicalName).toBe("BOB");
+    expect(links[0].method).toBe("coachId");
+    expect(unmatchedCoaches.map((c) => c.canonicalName)).toEqual(["SAM"]);
+  });
 });
