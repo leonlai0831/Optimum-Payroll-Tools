@@ -16,15 +16,15 @@ import type { Brand } from "@/components/brand-shell";
  */
 const BRANDS: Record<
   Brand,
-  { src: string; alt: string; width: number; height: number; h: string; hSm: string }
+  { src: string; alt: string; width: number; height: number; hCls: string }
 > = {
-  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350, h: "h-9", hSm: "h-7" },
-  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1600, height: 355, h: "h-6", hSm: "h-5" },
+  // hCls carries both heights as literals so Tailwind keeps the responsive variants.
+  swim: { src: "/logo-full.png", alt: "Optimum Swim School", width: 1080, height: 350, hCls: "h-7 sm:h-9" },
+  fit: { src: "/logo-fit.png", alt: "Optimum Fit", width: 1600, height: 355, hCls: "h-5 sm:h-6" },
 };
 
-export function Nav({ email, role, brand = "swim" }: { email: string; role: Role; brand?: Brand }) {
+export function Nav({ email, role }: { email: string; role: Role; brand?: Brand }) {
   const router = useRouter();
-  const b = BRANDS[brand];
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -36,22 +36,13 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
     <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur no-print">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 sm:gap-3" aria-label="Home">
-          {/* Mobile: show only the active brand's logo to save width. */}
-          <Image
-            src={b.src}
-            alt={b.alt}
-            width={b.width}
-            height={b.height}
-            priority
-            className={`${b.hSm} w-auto sm:hidden`}
-          />
-          {/* Desktop: show both brand logos side by side, in full color. */}
-          <div className="hidden items-center gap-3 sm:flex">
+          {/* Both brand logos, side by side, in full color — on mobile too. */}
+          <div className="flex items-center gap-2 sm:gap-3">
             {(["swim", "fit"] as Brand[]).map((key, i) => {
               const x = BRANDS[key];
               return (
-                <div key={key} className="flex items-center gap-3">
-                  {i > 0 && <span className="h-6 w-px bg-gray-200" aria-hidden />}
+                <div key={key} className="flex items-center gap-2 sm:gap-3">
+                  {i > 0 && <span className="h-5 w-px bg-gray-200 sm:h-6" aria-hidden />}
                   <Image
                     src={x.src}
                     alt={x.alt}
@@ -59,7 +50,7 @@ export function Nav({ email, role, brand = "swim" }: { email: string; role: Role
                     height={x.height}
                     priority
                     title={x.alt}
-                    className={`${x.h} w-auto`}
+                    className={`${x.hCls} w-auto`}
                   />
                 </div>
               );
