@@ -50,7 +50,7 @@ export function gradeFor(percent: number): GradeKey {
 }
 
 /** A sub-category's earned points: avg(criteria value, unrated = 0) × weight. */
-export function subCategoryScore(sub: SubCategory, ratings: RatingMap): number {
+function subCategoryScore(sub: SubCategory, ratings: RatingMap): number {
   if (sub.criteria.length === 0) return 0;
   const sum = sub.criteria.reduce((acc, c) => {
     const r = ratings[c.key];

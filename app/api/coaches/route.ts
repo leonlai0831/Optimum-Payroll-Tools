@@ -5,6 +5,8 @@ import { createCoach, listCoaches, recordAudit } from "@/lib/db/queries";
 import { EMPLOYMENT_TYPES, type EmploymentType } from "@/lib/performance/types";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   // Returns the full staff roster with pay-related fields — same data the Staff
   // directory page gates behind `view_all_staff`. (The KPI dashboard, gated on

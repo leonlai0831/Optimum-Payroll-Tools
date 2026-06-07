@@ -4,7 +4,7 @@ import { requireCapability } from "@/lib/auth/permissions";
 import {
   checkAllowancePeriodAllowed,
   createAllowanceRun,
-  getAllowanceConfig,
+  getAllowanceConfigFresh,
   isPeriodLocked,
   listAllowanceRuns,
   recordAudit,
@@ -12,6 +12,8 @@ import {
 import { calcAllowance } from "@/lib/allowance/calc";
 import { isValidPeriod } from "@/lib/allowance/period";
 import type { AllowanceInput } from "@/lib/allowance/types";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   // Saved allowance runs are staff pay records — gate on the allowance module's
@@ -51,8 +53,9 @@ export async function POST(req: Request) {
     );
   }
   // Recompute server-side from the live config (ignore any client-sent result),
-  // and snapshot that config so the saved record stays reproducible.
-  const configSnapshot = await getAllowanceConfig();
+  // and snapshot that config so the saved record stays reproducible. Read FRESH
+  // (cache-bypassing) so a multi-instance deploy never snapshots stale rates.
+  const configSnapshot = await getAllowanceConfigFresh();
   const result = calcAllowance(body.input, configSnapshot);
   const id = await createAllowanceRun({
     periodLabel: body.periodLabel,

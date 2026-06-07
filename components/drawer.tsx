@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { trapFocus } from "@/components/modal";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,14 +31,22 @@ export function Drawer({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      // Focus trap: keep Tab / Shift+Tab cycling within the panel.
+      if (e.key === "Tab") trapFocus(e, panelRef.current);
     };
     document.addEventListener("keydown", onKey);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Remember what was focused so we can restore it on close.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
     };
   }, [open, onClose]);
 
@@ -73,6 +82,7 @@ export function Drawer({
               type="button"
               onClick={onClose}
               title="Close"
+              aria-label="Close"
               className="-mr-1 flex-none rounded p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
             >
               <X className="h-4 w-4" />

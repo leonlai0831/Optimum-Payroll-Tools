@@ -104,7 +104,19 @@ export function KpiHistoryView({
                 const open = expanded.has(r.id);
                 return (
                   <Fragment key={r.id}>
-                    <tr className="cursor-pointer hover:bg-indigo-50/40" onClick={() => toggle(r.id)}>
+                    <tr
+                      className="cursor-pointer hover:bg-indigo-50/40"
+                      onClick={() => toggle(r.id)}
+                      tabIndex={0}
+                      role="button"
+                      aria-expanded={open}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          if (e.key === " ") e.preventDefault();
+                          toggle(r.id);
+                        }
+                      }}
+                    >
                       <td className="px-4 py-2 font-semibold text-gray-900">
                         <span className="inline-flex items-center gap-1.5">
                           {open ? (

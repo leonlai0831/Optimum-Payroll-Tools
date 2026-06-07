@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sparkles, Target } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
+import { fetchJson } from "@/lib/http";
 
 interface TargetStat {
   name: string;
@@ -26,8 +27,7 @@ export function TargetSuggestions() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/suggest-targets");
-      const d = (await res.json()) as { stats?: TargetStat[]; text?: string };
+      const d = await fetchJson<{ stats?: TargetStat[]; text?: string }>("/api/suggest-targets");
       setData({ stats: d.stats ?? [], text: d.text ?? "" });
     } catch {
       setData({ stats: [], text: "Could not generate suggestions right now." });
