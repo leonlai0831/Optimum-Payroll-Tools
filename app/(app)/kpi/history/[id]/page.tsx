@@ -4,10 +4,11 @@ import { ArrowLeft, Clock } from "lucide-react";
 import { getAllowanceConfig, getLatestAssessmentFinalByCoach, getRun } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
-import { makeCenterNormalizer } from "@/lib/allowance/centers";
-import { Badge, Card } from "@/components/ui";
+import { Badge } from "@/components/ui";
 import { DeleteRunButton } from "@/components/delete-run-button";
+import { ReopenRunButton } from "@/components/reopen-run-button";
 import { RunReview } from "@/components/run-review";
+import { RunCoachTable } from "@/components/run-coach-table";
 import { RunDigest } from "@/components/run-digest";
 import { RunAudit } from "@/components/run-audit";
 import { rm } from "@/lib/utils";
@@ -28,9 +29,9 @@ export default async function RunDetailPage({
   const canFinalize = await userCan(user, "finalize_kpi");
   const coaches = [...run.coachResults].sort((a, b) => b.finalScore - a.finalScore);
   const totalPayout = coaches.reduce((s, c) => s + (c.payout || 0), 0);
-  // Normalize stored (possibly raw) center labels onto the configured codes for display.
+  // Operator center codes + aliases, passed to the table so it can normalize the
+  // stored (possibly raw) center labels onto the configured codes for display.
   const allowanceConfig = await getAllowanceConfig();
-  const normCenter = makeCenterNormalizer(allowanceConfig.centers, allowanceConfig.centerAliases);
 
   const header = (
     <div className="flex items-start justify-between">
@@ -53,7 +54,10 @@ export default async function RunDetailPage({
           {rm(totalPayout)}
         </p>
       </div>
-      <DeleteRunButton id={run.id} />
+      <div className="flex items-center gap-2">
+        {!isDraft && canFinalize && <ReopenRunButton id={run.id} period={run.periodLabel} />}
+        <DeleteRunButton id={run.id} />
+      </div>
     </div>
   );
 
@@ -112,47 +116,11 @@ export default async function RunDetailPage({
         </div>
       )}
 
-      <Card className="overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-2 text-left">Coach</th>
-              <th className="px-4 py-2 text-left">Center</th>
-              <th className="px-4 py-2 text-center">Students</th>
-              <th className="px-4 py-2 text-left">Position</th>
-              <th className="px-4 py-2 text-center">Score</th>
-              <th className="px-4 py-2 text-center">Grade</th>
-              <th className="px-4 py-2 text-right">Allowance</th>
-              <th className="px-4 py-2 text-right">Payout</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {coaches.map((c) => (
-              <tr key={c.canonicalName}>
-                <td className="px-4 py-2 font-medium text-gray-900">
-                  {c.canonicalName}
-                  {!c.isComplete && (
-                    <span className="ml-2 text-[10px] text-amber-600">incomplete</span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-gray-500">{normCenter(c.center)}</td>
-                <td className="px-4 py-2 text-center text-gray-600">{c.students}</td>
-                <td className="px-4 py-2 text-gray-600">{c.position}</td>
-                <td className="px-4 py-2 text-center font-bold text-indigo-600">
-                  {c.finalScore.toFixed(2)}
-                </td>
-                <td className="px-4 py-2 text-center">
-                  <Badge className="border-gray-300 bg-gray-100 text-gray-700">{c.grade}</Badge>
-                </td>
-                <td className="px-4 py-2 text-right text-gray-600">
-                  {c.teachingAllowance ? rm(c.teachingAllowance) : "—"}
-                </td>
-                <td className="px-4 py-2 text-right font-medium text-green-700">{rm(c.payout)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      <RunCoachTable
+        coaches={coaches}
+        centers={allowanceConfig.centers}
+        centerAliases={allowanceConfig.centerAliases}
+      />
     </>
   );
 }

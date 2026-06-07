@@ -121,6 +121,36 @@ describe("DB layer (PGlite in-memory)", () => {
     expect((await queries.listRuns()).find((r) => r.id === draftId)?.status).toBe("finalized");
   });
 
+  it("reopenRun reverts a finalized month to an editable draft (no-op on a draft)", async () => {
+    const finalId = await queries.createRun({
+      periodLabel: "2026-09",
+      filename: "sep.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("REOPEN RON", { isComplete: true, mgmtAssessment: 90 })],
+      status: "finalized",
+    });
+    expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("finalized");
+
+    // Reopen flips it back to draft so the review screen becomes editable again.
+    expect(await queries.reopenRun(finalId)).toBe(true);
+    expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("draft");
+    // Coach results are preserved through the reopen.
+    expect((await queries.getRun(finalId))?.coachResults[0]?.canonicalName).toBe("REOPEN RON");
+
+    // Reopening a run that's already a draft is a no-op (returns false).
+    expect(await queries.reopenRun(finalId)).toBe(false);
+    expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("draft");
+
+    // It can be re-finalized after the correction.
+    await queries.updateRunReview(
+      finalId,
+      [makeCoach("REOPEN RON", { isComplete: true, mgmtAssessment: 95 })],
+      "finalized",
+    );
+    expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("finalized");
+  });
+
   it("backfills finalize_kpi for admin but not supervisor/staff", () => {
     const normalized = queries.normalizePermissionConfig({
       admin: ["run_kpi"],

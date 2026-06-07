@@ -5,6 +5,7 @@ import {
   deleteRun,
   getRun,
   recordAudit,
+  reopenRun,
   runStatusFromResults,
   updateRunReview,
 } from "@/lib/db/queries";
@@ -23,6 +24,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
 /**
  * Save a management review onto a draft run: the (client-recomputed) coach results
  * — updated mgmt scores and/or corrected account links — plus whether to finalize.
+ * Also handles `reopen` — reverting a finalized month back to an editable draft.
  * Gated on `finalize_kpi` (admin + super_admin). Finalizing requires every coach
  * complete; otherwise the month stays a draft.
  */
@@ -38,7 +40,26 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/runs/[id]">) {
   const body = (await req.json().catch(() => ({}))) as {
     coachResults?: RunCoach[];
     finalize?: boolean;
+    reopen?: boolean;
   };
+
+  // Reopen a finalized month for correction — the inverse of finalizing, behind the
+  // same `finalize_kpi` gate. Flips it back to an editable draft; no body needed.
+  if (body.reopen) {
+    const reopened = await reopenRun(runId);
+    if (actor && reopened) {
+      await recordAudit({
+        actorId: actor.id,
+        actorEmail: actor.email,
+        action: "kpi_run.reopen",
+        entity: "run",
+        entityId: runId,
+        summary: `Reopened ${run.periodLabel} for edits`,
+      });
+    }
+    return NextResponse.json({ ok: true, status: "draft" });
+  }
+
   if (!Array.isArray(body.coachResults)) {
     return NextResponse.json({ error: "coachResults is required" }, { status: 400 });
   }
