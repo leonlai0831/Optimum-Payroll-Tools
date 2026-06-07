@@ -10,12 +10,10 @@ import {
 } from "drizzle-orm/pg-core";
 import type { PermissionConfig, Role } from "@/lib/auth/types";
 import type {
-  AppraisalRating,
   EmployeeRole,
   EmploymentType,
   NoteSeverity,
   NoteType,
-  PerformanceConfig,
 } from "@/lib/performance/types";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GradeKey, RatingMap } from "@/lib/assessment/types";
@@ -196,31 +194,11 @@ export const gymNotes = pgTable("gym_notes", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** Singleton appraisal configuration (one row, id = 1). */
-export const performanceConfig = pgTable("performance_config", {
-  id: integer("id").primaryKey().default(1),
-  data: jsonb("data").$type<PerformanceConfig>().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-/** A performance appraisal for one employee. Ratings are snapshotted. */
-export const appraisals = pgTable("appraisals", {
-  id: serial("id").primaryKey(),
-  coachId: integer("coach_id").notNull(),
-  periodLabel: text("period_label").default("").notNull(),
-  reviewDate: timestamp("review_date", { withTimezone: true }).defaultNow().notNull(),
-  reviewedBy: text("reviewed_by").default("").notNull(),
-  ratings: jsonb("ratings").$type<AppraisalRating[]>().notNull().default([]),
-  overallScore: real("overall_score").notNull(),
-  comments: text("comments").default("").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
 /**
  * An instructor assessment (observation form). The per-criterion `ratings` and
  * the computed `totalPercent` / `finalGrade` are snapshotted so history survives
  * later form changes; the latest `totalPercent` per coach feeds the KPI
- * management assessment. The successor to `appraisals`.
+ * management assessment.
  */
 export const assessments = pgTable("assessments", {
   id: serial("id").primaryKey(),
@@ -284,8 +262,6 @@ export type AuditLogRecord = typeof auditLog.$inferSelect;
 export type AllowancePeriodLockRecord = typeof allowancePeriodLocks.$inferSelect;
 export type UserRecord = typeof users.$inferSelect;
 export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;
-export type PerformanceConfigRecord = typeof performanceConfig.$inferSelect;
-export type AppraisalRecord = typeof appraisals.$inferSelect;
 export type AssessmentRecord = typeof assessments.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
 export type CoachRecord = typeof coaches.$inferSelect;

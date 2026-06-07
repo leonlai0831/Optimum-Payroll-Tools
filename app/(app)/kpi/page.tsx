@@ -5,10 +5,10 @@ export const dynamic = "force-dynamic";
 
 export default async function KpiDashboardPage() {
   // The latest instructor-assessment final % prefills each coach's management
-  // assessment (Mgmt %). Replaces the old appraisal-overall source.
+  // assessment (Mgmt %).
   const finalMap = await getLatestAssessmentFinalByCoach();
-  const appraisalOverall: Record<string, number> = Object.fromEntries(
+  const assessmentFinal: Record<string, number> = Object.fromEntries(
     [...finalMap.entries()].map(([coachId, final]) => [String(coachId), Math.round(final)]),
   );
-  return <Dashboard appraisalOverall={appraisalOverall} />;
+  return <Dashboard assessmentFinal={assessmentFinal} />;
 }

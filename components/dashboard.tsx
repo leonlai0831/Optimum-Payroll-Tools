@@ -67,7 +67,7 @@ interface GroupInputs {
   carryAllowance: number | null;
   mgmt: number | null;
   /** Where the active mgmt assessment came from (drives the hint). */
-  mgmtSource: "appraisal" | "carryover" | "manual" | null;
+  mgmtSource: "assessment" | "carryover" | "manual" | null;
   lastMgmtAt: string | null;
   coachId: number | null;
   groupConfig: GroupConfig | null;
@@ -112,10 +112,10 @@ function monthsAgo(iso: string | null): string {
 }
 
 export function Dashboard({
-  appraisalOverall = {},
+  assessmentFinal = {},
 }: {
-  /** Latest appraisal overall (0–100) keyed by coachId, to prefill the mgmt assessment. */
-  appraisalOverall?: Record<string, number>;
+  /** Latest assessment final % (0–100) keyed by coachId, to prefill the mgmt assessment. */
+  assessmentFinal?: Record<string, number>;
 }) {
   const [phase, setPhase] = useState<"upload" | "working">("upload");
   const [fileName, setFileName] = useState("");
@@ -239,18 +239,18 @@ export function Dashboard({
                 c.canonicalName === g.canonicalName ||
                 (c.aliases ?? []).some((al) => g.accounts.includes(al)),
             );
-            const appraisalMgmt =
-              profile?.id != null ? appraisalOverall[String(profile.id)] : undefined;
+            const assessmentMgmt =
+              profile?.id != null ? assessmentFinal[String(profile.id)] : undefined;
             nextMeta[id] = {
               canonicalName: g.canonicalName,
               position: profile?.defaultPosition ?? "Instructor",
               allowance: profile?.lastAllowance ?? null,
               allowanceSource: profile?.lastAllowance != null ? "carryover" : null,
               carryAllowance: profile?.lastAllowance ?? null,
-              mgmt: appraisalMgmt ?? profile?.lastMgmtAssessment ?? null,
+              mgmt: assessmentMgmt ?? profile?.lastMgmtAssessment ?? null,
               mgmtSource:
-                appraisalMgmt != null
-                  ? "appraisal"
+                assessmentMgmt != null
+                  ? "assessment"
                   : profile?.lastMgmtAssessment != null
                     ? "carryover"
                     : null,
@@ -925,8 +925,8 @@ export function Dashboard({
                       }
                       className="w-20 py-1 text-xs"
                     />
-                    {g.meta.mgmtSource === "appraisal" ? (
-                      <div className="text-[10px] font-medium text-brand">from latest appraisal</div>
+                    {g.meta.mgmtSource === "assessment" ? (
+                      <div className="text-[10px] font-medium text-brand">from latest assessment</div>
                     ) : g.meta.lastMgmtAt ? (
                       <div className="text-[10px] text-gray-400">
                         last {monthsAgo(g.meta.lastMgmtAt)}

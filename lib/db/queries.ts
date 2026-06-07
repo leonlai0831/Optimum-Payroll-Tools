@@ -6,7 +6,6 @@ import {
   allowanceConfig,
   allowancePeriodLocks,
   allowanceRuns,
-  appraisals,
   assessments,
   auditLog,
   coaches,
@@ -18,13 +17,11 @@ import {
   gymStaff,
   config,
   notes,
-  performanceConfig,
   permissionConfig,
   runs,
   users,
   type AllowancePeriodLockRecord,
   type AllowanceRunRecord,
-  type AppraisalRecord,
   type AssessmentRecord,
   type AuditLogRecord,
   type CoachRecord,
@@ -38,14 +35,11 @@ import {
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
 import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type Capability, type PermissionConfig, type Role } from "@/lib/auth/types";
-import { DEFAULT_PERFORMANCE_CONFIG } from "@/lib/performance/defaults";
 import type {
-  AppraisalRating,
   EmployeeRole,
   EmploymentType,
   NoteSeverity,
   NoteType,
-  PerformanceConfig,
 } from "@/lib/performance/types";
 import type { GradeKey, RatingMap } from "@/lib/assessment/types";
 import {
@@ -1458,69 +1452,7 @@ export async function savePermissionConfig(data: PermissionConfig): Promise<void
     .onConflictDoUpdate({ target: permissionConfig.id, set: { data, updatedAt: new Date() } });
 }
 
-// ── Performance / appraisals ─────────────────────────────────────────────────
-
-/** Read the singleton appraisal config, seeding defaults on first use. */
-export const getPerformanceConfig = cache(async (): Promise<PerformanceConfig> => {
-  const db = await getDb();
-  const rows = await db
-    .select()
-    .from(performanceConfig)
-    .where(eq(performanceConfig.id, 1))
-    .limit(1);
-  if (rows[0]) return rows[0].data;
-  const data = structuredClone(DEFAULT_PERFORMANCE_CONFIG);
-  await db.insert(performanceConfig).values({ id: 1, data }).onConflictDoNothing();
-  return data;
-});
-
-export async function savePerformanceConfig(data: PerformanceConfig): Promise<void> {
-  const db = await getDb();
-  await db
-    .insert(performanceConfig)
-    .values({ id: 1, data })
-    .onConflictDoUpdate({ target: performanceConfig.id, set: { data, updatedAt: new Date() } });
-}
-
-export async function listAppraisalsForCoach(coachId: number): Promise<AppraisalRecord[]> {
-  const db = await getDb();
-  return db
-    .select()
-    .from(appraisals)
-    .where(eq(appraisals.coachId, coachId))
-    .orderBy(desc(appraisals.reviewDate));
-}
-
-export async function createAppraisal(input: {
-  coachId: number;
-  periodLabel: string;
-  reviewDate: Date;
-  reviewedBy: string;
-  ratings: AppraisalRating[];
-  overallScore: number;
-  comments: string;
-}): Promise<AppraisalRecord> {
-  const db = await getDb();
-  const [row] = await db.insert(appraisals).values(input).returning();
-  return row;
-}
-
-export async function updateAppraisal(
-  id: number,
-  patch: Partial<
-    Pick<AppraisalRecord, "periodLabel" | "reviewDate" | "ratings" | "overallScore" | "comments">
-  >,
-): Promise<void> {
-  const db = await getDb();
-  await db.update(appraisals).set(patch).where(eq(appraisals.id, id));
-}
-
-export async function deleteAppraisal(id: number): Promise<void> {
-  const db = await getDb();
-  await db.delete(appraisals).where(eq(appraisals.id, id));
-}
-
-// ── Instructor assessments (observation form; successor to appraisals) ────────
+// ── Instructor assessments (observation form) ────────────────────────────────
 
 export async function listAssessmentsForCoach(coachId: number): Promise<AssessmentRecord[]> {
   const db = await getDb();
@@ -1655,20 +1587,6 @@ export async function createGymNote(input: {
 export async function deleteGymNote(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(gymNotes).where(eq(gymNotes.id, id));
-}
-
-/** Latest appraisal overall (0–100) per coach, for prefilling the KPI mgmt assessment. */
-export async function getLatestAppraisalOverallByCoach(): Promise<Map<number, number>> {
-  const db = await getDb();
-  const rows = await db
-    .select({ coachId: appraisals.coachId, overallScore: appraisals.overallScore })
-    .from(appraisals)
-    .orderBy(desc(appraisals.reviewDate));
-  const map = new Map<number, number>();
-  for (const r of rows) {
-    if (!map.has(r.coachId)) map.set(r.coachId, r.overallScore); // desc order ⇒ first seen is latest
-  }
-  return map;
 }
 
 /**
