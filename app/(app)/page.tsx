@@ -45,7 +45,7 @@ const TOOLS: Tool[] = [
   {
     href: "/staff",
     title: "Staff",
-    subtitle: "Employee directory, appraisals & notes",
+    subtitle: "Employee directory, profiles & notes",
     icon: Users,
     cap: "view_all_staff",
   },

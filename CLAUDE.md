@@ -197,9 +197,8 @@ The three sections (Allowance / KPI / Staff) and their per-section settings page
 are intentionally stable. When a "where should X go?" question comes up, resolve it with the
 rule below rather than relocating UI:
 
-- **Entities live under Staff.** Centers (`/staff/settings`), Appraisal dimensions
-  (`/staff/settings`), Users / accounts (`/staff/users`), Permissions matrix
-  (`/staff/permissions`, super_admin only).
+- **Entities live under Staff.** Centers (`/staff/settings`), Users / accounts
+  (`/staff/users`), Permissions matrix (`/staff/permissions`, super_admin only).
 - **Calculator math lives under its calculator.** Allowance tiers + rate tables
   (`/allowance/settings`), KPI metrics + weights + min/max (`/kpi/settings`).
 - **All three section tabs are labeled "Settings"** — Allowance, KPI, and Staff — never

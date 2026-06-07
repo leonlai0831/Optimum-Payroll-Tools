@@ -30,7 +30,7 @@ export default async function AuditPage() {
             bare
             icon={ScrollText}
             title="No activity yet"
-            body="Sensitive changes — settings, permissions, users, staff profiles, appraisals, notes, and saved runs — will appear here."
+            body="Sensitive changes — settings, permissions, users, staff profiles, assessments, notes, and saved runs — will appear here."
           />
         ) : (
           <div className="overflow-x-auto">

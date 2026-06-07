@@ -12,7 +12,8 @@ The app is feature-complete for a first production rollout:
   client-side scoring → leaderboard + per-coach detail → save month), **History**,
   **Trends**, editable **Settings**. Scoring is byte-for-byte v11.1 by default.
 - **Staff Allowance** calculator + history + rate settings.
-- **Staff** module: directory, per-employee profile, **appraisals**, **notes**.
+- **Staff** module: directory, per-employee profile, **notes**, read-only
+  **assessment** records (instructor assessments live in their own module).
 - **Per-user auth + RBAC**: email/password, roles (super_admin / admin / staff),
   editable capability matrix, users + permissions admin pages. First super admin
   bootstraps from `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`.
@@ -29,7 +30,7 @@ The app is feature-complete for a first production rollout:
   sweep complete app-wide); the AI-insight panel uses a Skeleton while loading.
 - **#6 Audit log** — `audit_log` table (migration `0007`) + `recordAudit()` /
   `listAuditLog()`; sensitive mutations are recorded (settings, permissions,
-  user create/update/delete, appraisal create/delete, allowance save, KPI-run
+  user create/update/delete, allowance save, KPI-run
   save). Read-only **`/staff/audit`** page gated by the new `view_audit`
   capability (default: admin + super_admin). Records forward from deploy only.
 - **#7 E2E** — `e2e/integration-smoke.mjs` (`npm run test:smoke`, no browser,
@@ -49,9 +50,7 @@ The app is feature-complete for a first production rollout:
   them from the GitHub Branches UI — all merged, safe.
 - **Audit coverage** now also records performance **notes** (create/delete) and
   **staff-profile** edits (create/update/delete), alongside the existing
-  settings, permissions, users, appraisals, and saved-run coverage. Remaining
-  gap: appraisal **edits** (the PATCH on `/api/staff/appraisals/[id]`) still
-  aren't recorded — only create/delete are.
+  settings, permissions, users, and saved-run coverage.
 
 ## Verify / run
 
