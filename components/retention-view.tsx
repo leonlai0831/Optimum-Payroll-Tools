@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { HeartHandshake, Info, Sparkles } from "lucide-react";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
+import { fetchJson } from "@/lib/http";
 import { cn } from "@/lib/utils";
 
 interface Watch {
@@ -26,8 +27,7 @@ export function RetentionView() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/retention");
-      const d = (await res.json()) as { watch?: Watch[]; summary?: string };
+      const d = await fetchJson<{ watch?: Watch[]; summary?: string }>("/api/retention");
       setData({ watch: d.watch ?? [], summary: d.summary ?? "" });
     } catch {
       setData({ watch: [], summary: "Could not load this right now." });

@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   createCommissionRun,
-  getCommissionConfig,
+  getCommissionConfigFresh,
   listCommissionRuns,
   recordAudit,
 } from "@/lib/db/queries";
@@ -41,7 +41,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "rows are required" }, { status: 400 });
   }
 
-  const config = body.config ?? (await getCommissionConfig());
+  // Snapshot from the client-sent config, else read FRESH (cache-bypassing) so a
+  // multi-instance deploy never builds the persisted snapshot from stale rates.
+  const config = body.config ?? (await getCommissionConfigFresh());
   const summary = computeCommission(body.rows, config);
   const id = await createCommissionRun({
     periodLabel: body.periodLabel,

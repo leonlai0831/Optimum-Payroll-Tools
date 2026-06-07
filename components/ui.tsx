@@ -21,6 +21,9 @@ const buttonSizes: Record<ButtonSize, string> = {
 export function Button({
   variant = "primary",
   size = "md",
+  // Default to a non-submitting button so a <Button> inside a <form> doesn't
+  // accidentally submit it. Buttons that *should* submit pass type="submit".
+  type = "button",
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -29,6 +32,7 @@ export function Button({
 }) {
   return (
     <button
+      type={type}
       className={cn(
         "inline-flex items-center justify-center font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
         buttonSizes[size],

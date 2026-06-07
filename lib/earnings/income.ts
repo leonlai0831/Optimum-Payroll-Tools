@@ -37,12 +37,12 @@ export function matcherFor(member: { name: string; staffCode: string; aliases?: 
 }
 
 /** Commission matches on exact staff_code (when set) or normalised name. */
-export function matchesCommission(m: EarningsMatcher, s: { staffCode: string; staffName: string }): boolean {
+function matchesCommission(m: EarningsMatcher, s: { staffCode: string; staffName: string }): boolean {
   return (m.staffCode !== "" && s.staffCode === m.staffCode) || m.names.has(normName(s.staffName));
 }
 
 /** Coaching only carries a name, so it matches on normalised name / alias. */
-export function matchesCoaching(m: EarningsMatcher, c: { staffName: string }): boolean {
+function matchesCoaching(m: EarningsMatcher, c: { staffName: string }): boolean {
   return m.names.has(normName(c.staffName));
 }
 

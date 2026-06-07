@@ -601,6 +601,12 @@ export async function saveCommissionConfig(data: CommissionConfig): Promise<void
   invalidateSingleton("commission-config");
 }
 
+/** Fresh (uncached) commission config for the SAVE/snapshot path — see `getAllowanceConfigFresh`. */
+export function getCommissionConfigFresh(): Promise<CommissionConfig> {
+  invalidateSingleton("commission-config");
+  return getCommissionConfig();
+}
+
 export interface CommissionRunSummary {
   id: number;
   periodLabel: string;
@@ -739,6 +745,12 @@ export async function saveTeachingConfig(data: TeachingConfig): Promise<void> {
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: teachingConfig.id, set: { data, updatedAt: new Date() } });
   invalidateSingleton("teaching-config");
+}
+
+/** Fresh (uncached) coaching-income config for the SAVE/snapshot path — see `getAllowanceConfigFresh`. */
+export function getTeachingConfigFresh(): Promise<TeachingConfig> {
+  invalidateSingleton("teaching-config");
+  return getTeachingConfig();
 }
 
 // Saved coaching-income months (mirror of commission runs).
@@ -1032,6 +1044,18 @@ export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> 
     .values({ id: 1, data })
     .onConflictDoUpdate({ target: allowanceConfig.id, set: { data, updatedAt: new Date() } });
   invalidateSingleton("allowance-config");
+}
+
+/**
+ * Fresh (uncached) read of the allowance config: invalidate the per-process cache
+ * first so the memoized getter re-hits the DB. The SAVE/snapshot path must build
+ * its persisted `configSnapshot` (and recompute) from the live rates — on a
+ * multi-instance deploy a 60s-stale cache could otherwise snapshot old rates.
+ * View/read pages keep the cached `getAllowanceConfig`.
+ */
+export function getAllowanceConfigFresh(): Promise<AllowanceConfig> {
+  invalidateSingleton("allowance-config");
+  return getAllowanceConfig();
 }
 
 /**

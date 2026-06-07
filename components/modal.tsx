@@ -14,6 +14,36 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   lg: "max-w-lg",
 };
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Keep Tab / Shift+Tab cycling within `panel` (a basic dialog focus trap). When
+ * focus is on the first focusable and Shift+Tab is pressed it wraps to the last,
+ * and vice-versa; with nothing focusable it just pins focus to the panel.
+ */
+export function trapFocus(e: KeyboardEvent, panel: HTMLElement | null): void {
+  if (!panel) return;
+  const items = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
+  if (items.length === 0) {
+    e.preventDefault();
+    panel.focus();
+    return;
+  }
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (e.shiftKey) {
+    if (active === first || active === panel) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else if (active === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 /**
  * Centered dialog. Closes on Esc and backdrop click; focuses the panel on open.
  * Pass a `footer` (typically Cancel + primary action) for buttons; the body goes
@@ -39,15 +69,23 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      // Focus trap: keep Tab / Shift+Tab cycling within the panel.
+      if (e.key === "Tab") trapFocus(e, panelRef.current);
     };
     document.addEventListener("keydown", onKey);
     // Lock background scroll while the modal is open.
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Remember what was focused so we can restore it on close.
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
     };
   }, [open, onClose]);
 
@@ -85,6 +123,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             title="Close"
+            aria-label="Close"
             className="rounded p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
           >
             <X className="h-4 w-4" />

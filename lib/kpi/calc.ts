@@ -189,7 +189,7 @@ export function getCenterTarget(name: string, targets: CenterTargets): number {
 }
 
 /** Score a single center using center KPI config, with student target applied. */
-export function computeCenterScore(
+function computeCenterScore(
   rows: InstructorRow[],
   centerName: string,
   centerKpi: MetricConfig[],

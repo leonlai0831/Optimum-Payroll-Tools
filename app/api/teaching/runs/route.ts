@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createTeachingRun, getTeachingConfig, listTeachingRuns, recordAudit } from "@/lib/db/queries";
+import { createTeachingRun, getTeachingConfigFresh, listTeachingRuns, recordAudit } from "@/lib/db/queries";
 import { computeTeaching } from "@/lib/teaching/calc";
 import type { TeachingConfig, TeachingRow } from "@/lib/teaching/types";
 
@@ -36,7 +36,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "rows are required" }, { status: 400 });
   }
 
-  const config = body.config ?? (await getTeachingConfig());
+  // Snapshot from the client-sent config, else read FRESH (cache-bypassing) so a
+  // multi-instance deploy never builds the persisted snapshot from stale rates.
+  const config = body.config ?? (await getTeachingConfigFresh());
   const summary = computeTeaching(body.rows, config);
   const id = await createTeachingRun({
     periodLabel: body.periodLabel.trim(),

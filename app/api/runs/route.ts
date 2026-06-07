@@ -5,6 +5,8 @@ import { createRun, listRuns, recordAudit, runStatusFromResults } from "@/lib/db
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { RunCoach } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   // Saved KPI runs carry per-coach bonus/pay data — gate on the KPI module's
   // capability (matches the POST/DELETE siblings and the KPI history page).

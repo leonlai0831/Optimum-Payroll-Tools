@@ -20,6 +20,7 @@ import type { AllowanceConfig, AllowanceTier } from "@/lib/allowance/types";
 import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
+import { fetchJson } from "@/lib/http";
 import { cn, rm } from "@/lib/utils";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 
@@ -88,17 +89,6 @@ interface AllowanceRec {
   tier: AllowanceTier;
   /** CSV account aliases of this allowance's coach profile (for tolerant linking). */
   aliases?: string[];
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    // Surface the server's real error/status instead of a misleading
-    // "Unexpected end of JSON input" from calling .json() on an empty error body.
-    const body = (await res.text().catch(() => "")).slice(0, 300);
-    throw new Error(`${url} failed (${res.status})${body ? `: ${body}` : ""}`);
-  }
-  return res.json() as Promise<T>;
 }
 
 function derivePeriod(filename: string): string {
