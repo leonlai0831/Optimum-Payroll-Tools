@@ -140,6 +140,70 @@ export async function analyzePerformance(input: AnalyzeInput): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Instructor assessment analysis: turn an observation form into a coaching note.
+// ---------------------------------------------------------------------------
+
+export interface AssessmentAnalyzeInput {
+  name: string;
+  totalPercent: number;
+  finalGrade: string;
+  /** Each sub-category's earned points out of its weight. */
+  subScores: { label: string; score: number; weight: number }[];
+  comments?: string;
+  /** Optional recent history (newest first) for a trend read. */
+  history?: { observedOn: string; totalPercent: number }[];
+}
+
+const ASSESSMENT_SYSTEM = `You are an instructor-development coach for a swim school. Given an instructor's observation-form scores by category (each out of its weight) plus the assessor's comments and any recent score history, write a concise insight (2–4 sentences) for management. Name the strongest and weakest category, note the trend if history is given, and give one concrete, actionable development focus. Be direct and specific; no preamble, no bullet lists.`;
+
+function fallbackAssessmentAnalysis(input: AssessmentAnalyzeInput): string {
+  const ranked = [...input.subScores]
+    .filter((s) => s.weight > 0)
+    .sort((a, b) => b.score / b.weight - a.score / a.weight);
+  const top = ranked[0];
+  const bottom = ranked[ranked.length - 1];
+  let sentiment = "Solid all-round teaching.";
+  if (input.totalPercent >= 85) sentiment = "Excellent — well above expectations.";
+  else if (input.totalPercent < 55) sentiment = "Developing — needs focused support.";
+  if (!top || !bottom || top.label === bottom.label) {
+    return `${input.name}: ${sentiment} (${input.totalPercent.toFixed(0)}%, ${input.finalGrade}).`;
+  }
+  return `${input.name}: ${sentiment} (${input.totalPercent.toFixed(0)}%, grade ${input.finalGrade}). Strongest area is ${top.label}; prioritise development in ${bottom.label}.`;
+}
+
+/** Generate a short development insight from an assessment, falling back to a template. */
+export async function analyzeAssessment(input: AssessmentAnalyzeInput): Promise<string> {
+  const client = getClient();
+  if (!client) return fallbackAssessmentAnalysis(input);
+
+  const cats = input.subScores
+    .map((s) => `- ${s.label}: ${s.score.toFixed(1)} / ${s.weight}`)
+    .join("\n");
+  const trend = input.history?.length
+    ? `\nRecent scores (newest first): ${input.history.map((h) => `${h.observedOn} ${h.totalPercent.toFixed(0)}%`).join(", ")}`
+    : "";
+
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      system: [{ type: "text", text: ASSESSMENT_SYSTEM, cache_control: { type: "ephemeral" } }],
+      messages: [
+        {
+          role: "user",
+          content: `Instructor: ${input.name}\nFinal: ${input.totalPercent.toFixed(1)}% (grade ${input.finalGrade})\nCategory scores:\n${cats}${trend}${input.comments ? `\nAssessor comments: ${input.comments}` : ""}`,
+        },
+      ],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    return text && text.type === "text" ? text.text.trim() : fallbackAssessmentAnalysis(input);
+  } catch (err) {
+    logger.warn("analyzeAssessment failed; using template fallback", { err });
+    return fallbackAssessmentAnalysis(input);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CSV anomaly detection (feature #1): flag suspect rows before they reach payroll.
 // ---------------------------------------------------------------------------
 

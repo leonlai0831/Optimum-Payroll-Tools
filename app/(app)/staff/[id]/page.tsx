@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import {
   getAllowanceConfig,
   getCoachProfile,
+  listAssessmentsForCoach,
   listNotesForCoach,
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -9,6 +10,7 @@ import { getCapabilities } from "@/lib/auth/permissions";
 import {
   CoachProfileView,
   type AllowancePoint,
+  type AssessmentView,
   type CoachProfile,
 } from "@/components/coach-profile-view";
 import type { NoteView } from "@/components/notes-timeline";
@@ -26,10 +28,11 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
   const isOwn = caps.has("view_own") && user.coachId === coachId;
   if (!canViewAll && !isOwn) redirect("/");
 
-  const [profile, config, noteRecords] = await Promise.all([
+  const [profile, config, noteRecords, assessmentRecords] = await Promise.all([
     getCoachProfile(coachId),
     getAllowanceConfig(),
     listNotesForCoach(coachId),
+    listAssessmentsForCoach(coachId),
   ]);
   if (!profile) notFound();
   const { coach, kpi, allowance } = profile;
@@ -53,6 +56,15 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
     active: coach.active,
     allowanceTier: coach.allowanceTier,
   };
+  const assessmentViews: AssessmentView[] = assessmentRecords.map((a) => ({
+    id: a.id,
+    observedOn: a.observedOn.toISOString(),
+    assessor: a.assessor,
+    classType: a.classType,
+    poolType: a.poolType,
+    totalPercent: a.totalPercent,
+    finalGrade: a.finalGrade,
+  }));
   const allowancePoints: AllowancePoint[] = allowance.map((a) => ({
     id: a.id,
     period: a.periodLabel,
@@ -72,6 +84,7 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
       allowance={allowancePoints}
       notes={noteViews}
       canEditNotes={caps.has("edit_notes")}
+      assessments={assessmentViews}
     />
   );
 }

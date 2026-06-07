@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Plus, Save, X } from "lucide-react";
+import { ClipboardCheck, RotateCcw, Save } from "lucide-react";
 import { Button, Card, Input, Label, Spinner, Textarea } from "@/components/ui";
+import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
 import {
   ASSESSMENT_FORM,
@@ -14,23 +15,29 @@ import {
   type RatingMap,
 } from "@/lib/assessment/types";
 import { computeAssessment } from "@/lib/assessment/calc";
-import { cn } from "@/lib/utils";
+
+/** An instructor the form can be filed against. */
+export interface InstructorOption {
+  id: number;
+  name: string;
+}
 
 /**
- * The instructor observation form. Header + a 4-point rating per criterion,
- * grouped by the weighted sub-categories. Scores (sub-category %, Part grade,
- * Final grade) recompute live; the server recomputes + snapshots on save.
+ * The instructor observation form — the default landing of the assessment
+ * module. Pick the instructor from a searchable dropdown, rate each criterion on
+ * the 4-point scale (scores recompute live), add comments, and save. The server
+ * recomputes + snapshots the score, which feeds that instructor's KPI Mgmt %.
  */
 export function AssessmentForm({
-  coachId,
+  instructors,
   assessorDefault,
 }: {
-  coachId: number;
+  instructors: InstructorOption[];
   assessorDefault: string;
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [open, setOpen] = useState(false);
+  const [coachId, setCoachId] = useState<number | null>(null);
   const [classType, setClassType] = useState("");
   const [poolType, setPoolType] = useState("");
   const [pax, setPax] = useState("");
@@ -43,12 +50,14 @@ export function AssessmentForm({
   const result = useMemo(() => computeAssessment(ratings), [ratings]);
   const subScore = (key: string) =>
     result.parts.flatMap((p) => p.subScores).find((s) => s.key === key)?.score ?? 0;
+  const selectedName = instructors.find((i) => i.id === coachId)?.name;
 
   function setRating(key: string, r: Rating) {
     setRatings((prev) => ({ ...prev, [key]: r }));
   }
 
   function reset() {
+    setCoachId(null);
     setClassType("");
     setPoolType("");
     setPax("");
@@ -58,6 +67,10 @@ export function AssessmentForm({
   }
 
   async function save() {
+    if (coachId == null) {
+      toast.error("Select an instructor first.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/assessments", {
@@ -75,9 +88,8 @@ export function AssessmentForm({
         }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
-      toast.success("Assessment saved.");
+      toast.success(`Saved — ${selectedName ?? "instructor"} · ${result.totalPercent.toFixed(1)}%`);
       reset();
-      setOpen(false);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -86,27 +98,24 @@ export function AssessmentForm({
     }
   }
 
-  if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)}>
-        <ClipboardCheck className="h-4 w-4" /> New assessment
-      </Button>
-    );
-  }
-
   return (
     <Card className="p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-h3 text-gray-900">
-          <ClipboardCheck className="h-4 w-4 text-indigo-500" /> New assessment
-        </h3>
-        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600" title="Cancel">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      <h3 className="mb-3 flex items-center gap-2 text-h3 text-gray-900">
+        <ClipboardCheck className="h-4 w-4 text-indigo-500" /> New assessment
+      </h3>
 
-      {/* Header */}
+      {/* Header — instructor + observation details */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <Label>Instructor</Label>
+          <SearchableSelect
+            className="mt-1"
+            placeholder={selectedName ?? "Select instructor…"}
+            searchPlaceholder="Search instructor…"
+            options={instructors.map((i) => ({ value: String(i.id), label: i.name }))}
+            onSelect={(v) => setCoachId(Number(v))}
+          />
+        </div>
         <div>
           <Label htmlFor="a-class">Class type / Level</Label>
           <Input id="a-class" className="mt-1" value={classType} onChange={(e) => setClassType(e.target.value)} placeholder="LVL 1" />
@@ -187,8 +196,8 @@ export function AssessmentForm({
         <Button onClick={save} disabled={busy}>
           {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save assessment
         </Button>
-        <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
-          <Plus className="h-4 w-4 rotate-45" /> Cancel
+        <Button variant="ghost" onClick={reset} disabled={busy}>
+          <RotateCcw className="h-4 w-4" /> Clear
         </Button>
       </div>
     </Card>
@@ -219,7 +228,7 @@ function SubCategoryRows({
         <tr key={c.key} className="border-t border-gray-100">
           <td className="py-1.5 pr-2 text-gray-700">{c.label}</td>
           {RATINGS.map((r) => (
-            <td key={r} className={cn("px-2 py-1.5 text-center")}>
+            <td key={r} className="px-2 py-1.5 text-center">
               <input
                 type="radio"
                 name={c.key}

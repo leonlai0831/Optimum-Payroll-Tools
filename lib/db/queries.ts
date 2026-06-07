@@ -1573,6 +1573,40 @@ export async function getLatestAssessmentFinalByCoach(): Promise<Map<number, num
   return map;
 }
 
+export interface RecentAssessment {
+  id: number;
+  coachId: number;
+  coachName: string;
+  observedOn: Date;
+  assessor: string;
+  classType: string;
+  poolType: string;
+  totalPercent: number;
+  finalGrade: GradeKey;
+}
+
+/** The most recent assessments across all instructors, with the coach name joined. */
+export async function listRecentAssessments(limit = 20): Promise<RecentAssessment[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: assessments.id,
+      coachId: assessments.coachId,
+      coachName: coaches.canonicalName,
+      observedOn: assessments.observedOn,
+      assessor: assessments.assessor,
+      classType: assessments.classType,
+      poolType: assessments.poolType,
+      totalPercent: assessments.totalPercent,
+      finalGrade: assessments.finalGrade,
+    })
+    .from(assessments)
+    .leftJoin(coaches, eq(assessments.coachId, coaches.id))
+    .orderBy(desc(assessments.observedOn))
+    .limit(limit);
+  return rows.map((r) => ({ ...r, coachName: r.coachName ?? `#${r.coachId}` }));
+}
+
 export async function listNotesForCoach(coachId: number): Promise<NoteRecord[]> {
   const db = await getDb();
   return db.select().from(notes).where(eq(notes.coachId, coachId)).orderBy(desc(notes.noteDate));

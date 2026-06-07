@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { ConfirmModal } from "@/components/modal";
 import {
@@ -15,12 +15,24 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
+import { GRADE_LABEL, type GradeKey } from "@/lib/assessment/types";
+
+/** A read-only assessment row shown on the profile. */
+export interface AssessmentView {
+  id: number;
+  observedOn: string;
+  assessor: string;
+  classType: string;
+  poolType: string;
+  totalPercent: number;
+  finalGrade: GradeKey;
+}
 import {
   EMPLOYEE_ROLE_LABELS,
   EMPLOYMENT_TYPES,
@@ -65,6 +77,7 @@ export function CoachProfileView({
   allowance,
   notes,
   canEditNotes,
+  assessments,
 }: {
   coach: CoachProfile;
   centers: string[];
@@ -74,6 +87,7 @@ export function CoachProfileView({
   allowance: AllowancePoint[];
   notes: NoteView[];
   canEditNotes: boolean;
+  assessments: AssessmentView[];
 }) {
   return (
     <div className="space-y-4">
@@ -108,10 +122,61 @@ export function CoachProfileView({
         canEdit={canEdit}
       />
       <NotesTimeline subjectId={coach.id} notes={notes} canEdit={canEditNotes} />
+      <AssessmentsCard assessments={assessments} />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
       <PayslipsCard coachId={coach.id} kpi={kpi} allowance={allowance} />
     </div>
+  );
+}
+
+function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
+  if (assessments.length === 0) return null;
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
+        <ClipboardCheck className="h-4 w-4 text-indigo-500" />
+        <span className="text-sm font-bold text-gray-900">Assessments</span>
+        <span className="text-xs text-gray-500">{assessments.length}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="px-4 py-2 text-left">Date</th>
+              <th className="px-4 py-2 text-left">Assessor</th>
+              <th className="px-4 py-2 text-left">Class</th>
+              <th className="px-4 py-2 text-right">Score</th>
+              <th className="px-4 py-2 text-left">Grade</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {assessments.map((a, i) => (
+              <tr key={a.id}>
+                <td className="px-4 py-2 text-gray-700">
+                  {new Date(a.observedOn).toLocaleDateString()}
+                  {i === 0 && (
+                    <span className="ml-2 text-[10px] font-semibold uppercase text-indigo-500">
+                      latest → KPI
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-gray-500">{a.assessor || "—"}</td>
+                <td className="px-4 py-2 text-gray-500">
+                  {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}
+                </td>
+                <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
+                  {a.totalPercent.toFixed(1)}%
+                </td>
+                <td className="px-4 py-2">
+                  <Badge>{GRADE_LABEL[a.finalGrade]}</Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 

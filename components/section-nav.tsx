@@ -16,6 +16,7 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   UserCog,
   Users,
   type LucideIcon,
@@ -37,7 +38,9 @@ const NAVS: Record<"allowance" | "kpi" | "staff" | "commission" | "assessment", 
   assessment: {
     title: "Instructor Assessment",
     items: [
-      { href: "/assessment", label: "Instructors", icon: ClipboardCheck, exact: true },
+      { href: "/assessment", label: "New assessment", icon: ClipboardCheck, exact: true },
+      { href: "/assessment/recent", label: "Recent", icon: History },
+      { href: "/assessment/ai", label: "AI analysis", icon: Sparkles },
     ],
   },
   allowance: {
