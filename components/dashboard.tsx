@@ -8,7 +8,7 @@ import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { Skeleton } from "@/components/skeleton";
 import { SearchableSelect } from "@/components/searchable-select";
-import { RadarProfile } from "@/components/radar-chart";
+import dynamic from "next/dynamic";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
@@ -56,6 +56,12 @@ interface Acct {
   /** Whether this account counts toward the coach's individual KPI. */
   include: boolean;
 }
+
+// recharts is heavy; load the radar only on the client, after the page paints.
+const RadarProfile = dynamic(
+  () => import("@/components/radar-chart").then((m) => ({ default: m.RadarProfile })),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-gray-50" /> },
+);
 
 interface GroupInputs {
   canonicalName: string;
