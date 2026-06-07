@@ -48,8 +48,11 @@ export function computeCoach(opts: {
       hours2: inputs.groupConfig.hours2,
     });
   }
+  // Average personal + group ONLY when a supervisor actually has a group
+  // config. Conditioning on `groupScore > 0` (the old behavior) wrongly handed
+  // full personal pay to a supervisor whose group legitimately scored 0.
   const finalScore =
-    isSupervisor && groupScore > 0
+    isSupervisor && hasGroup
       ? (personal.totalScore + groupScore) / 2
       : personal.totalScore;
 

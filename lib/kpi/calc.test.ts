@@ -24,6 +24,15 @@ describe("calcMetricScore (ported v11.1 curves)", () => {
     expect(calcMetricScore(123, 140, 280, "growth")).toBeCloseTo(123 / 140, 6);
     expect(calcMetricScore(280, 140, 280, "growth")).toBeCloseTo(1.49907, 4);
   });
+  it("growth: a zero (or negative) min never divides by zero", () => {
+    // Regression: the old guard sat in the wrong branch, so val > min === 0
+    // hit `Math.log((val-0)/0 + 1)` -> Infinity. The score must stay finite.
+    const s = calcMetricScore(200, 0, 280, "growth");
+    expect(Number.isFinite(s)).toBe(true);
+    expect(s).toBe(1.5); // positive value, no real baseline -> capped at ceiling
+    expect(Number.isFinite(calcMetricScore(200, -5, 280, "growth"))).toBe(true);
+    expect(calcMetricScore(0, 0, 280, "growth")).toBe(0); // non-positive value -> 0
+  });
   it("lower: best at/below min, worst at/above max", () => {
     expect(calcMetricScore(0, 0, 0.1, "lower")).toBe(1.5);
     expect(calcMetricScore(0.1, 0, 0.1, "lower")).toBe(0.5);
