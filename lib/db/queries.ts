@@ -363,6 +363,19 @@ export async function upsertCoachesFromRun(coachResults: RunCoach[]): Promise<vo
   }
 }
 
+/** One coach's headline result within a saved month (for the History accordion). */
+export interface RunCoachRow {
+  canonicalName: string;
+  center: string;
+  students: number;
+  position: string;
+  finalScore: number;
+  grade: string;
+  teachingAllowance: number | null;
+  payout: number;
+  isComplete: boolean;
+}
+
 export interface RunSummary {
   id: number;
   periodLabel: string;
@@ -371,6 +384,8 @@ export interface RunSummary {
   createdAt: Date;
   coachCount: number;
   totalPayout: number;
+  /** Per-coach results (sorted by score desc) so History can expand a month inline. */
+  coaches: RunCoachRow[];
 }
 
 export async function listRuns(): Promise<RunSummary[]> {
@@ -394,6 +409,19 @@ export async function listRuns(): Promise<RunSummary[]> {
     createdAt: r.createdAt,
     coachCount: r.coachResults.length,
     totalPayout: r.coachResults.reduce((s, c) => s + (c.payout || 0), 0),
+    coaches: [...r.coachResults]
+      .sort((a, b) => b.finalScore - a.finalScore)
+      .map((c) => ({
+        canonicalName: c.canonicalName,
+        center: c.center,
+        students: c.students,
+        position: c.position,
+        finalScore: c.finalScore,
+        grade: c.grade,
+        teachingAllowance: c.teachingAllowance,
+        payout: c.payout,
+        isComplete: c.isComplete,
+      })),
   }));
 }
 
