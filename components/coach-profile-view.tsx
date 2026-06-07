@@ -6,15 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { ConfirmModal } from "@/components/modal";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
@@ -180,6 +172,12 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
   );
 }
 
+// recharts is heavy; load the chart only on the client, after the page paints.
+const ProfileScoreChart = dynamic(() => import("@/components/profile-score-chart"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-gray-50" />,
+});
+
 function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
   if (kpi.length === 0) return null;
   const chart = kpi.map((k) => ({ period: k.period, score: Number(k.finalScore.toFixed(2)) }));
@@ -190,15 +188,7 @@ function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
       </h3>
       {kpi.length > 1 && (
         <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chart} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} domain={[0, "auto"]} />
-              <Tooltip />
-              <Line type="monotone" dataKey="score" stroke="#0061ff" strokeWidth={2} dot={{ r: 2 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <ProfileScoreChart data={chart} />
         </div>
       )}
       <div className="overflow-x-auto">
