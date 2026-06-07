@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, History, Lock, LockOpen, Search } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronRight, History, Lock, LockOpen, Search } from "lucide-react";
 import { Button, Card, Input, Select, Spinner } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
@@ -18,7 +18,7 @@ import {
   useSortState,
 } from "@/components/table-controls";
 import type { AllowanceRunSummary } from "@/lib/db/queries";
-import { rm, splitCenters } from "@/lib/utils";
+import { cn, rm, splitCenters } from "@/lib/utils";
 
 function LockButton({ period, locked }: { period: string; locked: boolean }) {
   const router = useRouter();
@@ -194,6 +194,18 @@ export function AllowanceHistoryView({
   const [centerFilter, setCenterFilter] = useState("");
   const [positionFilter, setPositionFilter] = useState("");
   const { sort, toggleSort } = useSortState<keyof typeof ACCESSORS>();
+  // Months are collapsed by default; click a header to expand. An active filter
+  // expands every group so search results aren't hidden behind a collapsed month.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const filterActive = q.trim() !== "" || centerFilter !== "" || positionFilter !== "";
+  function toggleExpand(period: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(period)) next.delete(period);
+      else next.add(period);
+      return next;
+    });
+  }
 
   const centerOptions = useMemo(
     () => [...new Set(rows.flatMap((r) => splitCenters(r.center)))].sort(),
@@ -284,10 +296,27 @@ export function AllowanceHistoryView({
           const period = list[0].periodLabel;
           const total = list.reduce((s, r) => s + r.grandTotal, 0);
           const locked = lockedSet.has(period);
+          const open = expanded.has(period) || filterActive;
           return (
             <Card key={period} className="overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
-                <div className="flex flex-wrap items-center gap-2">
+              <div
+                className={cn(
+                  "flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-4 py-2",
+                  open && "border-b border-gray-100",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(period)}
+                  aria-expanded={open}
+                  className="flex flex-1 flex-wrap items-center gap-2 text-left"
+                  title={open ? "Collapse month" : "Expand month"}
+                >
+                  {open ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                  )}
                   <span className="font-semibold text-gray-900">{period}</span>
                   {locked && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
@@ -297,13 +326,14 @@ export function AllowanceHistoryView({
                   <span className="text-xs text-gray-500">
                     {list.length} coach(es) · total {rm(total)}
                   </span>
-                </div>
+                </button>
                 <div className="flex items-center gap-2">
                   {canLock && !locked && <ChangeMonthButton period={period} />}
                   {canLock && <LockButton period={period} locked={locked} />}
                   <AllowanceExportButton period={period} rows={list} />
                 </div>
               </div>
+              {open && (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
@@ -390,6 +420,7 @@ export function AllowanceHistoryView({
                   </tbody>
                 </table>
               </div>
+              )}
             </Card>
           );
         })
