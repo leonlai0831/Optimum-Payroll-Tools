@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { sanitizeSpreadsheetText } from "@/lib/utils";
 
 /** KPI fields the summary needs from one coach in a saved run. */
 export interface SummaryKpiInput {
@@ -123,11 +124,13 @@ export function buildMonthlySummaryCsv(summary: MonthlySummary): string {
     sumAllowance += r.allowance;
     sumTotal += total;
     return [
-      summary.period,
-      r.coach,
-      r.center,
-      r.position,
-      r.tier,
+      // User-derived text is neutralized against spreadsheet formula injection;
+      // numeric columns below are left untouched.
+      sanitizeSpreadsheetText(summary.period),
+      sanitizeSpreadsheetText(r.coach),
+      sanitizeSpreadsheetText(r.center),
+      sanitizeSpreadsheetText(r.position),
+      sanitizeSpreadsheetText(r.tier),
       r.kpi ? r.kpi.students : "",
       r.kpi ? r.kpi.score.toFixed(3) : "",
       r.kpi ? r.kpi.grade : "",

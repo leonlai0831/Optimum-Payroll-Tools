@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   createCommissionRun,
@@ -13,7 +13,10 @@ import type { CommissionConfig, CommissionRow } from "@/lib/commission/types";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Saved commission runs carry per-staff earnings — gate on the commission
+  // module's capability (matches the POST/DELETE siblings and history page).
+  const denied = await requireCapability("run_commission");
+  if (denied) return denied;
   return NextResponse.json(await listCommissionRuns());
 }
 
@@ -25,10 +28,10 @@ export async function POST(req: Request) {
   const denied = await requireCapability("run_commission");
   if (denied) return denied;
   const actor = await getCurrentUser();
-  const body = (await req.json()) as {
-    periodLabel: string;
+  const body = (await req.json().catch(() => ({}))) as {
+    periodLabel?: string;
     filename?: string;
-    rows: CommissionRow[];
+    rows?: CommissionRow[];
     config?: CommissionConfig;
   };
   if (!body.periodLabel) {

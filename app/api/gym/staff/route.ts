@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createGymStaff, listGymStaff, recordAudit } from "@/lib/db/queries";
 import type { GymStaffInput } from "@/lib/gym/types";
@@ -7,7 +7,11 @@ import type { GymStaffInput } from "@/lib/gym/types";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Returns the full gym-staff roster (with earnings linkage) — gate on
+  // `view_all_staff`, the all-staff data gate every role reaching the Staff
+  // Earnings module (admin/supervisor) also holds.
+  const denied = await requireCapability("view_all_staff");
+  if (denied) return denied;
   return NextResponse.json(await listGymStaff());
 }
 
@@ -15,7 +19,7 @@ export async function POST(req: Request) {
   const denied = await requireCapability("edit_staff");
   if (denied) return denied;
   const actor = await getCurrentUser();
-  const body = (await req.json()) as GymStaffInput;
+  const body = (await req.json().catch(() => ({}))) as GymStaffInput;
   if (!body.name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
   const id = await createGymStaff({

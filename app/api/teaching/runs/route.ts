@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createTeachingRun, getTeachingConfig, listTeachingRuns, recordAudit } from "@/lib/db/queries";
 import { computeTeaching } from "@/lib/teaching/calc";
@@ -8,7 +8,10 @@ import type { TeachingConfig, TeachingRow } from "@/lib/teaching/types";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Saved coaching-income runs carry per-coach earnings — gate on the same
+  // commission-module capability the POST/DELETE siblings use.
+  const denied = await requireCapability("run_commission");
+  if (denied) return denied;
   return NextResponse.json(await listTeachingRuns());
 }
 
@@ -20,10 +23,10 @@ export async function POST(req: Request) {
   const denied = await requireCapability("run_commission");
   if (denied) return denied;
   const actor = await getCurrentUser();
-  const body = (await req.json()) as {
-    periodLabel: string;
+  const body = (await req.json().catch(() => ({}))) as {
+    periodLabel?: string;
     filename?: string;
-    rows: TeachingRow[];
+    rows?: TeachingRow[];
     config?: TeachingConfig;
   };
   if (!body.periodLabel?.trim()) {

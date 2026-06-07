@@ -9,11 +9,33 @@ export async function GET() {
   return NextResponse.json(await getTeachingConfig());
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const clampRate = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(100000, Math.max(0, n)) : 0;
+};
+
 export async function PUT(req: Request) {
   const denied = await requireCapability("edit_settings");
   if (denied) return denied;
   const actor = await getCurrentUser();
-  const data = (await req.json()) as TeachingConfig;
+  const raw = (await req.json().catch(() => null)) as TeachingConfig | null;
+
+  // Hardening (route already requires edit_settings): reject malformed bodies and
+  // clamp the per-session/attendee rates to sane non-negative ringgit.
+  if (!isObject(raw)) {
+    return NextResponse.json({ error: "invalid config body" }, { status: 400 });
+  }
+  const data: TeachingConfig = {
+    ptRate: clampRate(raw.ptRate),
+    groupRate: clampRate(raw.groupRate),
+    ptKeywords: Array.isArray(raw.ptKeywords)
+      ? raw.ptKeywords.map((k) => String(k)).filter(Boolean)
+      : [],
+  };
+
   await saveTeachingConfig(data);
   if (actor) {
     await recordAudit({

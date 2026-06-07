@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const denied = await requireCapability("run_commission");
   if (denied) return denied;
 
-  const body = (await req.json()) as { monthLabel?: string; rows: TeachingRow[]; config?: TeachingConfig };
+  const body = (await req.json().catch(() => ({}))) as { monthLabel?: string; rows?: TeachingRow[]; config?: TeachingConfig };
   if (!Array.isArray(body.rows) || body.rows.length === 0) {
     return NextResponse.json({ error: "rows are required" }, { status: 400 });
   }

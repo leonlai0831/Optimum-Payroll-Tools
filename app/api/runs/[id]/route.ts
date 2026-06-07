@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   deleteRun,
@@ -11,7 +11,9 @@ import {
 import type { RunCoach } from "@/lib/types";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // A saved run holds per-coach bonus/pay data — same gate as the list + siblings.
+  const denied = await requireCapability("run_kpi");
+  if (denied) return denied;
   const { id } = await ctx.params;
   const run = await getRun(Number(id));
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });

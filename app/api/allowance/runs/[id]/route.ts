@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
 import { requireCapability, requireManager } from "@/lib/auth/permissions";
 import {
   deleteAllowanceRun,
@@ -11,7 +10,9 @@ import {
 import { isValidPeriod } from "@/lib/allowance/period";
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/allowance/runs/[id]">) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // A single allowance run is a staff pay record — same gate as the list + siblings.
+  const denied = await requireCapability("run_allowance");
+  if (denied) return denied;
   const { id } = await ctx.params;
   const run = await getAllowanceRun(Number(id));
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });

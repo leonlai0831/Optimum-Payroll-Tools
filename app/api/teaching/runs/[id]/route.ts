@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { deleteTeachingRun, getTeachingRun, recordAudit } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // A single coaching-income run carries per-coach earnings — same gate as siblings.
+  const denied = await requireCapability("run_commission");
+  if (denied) return denied;
   const { id } = await params;
   const run = await getTeachingRun(Number(id));
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });

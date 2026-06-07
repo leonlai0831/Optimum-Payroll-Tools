@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { isAuthed } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
+import { getCapabilities } from "@/lib/auth/permissions";
 import { getGymStaffEarnings, getGymStaffMember } from "@/lib/db/queries";
 import { buildStaffEarningsWorkbook } from "@/lib/earnings/xlsx";
 
@@ -13,9 +14,21 @@ function fileName(name: string): string {
 
 /** One staff member's earnings across saved months, as an Excel workbook. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
-  const member = await getGymStaffMember(Number(id));
+  const staffId = Number(id);
+
+  // Same access rule as the payslip route: anyone who can view all staff, or the
+  // staff member viewing their own earnings.
+  const caps = await getCapabilities(user);
+  const canViewAll = caps.has("view_all_staff");
+  const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
+  if (!canViewAll && !isOwn) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const member = await getGymStaffMember(staffId);
   if (!member) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const report = await getGymStaffEarnings(member);

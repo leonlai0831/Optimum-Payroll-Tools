@@ -121,6 +121,7 @@ describe("capability matrix (default permission config)", () => {
     displayName: "",
     role,
     coachId: null,
+    gymStaffId: null,
     active: true,
   });
 

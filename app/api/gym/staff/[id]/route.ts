@@ -11,7 +11,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (denied) return denied;
   const actor = await getCurrentUser();
   const { id } = await params;
-  const body = (await req.json()) as GymStaffInput;
+  const body = (await req.json().catch(() => ({}))) as GymStaffInput;
   if (!body.name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
   await updateGymStaff(Number(id), {

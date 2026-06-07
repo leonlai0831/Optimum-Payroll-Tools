@@ -2,6 +2,7 @@
 // month (commission + coaching income), with a TOTAL row (exceljs).
 
 import ExcelJS from "exceljs";
+import { sanitizeSpreadsheetText } from "@/lib/utils";
 import type { StaffEarningsReport } from "./income";
 
 const NAVY = "FF1F2A56";
@@ -36,7 +37,7 @@ export async function buildStaffEarningsWorkbook(opts: {
 
   let r = 2;
   for (const m of report.months) {
-    ws.getCell(r, 1).value = m.period;
+    ws.getCell(r, 1).value = sanitizeSpreadsheetText(m.period);
     ws.getCell(r, 2).value = m.commission;
     ws.getCell(r, 3).value = m.coachingIncome;
     ws.getCell(r, 4).value = m.total;
