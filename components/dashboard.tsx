@@ -9,13 +9,14 @@ import { Skeleton } from "@/components/skeleton";
 import { SearchableSelect } from "@/components/searchable-select";
 import dynamic from "next/dynamic";
 import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
+import { makeCenterNormalizer } from "@/lib/allowance/centers";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
 import { linkAllowance, reconcileAllowances, type CoachLinkInfo } from "@/lib/kpi/allowance-link";
 import { appearsInLeaderboard } from "@/lib/kpi/leaderboard";
 import type { CsvAnomaly } from "@/lib/ai/anthropic";
 import { isLinkableTier, nonLinkableReason } from "@/lib/allowance/tier-rules";
-import type { AllowanceTier } from "@/lib/allowance/types";
+import type { AllowanceConfig, AllowanceTier } from "@/lib/allowance/types";
 import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { GroupConfig, Position, RunCoach } from "@/lib/types";
@@ -154,16 +155,24 @@ export function Dashboard({
       skipEmptyLines: true,
       complete: async (res) => {
         try {
-          const parsed = mapCsvRows(res.data);
-          setRows(parsed);
+          const rawParsed = mapCsvRows(res.data);
           setFileName(file.name);
           const derivedPeriod = derivePeriod(file.name);
           setPeriod(derivedPeriod);
 
-          const [cfg, coachList] = await Promise.all([
+          const [cfg, coachList, allowanceCfg] = await Promise.all([
             fetchJson<AppConfig>("/api/config"),
             fetchJson<CoachProfile[]>("/api/coaches"),
+            fetchJson<AllowanceConfig>("/api/allowance/config"),
           ]);
+          // Normalize raw CSV center labels (a mix of codes + full names) onto the
+          // operator's configured center codes via the alias map from Staff settings.
+          const normCenter = makeCenterNormalizer(
+            allowanceCfg.centers ?? [],
+            allowanceCfg.centerAliases ?? {},
+          );
+          const parsed = rawParsed.map((r) => ({ ...r, Center: normCenter(r.Center) }));
+          setRows(parsed);
           setConfig(cfg);
           setCoachList(coachList);
           // Seed the session NA set from persisted "not applicable" overrides.

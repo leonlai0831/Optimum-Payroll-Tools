@@ -946,6 +946,10 @@ export const getAllowanceConfig = memoizedSingleton("allowance-config", async ()
     if (!Array.isArray(data.centers) || data.centers.length === 0) {
       data.centers = [...CENTERS];
     }
+    // Backfill center aliases for configs saved before they existed.
+    if (!data.centerAliases || typeof data.centerAliases !== "object") {
+      data.centerAliases = {};
+    }
     return data;
   }
   const data = structuredClone(DEFAULT_ALLOWANCE_CONFIG);
@@ -970,18 +974,55 @@ export async function saveAllowanceConfig(data: AllowanceConfig): Promise<void> 
 export async function saveAllowanceRates(payload: AllowanceConfig): Promise<void> {
   invalidateSingleton("allowance-config"); // read-modify-write — never merge onto a stale cache
   const current = await getAllowanceConfig();
-  await saveAllowanceConfig({ ...payload, centers: current.centers });
+  // Centers AND their aliases are managed via Staff -> Settings; a rates save must
+  // never overwrite either, even if the payload carries stale/empty values.
+  await saveAllowanceConfig({
+    ...payload,
+    centers: current.centers,
+    centerAliases: current.centerAliases,
+  });
+}
+
+/** Trim, drop blanks, dedupe (order-preserving). */
+function normalizeCenterList(centers: readonly unknown[]): string[] {
+  return [...new Set(centers.map((c) => String(c).trim()).filter(Boolean))];
+}
+
+/** Clean an alias map: trim/dedupe each list, drop blanks, keep only known centers. */
+function normalizeAliasMap(
+  aliases: Record<string, unknown> | undefined,
+  centers: string[],
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!aliases || typeof aliases !== "object") return out;
+  const keep = new Set(centers);
+  for (const [code, list] of Object.entries(aliases)) {
+    if (!keep.has(code) || !Array.isArray(list)) continue;
+    const cleaned = [...new Set(list.map((a) => String(a).trim()).filter(Boolean))];
+    if (cleaned.length > 0) out[code] = cleaned;
+  }
+  return out;
 }
 
 /**
- * Replace the centers list while preserving the allowance rate tables.
- * Trims, drops blanks, and dedupes (order-preserving).
+ * Replace the centers list (and, when provided, the per-center alias map) while
+ * preserving the allowance rate tables. Centers/aliases live under Staff; this
+ * saver and `saveAllowanceRates` deliberately preserve each other's data so the
+ * Staff page and the Allowance rates page never clobber one another.
+ *
+ * When `centerAliases` is omitted the stored aliases are preserved (callers that
+ * only touch the centers list don't need to know about aliases). Alias entries
+ * for centers that no longer exist are dropped.
  */
-export async function saveCenters(centers: readonly unknown[]): Promise<void> {
+export async function saveCenters(
+  centers: readonly unknown[],
+  centerAliases?: Record<string, unknown>,
+): Promise<void> {
   invalidateSingleton("allowance-config"); // read-modify-write — never merge onto a stale cache
-  const normalized = [...new Set(centers.map((c) => String(c).trim()).filter(Boolean))];
+  const normalized = normalizeCenterList(centers);
   const current = await getAllowanceConfig();
-  await saveAllowanceConfig({ ...current, centers: normalized });
+  const aliases = normalizeAliasMap(centerAliases ?? current.centerAliases, normalized);
+  await saveAllowanceConfig({ ...current, centers: normalized, centerAliases: aliases });
 }
 
 /**

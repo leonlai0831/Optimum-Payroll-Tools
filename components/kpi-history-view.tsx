@@ -7,18 +7,29 @@ import { Badge, Card, Input } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import type { RunSummary } from "@/lib/db/queries";
+import { makeCenterNormalizer } from "@/lib/allowance/centers";
 import { rm } from "@/lib/utils";
 
 export function KpiHistoryView({
   runs,
   canExport,
   savers,
+  centers = [],
+  centerAliases = {},
 }: {
   runs: RunSummary[];
   canExport: boolean;
   /** run id → last saver's name, for admins; null hides the column. */
   savers: Record<number, string> | null;
+  /** Operator center codes + aliases, to normalize stored center labels for display. */
+  centers?: string[];
+  centerAliases?: Record<string, string[]>;
 }) {
+  // Normalize stored (possibly raw) center labels onto the configured codes for display.
+  const normCenter = useMemo(
+    () => makeCenterNormalizer(centers, centerAliases),
+    [centers, centerAliases],
+  );
   const [q, setQ] = useState("");
   // Months are collapsed; click a row to expand its per-coach result inline.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -181,7 +192,9 @@ export function KpiHistoryView({
                                           </span>
                                         )}
                                       </td>
-                                      <td className="px-2 py-1 text-gray-500">{c.center || "—"}</td>
+                                      <td className="px-2 py-1 text-gray-500">
+                                        {normCenter(c.center) || "—"}
+                                      </td>
                                       <td className="px-2 py-1 text-center text-gray-600">
                                         {c.students}
                                       </td>
