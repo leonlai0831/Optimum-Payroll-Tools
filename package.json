@@ -20,6 +20,7 @@
     "@anthropic-ai/sdk": "^0.98.0",
     "@electric-sql/pglite": "^0.4.5",
     "@sentry/node": "^10.55.0",
+    "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
