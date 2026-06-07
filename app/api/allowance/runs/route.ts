@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   checkAllowancePeriodAllowed,
-  createAllowanceRun,
+  createAllowanceRunIfUnlocked,
   getAllowanceConfigFresh,
   isPeriodLocked,
   listAllowanceRuns,
@@ -35,6 +35,10 @@ export async function POST(req: Request) {
   if (!body.input?.name?.trim()) {
     return NextResponse.json({ error: "coach name is required" }, { status: 400 });
   }
+  // Fast-path pre-check for the common case (avoids the sequential-month guard +
+  // config read + recompute when the month is already locked). NOT authoritative:
+  // the lock is re-checked atomically with the write below, so a concurrent
+  // lockPeriod between here and the save can't slip a record into a locked month.
   if (await isPeriodLocked(body.periodLabel)) {
     return NextResponse.json(
       { error: `${body.periodLabel} is locked. Unlock the month to make changes.` },
@@ -57,12 +61,21 @@ export async function POST(req: Request) {
   // (cache-bypassing) so a multi-instance deploy never snapshots stale rates.
   const configSnapshot = await getAllowanceConfigFresh();
   const result = calcAllowance(body.input, configSnapshot);
-  const id = await createAllowanceRun({
+  // Atomic: re-checks the period lock FOR UPDATE in the same transaction as the
+  // write, closing the TOCTOU window against a concurrent lockPeriod.
+  const saved = await createAllowanceRunIfUnlocked({
     periodLabel: body.periodLabel,
     input: body.input,
     result,
     configSnapshot,
   });
+  if (saved.locked) {
+    return NextResponse.json(
+      { error: `${body.periodLabel} is locked. Unlock the month to make changes.` },
+      { status: 409 },
+    );
+  }
+  const id = saved.id;
   if (actor) {
     await recordAudit({
       actorId: actor.id,

@@ -8,6 +8,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { PermissionConfig, Role } from "@/lib/auth/types";
 import type {
@@ -58,7 +59,10 @@ export const coaches = pgTable("coaches", {
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => [index("coaches_name_idx").on(t.canonicalName)]);
+  // One profile per canonical name: the merge pass + carry-over upserts all key
+  // coaches by canonical name, so a duplicate would silently split a person's
+  // history. UNIQUE makes that a hard guarantee (dedup runs first in the migration).
+}, (t) => [uniqueIndex("coaches_name_idx").on(t.canonicalName)]);
 
 /** Singleton role→capability matrix (one row, id = 1). super_admin is not stored. */
 export const permissionConfig = pgTable("permission_config", {
@@ -118,8 +122,11 @@ export const allowanceRuns = pgTable("allowance_runs", {
   configSnapshot: jsonb("config_snapshot").$type<AllowanceConfig>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
-  index("allowance_runs_period_idx").on(t.periodLabel),
-  index("allowance_runs_period_name_idx").on(t.periodLabel, t.canonicalName),
+  // One allowance record per (period, coach). UNIQUE lets createAllowanceRun do a
+  // single atomic onConflictDoUpdate upsert (the dedup runs first in the
+  // migration). Its leading `period_label` column also serves the period-only
+  // lookups, so the separate `allowance_runs_period_idx` was dropped as redundant.
+  uniqueIndex("allowance_runs_period_name_idx").on(t.periodLabel, t.canonicalName),
   index("allowance_runs_coach_idx").on(t.coachId),
 ]);
 

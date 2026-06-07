@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
@@ -88,6 +88,20 @@ import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
 type DbOrTx = DB | Tx;
 
+/**
+ * Take a transaction-scoped advisory lock keyed on an allowance period. Both the
+ * "save a run if unlocked" and "lock the period" paths acquire it on the same key,
+ * so the two operations fully serialize even when no lock *row* exists yet — a
+ * plain `SELECT … FOR UPDATE` only locks an existing row and so couldn't close the
+ * first-ever-lock TOCTOU on its own. Released automatically when the tx ends.
+ *
+ * (PGlite supports `pg_advisory_xact_lock`, verified; single-writer there makes it
+ * a near-no-op, but the lock still resolves correctly so the code path is shared.)
+ */
+async function lockPeriodAdvisory(tx: Tx, period: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${period}))`);
+}
+
 export function defaultConfig(): AppConfig {
   return {
     personalKpi: structuredClone(DEFAULT_PERSONAL_KPI),
@@ -125,6 +139,33 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+/** A plain (non-array, non-null) object — the only thing deepMerge recurses into. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Recursively backfill `stored` with `defaults`: plain objects are merged key by
+ * key; arrays and primitives present in `stored` win wholesale (a stored array is
+ * never element-merged with a default array). Used by the singleton config
+ * getters so a NEW nested field added inside a metric/rate object gains its
+ * default for configs written before that field existed — something the old
+ * one-level `{ ...defaults(), ...stored }` spread missed. A config that already
+ * has every key is returned byte-for-byte equal to `stored` (only missing keys
+ * are filled), so existing configs are unchanged.
+ */
+function deepMerge<T>(defaults: T, stored: unknown): T {
+  if (!isPlainObject(defaults) || !isPlainObject(stored)) {
+    // `stored` (when defined) always wins over the default at the leaf level.
+    return (stored === undefined ? defaults : (stored as T));
+  }
+  const out: Record<string, unknown> = { ...stored };
+  for (const [key, dflt] of Object.entries(defaults)) {
+    out[key] = key in stored ? deepMerge(dflt, stored[key]) : dflt;
+  }
+  return out as T;
+}
+
 function memoizedSingleton<T>(key: string, read: () => Promise<T>): () => Promise<T> {
   return async () => {
     const hit = singletonCache.get(key);
@@ -142,9 +183,10 @@ function invalidateSingleton(key: string): void {
 export const getConfig = memoizedSingleton("kpi-config", async (): Promise<AppConfig> => {
   const db = await getDb();
   const rows = await db.select().from(config).where(eq(config.id, 1)).limit(1);
-  // Backfill top-level keys added after a row was first written (e.g. `classify`)
-  // so older saved configs gain new defaults without a migration.
-  if (rows[0]) return { ...defaultConfig(), ...rows[0].data };
+  // Backfill keys added after a row was first written (e.g. `classify`, or a new
+  // field nested inside a metric) so older saved configs gain new defaults
+  // without a migration. Deep so nested additions backfill too.
+  if (rows[0]) return deepMerge(defaultConfig(), rows[0].data);
   const data = defaultConfig();
   await db.insert(config).values({ id: 1, data }).onConflictDoNothing();
   return data;
@@ -586,7 +628,7 @@ export const getCommissionConfig = memoizedSingleton("commission-config", async 
     .from(commissionConfig)
     .where(eq(commissionConfig.id, 1))
     .limit(1);
-  if (rows[0]) return { ...defaultCommissionConfig(), ...rows[0].data };
+  if (rows[0]) return deepMerge(defaultCommissionConfig(), rows[0].data);
   const data = defaultCommissionConfig();
   await db.insert(commissionConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;
@@ -732,7 +774,7 @@ async function _getCommissionTrendData(): Promise<CommissionTrendData> {
 export const getTeachingConfig = memoizedSingleton("teaching-config", async (): Promise<TeachingConfig> => {
   const db = await getDb();
   const rows = await db.select().from(teachingConfig).where(eq(teachingConfig.id, 1)).limit(1);
-  if (rows[0]) return { ...defaultTeachingConfig(), ...rows[0].data };
+  if (rows[0]) return deepMerge(defaultTeachingConfig(), rows[0].data);
   const data = defaultTeachingConfig();
   await db.insert(teachingConfig).values({ id: 1, data }).onConflictDoNothing();
   return data;
@@ -1166,54 +1208,111 @@ export async function ensureCoachForAllowance(opts: EnsureCoachOpts): Promise<nu
   return db.transaction((tx) => ensureCoachForAllowanceWith(tx, opts));
 }
 
-/**
- * Save one coach's month. One record per coach per period: any existing
- * (periodLabel, canonicalName) entry is replaced so re-saving is idempotent.
- */
-export async function createAllowanceRun(data: {
+interface AllowanceRunData {
   periodLabel: string;
   input: AllowanceInput;
   result: AllowanceResult;
   configSnapshot: AllowanceConfig;
-}): Promise<number> {
-  const db = await getDb();
-  // One transaction so the resolve-coach, the "replace existing (period, name)"
-  // DELETE, and the INSERT are atomic. Without it two concurrent saves of the
-  // same coach+period could both DELETE-then-INSERT and leave a duplicate row.
-  const id = await db.transaction(async (tx) => {
-    const coachId = await ensureCoachForAllowanceWith(tx, {
-      coachId: data.input.coachId,
-      canonicalName: data.input.name,
-      center: data.input.center,
-      tier: data.input.tier,
-    });
+}
 
-    await tx
-      .delete(allowanceRuns)
-      .where(
-        and(
-          eq(allowanceRuns.periodLabel, data.periodLabel),
-          eq(allowanceRuns.canonicalName, data.input.name),
-        ),
-      );
-
-    const [row] = await tx
-      .insert(allowanceRuns)
-      .values({
-        periodLabel: data.periodLabel,
-        coachId,
-        canonicalName: data.input.name,
-        tier: data.input.tier,
-        center: data.input.center,
-        input: { ...data.input, coachId },
-        result: data.result,
-        configSnapshot: data.configSnapshot,
-      })
-      .returning({ id: allowanceRuns.id });
-    return row.id;
+/**
+ * Executor-threaded core of the allowance save: resolve-or-create the coach, then
+ * upsert the one (periodLabel, canonicalName) record. Runs on whatever `exec` is
+ * passed so a caller can thread its open transaction (e.g. the lock-gated path) to
+ * make the whole read→write atomic. Returns the row id.
+ *
+ * The upsert relies on the UNIQUE index on (period_label, canonical_name): one
+ * atomic statement replaces the old delete-then-insert, so re-saving the same
+ * coach+month is idempotent and two concurrent saves can't leave a duplicate row.
+ */
+async function insertAllowanceRunWith(exec: DbOrTx, data: AllowanceRunData): Promise<number> {
+  const coachId = await ensureCoachForAllowanceWith(exec, {
+    coachId: data.input.coachId,
+    canonicalName: data.input.name,
+    center: data.input.center,
+    tier: data.input.tier,
   });
+
+  const values = {
+    periodLabel: data.periodLabel,
+    coachId,
+    canonicalName: data.input.name,
+    tier: data.input.tier,
+    center: data.input.center,
+    input: { ...data.input, coachId },
+    result: data.result,
+    configSnapshot: data.configSnapshot,
+  };
+
+  const [row] = await exec
+    .insert(allowanceRuns)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [allowanceRuns.periodLabel, allowanceRuns.canonicalName],
+      set: {
+        coachId: values.coachId,
+        tier: values.tier,
+        center: values.center,
+        input: values.input,
+        result: values.result,
+        configSnapshot: values.configSnapshot,
+        // Keep `created_at` advancing on re-save: History orders by it and the
+        // old delete-then-insert reset it on every save, so preserve that.
+        createdAt: new Date(),
+      },
+    })
+    .returning({ id: allowanceRuns.id });
+  return row.id;
+}
+
+/**
+ * Save one coach's month. One record per coach per period: any existing
+ * (periodLabel, canonicalName) entry is replaced so re-saving is idempotent.
+ * Does NOT gate on the period lock — callers that must respect locks should use
+ * `createAllowanceRunIfUnlocked`.
+ */
+export async function createAllowanceRun(data: AllowanceRunData): Promise<number> {
+  const db = await getDb();
+  // One transaction so the resolve-coach and the upsert are atomic (two
+  // concurrent saves of the same coach+period can't race the coach insert).
+  const id = await db.transaction((tx) => insertAllowanceRunWith(tx, data));
   invalidateSingleton("allowance-trend");
   return id;
+}
+
+/** Sentinel the route maps to its existing 409 "month is locked" response. */
+export type AllowanceRunLocked = { locked: true };
+export type AllowanceRunSaved = { locked: false; id: number };
+
+/**
+ * Save one coach's month, but ONLY if the period isn't locked — checked atomically
+ * with the write. Inside one transaction it takes a period-keyed advisory lock (the
+ * same one `lockPeriod` takes), re-reads the lock row, and only then upserts, so a
+ * concurrent `lockPeriod` can't slip in between the check and the insert (the TOCTOU
+ * the standalone `isPeriodLocked` + `createAllowanceRun` pair had). If the month is
+ * locked → return `{ locked: true }` and write nothing; otherwise do the upsert and
+ * return `{ locked: false, id }`.
+ */
+export async function createAllowanceRunIfUnlocked(
+  data: AllowanceRunData,
+): Promise<AllowanceRunLocked | AllowanceRunSaved> {
+  const db = await getDb();
+  const result = await db.transaction(async (tx): Promise<AllowanceRunLocked | AllowanceRunSaved> => {
+    // Serialize against a concurrent lockPeriod on this period (it takes the same
+    // advisory lock). Held until commit, so the lock-existence check below and the
+    // write are atomic w.r.t. locking even when no lock row exists yet.
+    await lockPeriodAdvisory(tx, data.periodLabel);
+    const locked = await tx
+      .select({ periodLabel: allowancePeriodLocks.periodLabel })
+      .from(allowancePeriodLocks)
+      .where(eq(allowancePeriodLocks.periodLabel, data.periodLabel))
+      .limit(1);
+    if (locked.length > 0) return { locked: true };
+    const id = await insertAllowanceRunWith(tx, data);
+    return { locked: false, id };
+  });
+  if (!result.locked) invalidateSingleton("allowance-trend");
+  return result;
 }
 
 export interface AllowanceRunSummary {
@@ -1511,13 +1610,19 @@ export async function isPeriodLocked(period: string): Promise<boolean> {
 /** Close a month: idempotent (re-locking just refreshes who/when). */
 export async function lockPeriod(period: string, lockedBy: string): Promise<void> {
   const db = await getDb();
-  await db
-    .insert(allowancePeriodLocks)
-    .values({ periodLabel: period, lockedBy })
-    .onConflictDoUpdate({
-      target: allowancePeriodLocks.periodLabel,
-      set: { lockedBy, lockedAt: new Date() },
-    });
+  // Take the same period-keyed advisory lock createAllowanceRunIfUnlocked uses, so
+  // a save in-flight for this period either commits before we mark it locked or
+  // blocks until we do — it can never land a record in a now-locked month.
+  await db.transaction(async (tx) => {
+    await lockPeriodAdvisory(tx, period);
+    await tx
+      .insert(allowancePeriodLocks)
+      .values({ periodLabel: period, lockedBy })
+      .onConflictDoUpdate({
+        target: allowancePeriodLocks.periodLabel,
+        set: { lockedBy, lockedAt: new Date() },
+      });
+  });
 }
 
 /** Re-open a month. No-op if it wasn't locked. */
