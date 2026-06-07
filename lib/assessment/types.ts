@@ -189,11 +189,37 @@ export const GRADE_LABEL = Object.fromEntries(
   GRADE_BANDS.map((b) => [b.key, b.label]),
 ) as Record<GradeKey, string>;
 
-/** Free-text header captured per observation. */
+/** Class type — single choice. */
+export const CLASS_TYPES = [
+  "Young swimmer",
+  "Low level",
+  "Medium level",
+  "High level",
+  "Adult class",
+] as const;
+export type ClassType = (typeof CLASS_TYPES)[number];
+
+/** Pool type — single choice. */
+export const POOL_TYPES = ["Big pool", "Small pool"] as const;
+export type PoolType = (typeof POOL_TYPES)[number];
+
+/** Swim levels present in the class (ticked, no per-level count). */
+export const LEVELS = ["YS", "N", "B", "1", "2", "3", "4", "5", "6", "7", "A"] as const;
+export type Level = (typeof LEVELS)[number];
+
+/** No. of pax dropdown range (1–MAX_PAX). */
+export const MAX_PAX = 8;
+
+/** Header captured per observation. */
 export interface AssessmentMeta {
   classType: string;
   poolType: string;
+  /** Level codes present in the class (subset of LEVELS). */
+  levels: string[];
+  /** Total class size (1–MAX_PAX). */
   pax: number | null;
+  hasHelper: boolean;
+  /** Snapshotted submitter (the signed-in user's display name). */
   assessor: string;
   /** YYYY-MM-DD of the observation. */
   observedOn: string;
