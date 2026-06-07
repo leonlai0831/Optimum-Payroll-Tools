@@ -1293,25 +1293,49 @@ export async function unlockPeriod(period: string): Promise<void> {
   await db.delete(allowancePeriodLocks).where(eq(allowancePeriodLocks.periodLabel, period));
 }
 
-/**
- * Map of allowance-run id → the email of whoever last saved (i.e. last edited)
- * it, read from the audit log's `allowance.save` entries. Powers the edit
- * attribution shown to admins. Only covers saves recorded since the audit log
- * existed; older runs map to nothing.
- */
-export async function getAllowanceSavers(): Promise<Record<number, string>> {
+/** Live map of user id → display name (falling back to email when unset). */
+async function displayNamesByUserId(): Promise<Map<number, string>> {
   const db = await getDb();
-  const rows = await db
-    .select({ entityId: auditLog.entityId, actorEmail: auditLog.actorEmail })
-    .from(auditLog)
-    .where(and(eq(auditLog.entity, "allowance_run"), eq(auditLog.action, "allowance.save")))
-    .orderBy(auditLog.createdAt, auditLog.id);
-  const byRun: Record<number, string> = {};
+  const rows = await db.select({ id: users.id, displayName: users.displayName, email: users.email }).from(users);
+  const map = new Map<number, string>();
+  for (const r of rows) map.set(r.id, r.displayName.trim() || r.email);
+  return map;
+}
+
+/**
+ * Map of audit entityId → the name of whoever last did `action` on it, resolving
+ * the actor to their current display name (falling back to the snapshotted
+ * email). Powers the saved-by / edited-by attribution shown to admins. Only
+ * covers actions recorded since the audit log existed; older rows map to nothing.
+ */
+async function saversFromAudit(entity: string, action: string): Promise<Record<number, string>> {
+  const db = await getDb();
+  const [rows, names] = await Promise.all([
+    db
+      .select({ entityId: auditLog.entityId, actorId: auditLog.actorId, actorEmail: auditLog.actorEmail })
+      .from(auditLog)
+      .where(and(eq(auditLog.entity, entity), eq(auditLog.action, action)))
+      .orderBy(auditLog.createdAt, auditLog.id),
+    displayNamesByUserId(),
+  ]);
+  const byEntity: Record<number, string> = {};
   for (const r of rows) {
     const id = Number(r.entityId);
-    if (Number.isFinite(id) && r.actorEmail) byRun[id] = r.actorEmail; // ascending ⇒ latest wins
+    if (!Number.isFinite(id)) continue;
+    const name = (r.actorId != null ? names.get(r.actorId) : undefined) || r.actorEmail;
+    if (name) byEntity[id] = name; // ascending ⇒ latest wins
   }
-  return byRun;
+  return byEntity;
+}
+
+/** allowance-run id → last saver's name, for the allowance history attribution. */
+export function getAllowanceSavers(): Promise<Record<number, string>> {
+  return saversFromAudit("allowance_run", "allowance.save");
+}
+
+/** KPI-run id → last saver's name, for the KPI history attribution. */
+export function getKpiRunSavers(): Promise<Record<number, string>> {
+  return saversFromAudit("run", "kpi_run.save");
 }
 
 // ── Users / auth ───────────────────────────────────────────────────────────
@@ -1349,6 +1373,7 @@ export async function createUser(input: {
   email: string;
   password: string;
   role: Role;
+  displayName?: string;
   coachId?: number | null;
   gymStaffId?: number | null;
 }): Promise<UserRecord> {
@@ -1361,6 +1386,7 @@ export async function createUser(input: {
     .insert(users)
     .values({
       email,
+      displayName: input.displayName?.trim() ?? "",
       passwordHash: hashPassword(input.password),
       role: input.role,
       coachId: input.coachId ?? null,
@@ -1374,6 +1400,7 @@ export async function updateUser(
   id: number,
   patch: {
     email?: string;
+    displayName?: string;
     role?: Role;
     active?: boolean;
     coachId?: number | null;
@@ -1383,6 +1410,7 @@ export async function updateUser(
 ): Promise<void> {
   const db = await getDb();
   const set: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
+  if (patch.displayName !== undefined) set.displayName = patch.displayName.trim();
   if (patch.email !== undefined) {
     const email = normalizeEmail(patch.email);
     const existing = await getUserByEmail(email);

@@ -11,6 +11,7 @@ function safeUser(u: UserRecord) {
   return {
     id: u.id,
     email: u.email,
+    displayName: u.displayName,
     role: u.role,
     coachId: u.coachId,
     gymStaffId: u.gymStaffId,
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
     email?: string;
     password?: string;
     role?: string;
+    displayName?: string;
     coachId?: number | null;
     gymStaffId?: number | null;
   };
@@ -58,6 +60,7 @@ export async function POST(req: Request) {
       email,
       password,
       role,
+      displayName: body.displayName,
       coachId: link.coachId,
       gymStaffId: link.gymStaffId,
     });

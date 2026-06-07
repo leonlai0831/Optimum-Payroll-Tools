@@ -14,5 +14,5 @@ export default async function AssessmentFormPage() {
     .filter((c) => c.jobRole === "instructor" && c.active)
     .map((c) => ({ id: c.id, name: c.canonicalName }));
 
-  return <AssessmentForm instructors={instructors} assessorDefault={user.email} />;
+  return <AssessmentForm instructors={instructors} assessorDefault={user.displayName || user.email} />;
 }
