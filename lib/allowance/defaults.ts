@@ -10,6 +10,7 @@ const STD_ATT = { met: 200, perfect: 300 };
  */
 export const DEFAULT_ALLOWANCE_CONFIG: AllowanceConfig = {
   centers: [...CENTERS],
+  centerAliases: {},
   attendance: {
     A1: { ...STD_ATT },
     A2: { ...STD_ATT },

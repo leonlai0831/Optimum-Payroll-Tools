@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Clock } from "lucide-react";
-import { getLatestAssessmentFinalByCoach, getRun } from "@/lib/db/queries";
+import { getAllowanceConfig, getLatestAssessmentFinalByCoach, getRun } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
+import { makeCenterNormalizer } from "@/lib/allowance/centers";
 import { Badge, Card } from "@/components/ui";
 import { DeleteRunButton } from "@/components/delete-run-button";
 import { RunReview } from "@/components/run-review";
@@ -27,6 +28,9 @@ export default async function RunDetailPage({
   const canFinalize = await userCan(user, "finalize_kpi");
   const coaches = [...run.coachResults].sort((a, b) => b.finalScore - a.finalScore);
   const totalPayout = coaches.reduce((s, c) => s + (c.payout || 0), 0);
+  // Normalize stored (possibly raw) center labels onto the configured codes for display.
+  const allowanceConfig = await getAllowanceConfig();
+  const normCenter = makeCenterNormalizer(allowanceConfig.centers, allowanceConfig.centerAliases);
 
   const header = (
     <div className="flex items-start justify-between">
@@ -131,7 +135,7 @@ export default async function RunDetailPage({
                     <span className="ml-2 text-[10px] text-amber-600">incomplete</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-gray-500">{c.center}</td>
+                <td className="px-4 py-2 text-gray-500">{normCenter(c.center)}</td>
                 <td className="px-4 py-2 text-center text-gray-600">{c.students}</td>
                 <td className="px-4 py-2 text-gray-600">{c.position}</td>
                 <td className="px-4 py-2 text-center font-bold text-indigo-600">

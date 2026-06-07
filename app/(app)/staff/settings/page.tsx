@@ -17,7 +17,11 @@ export default async function StaffSettingsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-      <CentersCard initial={allowanceConfig.centers} canEdit={canEdit} />
+      <CentersCard
+        initial={allowanceConfig.centers}
+        initialAliases={allowanceConfig.centerAliases}
+        canEdit={canEdit}
+      />
     </div>
   );
 }

@@ -114,6 +114,38 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     expect(after.attendance.T0).toEqual({ met: 999, perfect: 999 });
   });
 
+  it("saveCenters persists per-center aliases (trimmed/deduped, known centers only)", async () => {
+    await queries.saveCenters(["HQ", "USJ"], {
+      USJ: ["Subang USJ", " subang usj ", "Subang USJ", ""],
+      HQ: ["Berkeley"],
+      // Alias keyed to a center not in the list must be dropped.
+      ZZZ: ["Ghost"],
+    });
+    const after = await queries.getAllowanceConfig();
+    expect(after.centers).toEqual(["HQ", "USJ"]);
+    expect(after.centerAliases).toEqual({
+      USJ: ["Subang USJ", "subang usj"],
+      HQ: ["Berkeley"],
+    });
+  });
+
+  it("saveCenters preserves existing aliases when the payload omits them", async () => {
+    await queries.saveCenters(["HQ", "USJ"], { USJ: ["Subang USJ"] });
+    // A later centers-only save (no alias arg) must keep the stored aliases.
+    await queries.saveCenters(["HQ", "USJ", "BK"]);
+    expect((await queries.getAllowanceConfig()).centerAliases).toEqual({ USJ: ["Subang USJ"] });
+  });
+
+  it("saveAllowanceRates preserves the centers list AND the center aliases", async () => {
+    await queries.saveCenters(["HQ", "BK", "PJ"], { BK: ["Berkeley"] });
+    const before = await queries.getAllowanceConfig();
+    // A rates save arriving with cleared centers/aliases must NOT wipe either.
+    await queries.saveAllowanceRates({ ...before, centers: [], centerAliases: {} });
+    const after = await queries.getAllowanceConfig();
+    expect(after.centers).toEqual(["HQ", "BK", "PJ"]);
+    expect(after.centerAliases).toEqual({ BK: ["Berkeley"] });
+  });
+
   it("locks and unlocks a period (idempotent, membership checks)", async () => {
     expect(await queries.isPeriodLocked("2026-08")).toBe(false);
 

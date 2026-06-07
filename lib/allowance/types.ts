@@ -47,6 +47,12 @@ export interface TeachingRates {
 export interface AllowanceConfig {
   /** Editable list of operating centers shown in the center dropdowns. */
   centers: string[];
+  /**
+   * Per-center alias names: center code -> raw names that should normalize to it.
+   * Used to map uploaded KPI center labels (a mix of codes and full names) onto
+   * the operator's configured codes. Maintained in Staff -> Settings.
+   */
+  centerAliases: Record<string, string[]>;
   attendance: Record<AllowanceTier, AttendanceAmounts>;
   teaching: Record<AllowanceTier, TeachingRates>;
 }

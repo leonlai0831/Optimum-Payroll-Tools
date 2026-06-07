@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { History } from "lucide-react";
-import { getKpiRunSavers, listRuns } from "@/lib/db/queries";
+import { getAllowanceConfig, getKpiRunSavers, listRuns } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { KpiHistoryView } from "@/components/kpi-history-view";
@@ -13,10 +13,11 @@ export default async function HistoryPage() {
   if (!user) redirect("/login");
   // "Saved by" attribution is shown to admins + super admins only (matches allowance).
   const canSeeSavers = user.role === "admin" || user.role === "super_admin";
-  const [caps, runs, savers] = await Promise.all([
+  const [caps, runs, savers, allowanceConfig] = await Promise.all([
     getCapabilities(user),
     listRuns(),
     canSeeSavers ? getKpiRunSavers() : Promise.resolve(null),
+    getAllowanceConfig(),
   ]);
 
   return (
@@ -25,7 +26,13 @@ export default async function HistoryPage() {
         <History className="h-5 w-5 text-indigo-500" /> Saved Months
       </h1>
       {runs.length > 0 && <AskData />}
-      <KpiHistoryView runs={runs} canExport={caps.has("view_all_staff")} savers={savers} />
+      <KpiHistoryView
+        runs={runs}
+        canExport={caps.has("view_all_staff")}
+        savers={savers}
+        centers={allowanceConfig.centers}
+        centerAliases={allowanceConfig.centerAliases}
+      />
     </>
   );
 }
