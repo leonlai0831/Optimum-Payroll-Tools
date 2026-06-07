@@ -61,11 +61,23 @@ function recomputeRow(rc: RunCoach, rows: InstructorRow[], config: AppConfig): R
   };
 }
 
-export function RunReview({ run }: { run: ReviewRun }) {
+export function RunReview({
+  run,
+  assessmentByCoach,
+}: {
+  run: ReviewRun;
+  /** coachId → latest assessment final % — auto-fills + locks that coach's Mgmt %. */
+  assessmentByCoach: Record<number, number>;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [rows, setRows] = useState<ReviewRow[]>(() =>
-    run.coachResults.map((rc) => recomputeRow(rc, run.csvRows, run.configSnapshot)),
+    run.coachResults.map((rc) => {
+      // A coach with an assessment record gets that score, locked (no manual key-in).
+      const locked = rc.coachId != null ? assessmentByCoach[rc.coachId] : undefined;
+      const seeded = locked != null ? { ...rc, mgmtAssessment: locked } : rc;
+      return recomputeRow(seeded, run.csvRows, run.configSnapshot);
+    }),
   );
   const [saving, setSaving] = useState<"idle" | "progress" | "finalize">("idle");
 
@@ -217,6 +229,7 @@ export function RunReview({ run }: { run: ReviewRun }) {
 
       {rows.map((r, idx) => {
         const empty = r.rc.accounts.length === 0;
+        const mgmtLocked = r.rc.coachId != null && assessmentByCoach[r.rc.coachId] != null;
         return (
           <Card
             key={`${r.rc.canonicalName}-${idx}`}
@@ -259,8 +272,12 @@ export function RunReview({ run }: { run: ReviewRun }) {
                   onChange={(e) => setMgmt(idx, e.target.value)}
                   className="w-20 py-1 text-xs"
                   placeholder="—"
-                  disabled={empty}
+                  disabled={empty || mgmtLocked}
+                  title={mgmtLocked ? "From the latest assessment record — locked" : undefined}
                 />
+                {mgmtLocked && (
+                  <span className="text-[10px] font-medium text-brand">assessment · locked</span>
+                )}
               </div>
             </div>
 

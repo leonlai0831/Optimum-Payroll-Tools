@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Clock } from "lucide-react";
-import { getRun } from "@/lib/db/queries";
+import { getLatestAssessmentFinalByCoach, getRun } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
 import { Badge, Card } from "@/components/ui";
@@ -56,6 +56,11 @@ export default async function RunDetailPage({
 
   // Editable management review — admin / super_admin on a draft month.
   if (isDraft && canFinalize) {
+    // Latest assessment final % per coach — auto-fills + locks each coach's Mgmt %.
+    const assessmentMap = await getLatestAssessmentFinalByCoach();
+    const assessmentByCoach: Record<number, number> = Object.fromEntries(
+      [...assessmentMap.entries()].map(([coachId, pct]) => [coachId, Math.round(pct)]),
+    );
     return (
       <>
         {header}
@@ -68,6 +73,7 @@ export default async function RunDetailPage({
             configSnapshot: run.configSnapshot,
             coachResults: run.coachResults,
           }}
+          assessmentByCoach={assessmentByCoach}
         />
       </>
     );

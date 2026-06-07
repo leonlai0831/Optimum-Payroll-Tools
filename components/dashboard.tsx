@@ -923,10 +923,12 @@ export function Dashboard({
                           mgmtSource: "manual",
                         })
                       }
+                      // Locked when an assessment record drives it — no manual override.
+                      disabled={g.meta.mgmtSource === "assessment"}
                       className="w-20 py-1 text-xs"
                     />
                     {g.meta.mgmtSource === "assessment" ? (
-                      <div className="text-[10px] font-medium text-brand">from latest assessment</div>
+                      <div className="text-[10px] font-medium text-brand">from assessment · locked</div>
                     ) : g.meta.lastMgmtAt ? (
                       <div className="text-[10px] text-gray-400">
                         last {monthsAgo(g.meta.lastMgmtAt)}
