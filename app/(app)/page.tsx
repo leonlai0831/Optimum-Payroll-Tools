@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ChevronRight,
   ClipboardCheck,
   Dumbbell,
   ShieldCheck,
@@ -86,17 +87,30 @@ function ToolCard({ tool }: { tool: Tool }) {
   const body = (
     <Card
       className={cn(
-        "h-full p-5",
-        disabled ? "opacity-60" : "transition hover:border-brand hover:shadow-md",
+        "group h-full p-5 transition-all duration-150",
+        disabled
+          ? "opacity-60"
+          : "hover:-translate-y-0.5 hover:border-brand hover:shadow-md",
       )}
     >
-      <div
-        className={cn(
-          "flex h-11 w-11 items-center justify-center rounded-lg",
-          disabled ? "bg-gray-100 text-gray-400" : "bg-brand-light text-brand",
+      <div className="flex items-start justify-between">
+        <div
+          className={cn(
+            "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
+            disabled
+              ? "bg-gray-100 text-gray-400"
+              : "bg-brand-light text-brand group-hover:bg-brand group-hover:text-white",
+          )}
+        >
+          <Icon className="h-6 w-6" />
+        </div>
+        {disabled ? (
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-400">
+            Soon
+          </span>
+        ) : (
+          <ChevronRight className="h-5 w-5 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-brand" />
         )}
-      >
-        <Icon className="h-6 w-6" />
       </div>
       <div className="mt-3 text-base font-bold text-gray-900">{tool.title}</div>
       <p className="mt-1 text-sm text-gray-500">{tool.subtitle}</p>
@@ -132,8 +146,8 @@ export default async function HubPage() {
   return (
     <div className="fade-in space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Optimum Payroll Tools</h1>
-        <p className="mt-1 text-sm text-gray-500">Choose a calculator.</p>
+        <h1 className="text-display text-gray-900">Optimum Payroll Tools</h1>
+        <p className="mt-1 text-body text-muted">Choose a calculator to get started.</p>
       </div>
 
       {tools.length === 0 ? (
