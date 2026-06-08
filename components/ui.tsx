@@ -5,11 +5,11 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 type ButtonSize = "sm" | "md" | "lg";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm",
-  secondary: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
-  ghost: "text-gray-600 hover:bg-gray-100",
-  danger: "bg-red-600 text-white hover:bg-red-700",
-  outline: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+  primary: "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-sm",
+  secondary: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:bg-indigo-200",
+  ghost: "text-gray-600 hover:bg-gray-100 active:bg-gray-200",
+  danger: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
+  outline: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100",
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
@@ -34,7 +34,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex cursor-pointer items-center justify-center font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
         buttonSizes[size],
         buttonVariants[variant],
         className,
@@ -47,7 +47,7 @@ export function Button({
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-xl border border-gray-100 bg-white shadow-sm", className)}
+      className={cn("rounded-xl border border-gray-200/70 bg-white shadow-card", className)}
       {...props}
     />
   );
@@ -57,7 +57,7 @@ export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInp
   return (
     <input
       className={cn(
-        "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500",
+        "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
         className,
       )}
       {...props}
@@ -72,7 +72,7 @@ export function Textarea({
   return (
     <textarea
       className={cn(
-        "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500",
+        "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
         className,
       )}
       {...props}
@@ -84,7 +84,7 @@ export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLS
   return (
     <select
       className={cn(
-        "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500",
+        "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
         className,
       )}
       {...props}
