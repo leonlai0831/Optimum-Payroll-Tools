@@ -55,3 +55,10 @@ next-env.d.ts
 # Playwright e2e output (uploaded as CI artifacts, never committed)
 /test-results/
 /playwright-report/
+
+# Agent-skill installer artifacts. frontend-design (Anthropic, proprietary) is
+# bootstrapped from its official source by .claude/hooks/session-start.sh, not
+# vendored. The MIT skills under .claude/skills/ ARE committed.
+/.agents/
+/skills-lock.json
+/.claude/skills/frontend-design
