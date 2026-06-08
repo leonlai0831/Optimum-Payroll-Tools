@@ -129,6 +129,54 @@ body {
   }
 }
 
+/* ── Phase 2: legibility, elevation, focus & motion (site-wide) ──────────────
+   Refinements that propagate through the shared layer to every page. Brand-
+   agnostic: focus + selection use --color-brand, so they adopt the Swim (blue)
+   or Fit (black) skin automatically — no per-component changes. */
+
+/* Tabular figures wherever numbers matter (tables, money, KPI scores) so digits
+   line up column-to-column instead of jittering. */
+table {
+  font-variant-numeric: tabular-nums;
+}
+.nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft, layered card elevation — more depth than a flat shadow. */
+.shadow-card {
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 4px 14px -4px rgba(16, 24, 40, 0.08);
+}
+
+/* Clear, brand-tinted keyboard focus for interactive chrome (links, buttons,
+   tabs). :where() keeps specificity 0 so component styles still win; form fields
+   keep their own focus ring. Mouse clicks stay clean via :focus-visible. */
+:where(a, button, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* Brand-tinted text selection. */
+::selection {
+  background: var(--color-brand-light);
+  color: var(--color-brand-dark);
+}
+
+/* Honor reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;
