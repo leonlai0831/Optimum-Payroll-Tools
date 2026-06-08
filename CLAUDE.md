@@ -236,3 +236,20 @@ cd ~/.claude/skills/gstack && ./setup --team
 
 Skills like /qa, /ship, /review, /investigate, and /browse become available after install.
 Use /browse for all web browsing. Use ~/.claude/skills/gstack/... for gstack file paths.
+
+## Vendored skills (`.claude/skills/`)
+
+Committed into the repo so they're available in every Claude Code on the web session
+with no network (the container is ephemeral; vendoring beats bootstrapping for skills
+that don't need it). A SessionStart hook (`.claude/hooks/session-start.sh`) still
+bootstraps gstack separately.
+
+- **karpathy-guidelines** — guardrails against common LLM coding mistakes (simplicity,
+  surgical edits, verifiable success criteria).
+- **A curated subset of [obra/superpowers](https://github.com/obra/superpowers)** (MIT,
+  pinned — see `.claude/skills/_vendor/superpowers-NOTICE.md`): `test-driven-development`,
+  `systematic-debugging`, `verification-before-completion`, `requesting-code-review`,
+  `receiving-code-review`, `brainstorming`, `writing-plans`. Chosen for a payroll app
+  where a logic/rounding bug means wrong pay; the agent-orchestration/meta skills
+  (worktrees, parallel agents, etc.) were intentionally left out. These are invoked by
+  judgment, not as forced ceremony on trivial changes.
