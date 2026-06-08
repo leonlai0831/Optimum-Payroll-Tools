@@ -239,10 +239,11 @@ Use /browse for all web browsing. Use ~/.claude/skills/gstack/... for gstack fil
 
 ## Vendored skills (`.claude/skills/`)
 
-Committed into the repo so they're available in every Claude Code on the web session
-with no network (the container is ephemeral; vendoring beats bootstrapping for skills
-that don't need it). A SessionStart hook (`.claude/hooks/session-start.sh`) still
-bootstraps gstack separately.
+MIT-licensed skills are committed into the repo so they're available in every Claude
+Code on the web session with no network (the container is ephemeral; vendoring beats
+bootstrapping for skills that don't need it). The SessionStart hook
+(`.claude/hooks/session-start.sh`) bootstraps the ones we can't or shouldn't vendor —
+gstack, and the proprietary `frontend-design` skill.
 
 - **karpathy-guidelines** — guardrails against common LLM coding mistakes (simplicity,
   surgical edits, verifiable success criteria).
@@ -253,3 +254,13 @@ bootstraps gstack separately.
   where a logic/rounding bug means wrong pay; the agent-orchestration/meta skills
   (worktrees, parallel agents, etc.) were intentionally left out. These are invoked by
   judgment, not as forced ceremony on trivial changes.
+- **ui-ux-pro-max** ([nextlevelbuilder](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill),
+  MIT, pinned — see `.claude/skills/_vendor/design-skills-NOTICE.md`) — UI/UX design
+  intelligence (styles, palettes, font pairings, UX guidelines) with a small Python
+  search/design-system generator over CSV data. Only this one skill from that repo is
+  vendored; its sibling "ckm-design" marketing skills and bundled fonts are not.
+
+**Bootstrapped, not vendored:** **frontend-design** (Anthropic's official UI skill) is
+proprietary ("© Anthropic PBC. All rights reserved."), so it is *not* committed; the
+SessionStart hook installs it from the official source each session and its artifacts
+(`.agents/`, `skills-lock.json`, `.claude/skills/frontend-design`) are gitignored.

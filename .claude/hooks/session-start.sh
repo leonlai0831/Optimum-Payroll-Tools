@@ -1,7 +1,8 @@
 #!/bin/bash
-# SessionStart hook: auto-install gstack so its skills are available in every
-# Claude Code on the web session. See the "gstack (recommended)" section in
-# CLAUDE.md for the manual install equivalent.
+# SessionStart hook: make web-session skills available. Installs gstack (see the
+# "gstack (recommended)" section in CLAUDE.md) and the proprietary,
+# not-vendored frontend-design skill from its official source (see "Vendored
+# skills" in CLAUDE.md). MIT skills are vendored directly under .claude/skills/.
 #
 # Design notes:
 #  - Remote-only: does nothing on local machines (developers install gstack once).
@@ -17,6 +18,24 @@ set -uo pipefail
 # Only run in Claude Code on the web (remote) environment.
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
+fi
+
+# --- frontend-design (Anthropic official UI skill) -------------------------
+# Proprietary ("© Anthropic PBC. All rights reserved."), so it is NOT vendored
+# in the repo; install it from the official source each session instead. Light
+# (~6s, one SKILL.md) and idempotent; install artifacts (.agents/,
+# skills-lock.json, the .claude/skills/frontend-design symlink) are gitignored.
+# Non-fatal: a failed fetch must not block the session.
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if [ ! -e "$PROJECT_DIR/.claude/skills/frontend-design" ]; then
+  echo "frontend-design: installing via npx skills ..." >&2
+  if ( cd "$PROJECT_DIR" && npx -y skills@latest add anthropics/claude-code --skill frontend-design ) >&2; then
+    echo "frontend-design: installed." >&2
+  else
+    echo "frontend-design: install failed — skipping (session continues)." >&2
+  fi
+else
+  echo "frontend-design: already present — skipping." >&2
 fi
 
 GSTACK_DIR="$HOME/.claude/skills/gstack"
