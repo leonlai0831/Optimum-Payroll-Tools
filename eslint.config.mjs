@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party agent skills (obra/superpowers, etc.) — not project
+    // source; they ship their own example scripts not held to our lint rules.
+    ".claude/**",
   ]),
 ]);
 
