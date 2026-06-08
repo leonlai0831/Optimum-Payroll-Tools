@@ -62,3 +62,8 @@ next-env.d.ts
 /.agents/
 /skills-lock.json
 /.claude/skills/frontend-design
+
+# Python bytecode (the vendored ui-ux-pro-max skill ships .py scripts; running
+# them generates __pycache__ which must never be tracked)
+__pycache__/
+*.pyc
