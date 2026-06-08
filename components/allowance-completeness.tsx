@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck, ClipboardList } from "lucide-react";
+import { ChevronRight, ClipboardCheck, ClipboardList } from "lucide-react";
 import { Card, Select } from "@/components/ui";
-import { splitCenters } from "@/lib/utils";
+import { cn, splitCenters } from "@/lib/utils";
 
 export interface RosterEntry {
   id: number;
@@ -29,6 +29,9 @@ export function AllowanceCompleteness({
   savedNames: string[];
 }) {
   const [center, setCenter] = useState("");
+  // Names collapse by default — on a phone the full outstanding list is a wall;
+  // the count above is the at-a-glance signal, the list is tap-to-expand.
+  const [showNames, setShowNames] = useState(false);
 
   const centerOptions = useMemo(
     () => [...new Set(roster.flatMap((r) => splitCenters(r.center)))].sort(),
@@ -82,21 +85,35 @@ export function AllowanceCompleteness({
 
       {missing.length > 0 ? (
         <div className="mt-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+          <button
+            type="button"
+            onClick={() => setShowNames((s) => !s)}
+            aria-expanded={showNames}
+            className="flex min-h-9 items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-700 hover:text-amber-800"
+          >
+            <ChevronRight
+              className={cn("h-3.5 w-3.5 transition-transform", showNames && "rotate-90")}
+              aria-hidden
+            />
             Not yet recorded ({missing.length})
-          </p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {missing.map((m) => (
-              <Link
-                key={m.id}
-                href="/allowance"
-                className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
-                title="Enter allowance"
-              >
-                {m.name}
-              </Link>
-            ))}
-          </div>
+            <span className="font-medium normal-case text-amber-600">
+              · {showNames ? "hide" : "show"}
+            </span>
+          </button>
+          {showNames && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {missing.map((m) => (
+                <Link
+                  key={m.id}
+                  href="/allowance"
+                  className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                  title="Enter allowance"
+                >
+                  {m.name}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         scoped.length > 0 && (

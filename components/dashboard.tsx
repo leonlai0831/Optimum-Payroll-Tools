@@ -643,6 +643,67 @@ export function Dashboard({
 
   const detail = groups.find((g) => g.id === detailId);
 
+  // Shared inline-field renderers so the desktop table and the mobile cards edit
+  // through the exact same handlers — one source of truth for the editable cells.
+  // `inputClass` lets each layout size the control (compact in the table,
+  // full-width + larger touch target on mobile cards).
+  type Row = (typeof visible)[number];
+  const positionField = (g: Row, inputClass = "py-1 text-xs") => (
+    <Select
+      value={g.meta.position}
+      onChange={(e) => updateMeta(g.id, { position: e.target.value as Position })}
+      className={inputClass}
+    >
+      <option value="Instructor">Instructor</option>
+      <option value="Pool Supervisor">Supervisor</option>
+    </Select>
+  );
+  const allowanceField = (g: Row, inputClass = "w-24 py-1 text-xs") => (
+    <>
+      <Input
+        type="number"
+        value={g.meta.allowance ?? ""}
+        placeholder="—"
+        onChange={(e) =>
+          updateMeta(g.id, {
+            allowance: e.target.value === "" ? null : Number(e.target.value),
+            allowanceSource: "manual",
+          })
+        }
+        className={inputClass}
+      />
+      {g.meta.allowanceSource === "auto" && (
+        <div className="text-[10px] font-medium text-brand">auto-linked</div>
+      )}
+      {g.meta.allowanceSource === "carryover" && (
+        <div className="text-[10px] text-gray-400">last month</div>
+      )}
+    </>
+  );
+  // Mgmt % is locked when an assessment record drives it — no manual override.
+  const mgmtField = (g: Row, inputClass = "w-20 py-1 text-xs") => (
+    <>
+      <Input
+        type="number"
+        value={g.meta.mgmt ?? ""}
+        placeholder="—"
+        onChange={(e) =>
+          updateMeta(g.id, {
+            mgmt: e.target.value === "" ? null : Number(e.target.value),
+            mgmtSource: "manual",
+          })
+        }
+        disabled={g.meta.mgmtSource === "assessment"}
+        className={inputClass}
+      />
+      {g.meta.mgmtSource === "assessment" ? (
+        <div className="text-[10px] font-medium text-brand">from assessment · locked</div>
+      ) : g.meta.lastMgmtAt ? (
+        <div className="text-[10px] text-gray-400">last {monthsAgo(g.meta.lastMgmtAt)}</div>
+      ) : null}
+    </>
+  );
+
   return (
     <div className="fade-in space-y-4">
       {/* Header / actions */}
@@ -843,7 +904,84 @@ export function Dashboard({
             {visible.length} of {ranked.length}
           </span>
         </TableToolbar>
-        <div className="overflow-x-auto">
+
+        {/* Mobile (< lg): card list. A 9-column editable table only scrolls
+            sideways on a phone, which is how managers actually use this — cards
+            read far better and keep the inputs tappable. */}
+        <div className="divide-y divide-gray-100 lg:hidden">
+          {visible.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-gray-500">
+              No coaches match the current filters.
+            </div>
+          ) : (
+            visible.map((g, idx) => (
+              <div key={g.id} className={cn("p-4", !g.comp.isComplete && "bg-amber-50/50")}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-gray-400">#{idx + 1}</span>
+                      <span className="truncate font-semibold text-gray-900">
+                        {g.meta.canonicalName}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-gray-400">
+                      {g.center}
+                      {g.names.length > 1 && (
+                        <span className="ml-1 rounded bg-indigo-100 px-1 text-indigo-700">
+                          merged {g.names.length}
+                        </span>
+                      )}
+                      <span className="ml-1">· {g.comp.students} students</span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {g.comp.isComplete ? (
+                      <>
+                        <span className="text-lg font-bold text-indigo-600">
+                          {g.comp.finalScore.toFixed(2)}
+                        </span>
+                        <Badge className={g.comp.gradeClass}>{g.comp.grade}</Badge>
+                      </>
+                    ) : (
+                      <span className="text-[11px] font-medium text-amber-600">incomplete</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-overline text-muted">Position</span>
+                    <div className="mt-1">{positionField(g, "w-full py-2 text-sm")}</div>
+                  </label>
+                  <label className="block">
+                    <span className="text-overline text-muted">Allowance (RM)</span>
+                    <div className="mt-1">{allowanceField(g, "w-full py-2 text-sm")}</div>
+                  </label>
+                  <label className="block">
+                    <span className="text-overline text-muted">Mgmt&nbsp;%</span>
+                    <div className="mt-1">{mgmtField(g, "w-full py-2 text-sm")}</div>
+                  </label>
+                  <div className="flex flex-col">
+                    <span className="text-overline text-muted">Payout</span>
+                    <div className="mt-1 text-base font-bold text-green-700">
+                      {g.comp.isComplete ? rm(g.comp.payout) : "—"}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  className="mt-3 w-full rounded-md border border-gray-200 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+                  onClick={() => setDetailId(g.id)}
+                >
+                  View breakdown
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop (lg+): the full editable table. */}
+        <div className="hidden overflow-x-auto lg:block">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
@@ -888,59 +1026,9 @@ export function Dashboard({
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center text-gray-600">{g.comp.students}</td>
-                  <td className="px-3 py-2">
-                    <Select
-                      value={g.meta.position}
-                      onChange={(e) => updateMeta(g.id, { position: e.target.value as Position })}
-                      className="py-1 text-xs"
-                    >
-                      <option value="Instructor">Instructor</option>
-                      <option value="Pool Supervisor">Supervisor</option>
-                    </Select>
-                  </td>
-                  <td className="px-3 py-2">
-                    <Input
-                      type="number"
-                      value={g.meta.allowance ?? ""}
-                      placeholder="—"
-                      onChange={(e) =>
-                        updateMeta(g.id, {
-                          allowance: e.target.value === "" ? null : Number(e.target.value),
-                          allowanceSource: "manual",
-                        })
-                      }
-                      className="w-24 py-1 text-xs"
-                    />
-                    {g.meta.allowanceSource === "auto" && (
-                      <div className="text-[10px] font-medium text-brand">auto-linked</div>
-                    )}
-                    {g.meta.allowanceSource === "carryover" && (
-                      <div className="text-[10px] text-gray-400">last month</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Input
-                      type="number"
-                      value={g.meta.mgmt ?? ""}
-                      placeholder="—"
-                      onChange={(e) =>
-                        updateMeta(g.id, {
-                          mgmt: e.target.value === "" ? null : Number(e.target.value),
-                          mgmtSource: "manual",
-                        })
-                      }
-                      // Locked when an assessment record drives it — no manual override.
-                      disabled={g.meta.mgmtSource === "assessment"}
-                      className="w-20 py-1 text-xs"
-                    />
-                    {g.meta.mgmtSource === "assessment" ? (
-                      <div className="text-[10px] font-medium text-brand">from assessment · locked</div>
-                    ) : g.meta.lastMgmtAt ? (
-                      <div className="text-[10px] text-gray-400">
-                        last {monthsAgo(g.meta.lastMgmtAt)}
-                      </div>
-                    ) : null}
-                  </td>
+                  <td className="px-3 py-2">{positionField(g)}</td>
+                  <td className="px-3 py-2">{allowanceField(g)}</td>
+                  <td className="px-3 py-2">{mgmtField(g)}</td>
                   <td className="px-3 py-2 text-center font-bold text-indigo-600">
                     {g.comp.isComplete ? g.comp.finalScore.toFixed(2) : "—"}
                   </td>
