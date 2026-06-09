@@ -43,6 +43,32 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   view_audit: "View audit log",
 };
 
+/**
+ * Launcher categories a user can be granted. These mirror the home-launcher
+ * brand groups (minus "system", which is super_admin-only by nature, and so
+ * never assignable). super_admin always sees every category.
+ */
+export const TOOL_CATEGORIES = ["swim", "fit", "marketing"] as const;
+export type ToolCategory = (typeof TOOL_CATEGORIES)[number];
+
+export const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
+  swim: "Optimum Swim School",
+  fit: "Optimum Fit",
+  marketing: "Optimum Marketing",
+};
+
+/** Default for new (and pre-existing) accounts: everything visible. */
+export const ALL_TOOL_CATEGORIES: ToolCategory[] = [...TOOL_CATEGORIES];
+
+/** Validate + dedupe an untrusted category list, preserving canonical order. */
+export function sanitizeToolCategories(input: unknown): ToolCategory[] | null {
+  if (!Array.isArray(input)) return null;
+  if (!input.every((v) => (TOOL_CATEGORIES as readonly string[]).includes(v as string))) {
+    return null;
+  }
+  return TOOL_CATEGORIES.filter((c) => (input as string[]).includes(c));
+}
+
 /** Roles whose capabilities are configurable (super_admin is always all-access). */
 export type ConfigurableRole = Exclude<Role, "super_admin">;
 export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "supervisor", "staff"];

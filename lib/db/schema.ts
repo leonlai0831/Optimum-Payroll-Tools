@@ -10,7 +10,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import type { PermissionConfig, Role } from "@/lib/auth/types";
+import type { PermissionConfig, Role, ToolCategory } from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -85,6 +85,13 @@ export const users = pgTable("users", {
   // gym-staff member (`gymStaffId`) — the two are mutually exclusive, enforced at the API.
   coachId: integer("coach_id"),
   gymStaffId: integer("gym_staff_id"),
+  // Which home-launcher categories this account sees (System Setting →
+  // Category Visibility). Defaults to all so existing accounts lose nothing;
+  // super_admin ignores this and always sees everything.
+  visibleCategories: jsonb("visible_categories")
+    .$type<ToolCategory[]>()
+    .notNull()
+    .default(["swim", "fit", "marketing"]),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

@@ -6,6 +6,7 @@ delete process.env.POSTGRES_URL;
 
 import { hashPassword, verifyPassword } from "./password";
 import { getCapabilities, userCan } from "./permissions";
+import { ALL_TOOL_CATEGORIES, sanitizeToolCategories } from "./types";
 import type { CurrentUser } from "./session";
 
 describe("password hashing", () => {
@@ -112,6 +113,35 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(reread!.gymStaffId).toBe(99);
     expect(reread!.coachId).toBeNull();
   });
+
+  it("new users default to every launcher category; updateUser narrows them", async () => {
+    const u = await queries.createUser({ email: "cat@x.io", password: "pw", role: "staff" });
+    expect(u.visibleCategories).toEqual(["swim", "fit", "marketing"]);
+
+    await queries.updateUser(u.id, { visibleCategories: ["fit"] });
+    let reread = await queries.getUserById(u.id);
+    expect(reread!.visibleCategories).toEqual(["fit"]);
+
+    // An empty list is allowed (account sees no category groups).
+    await queries.updateUser(u.id, { visibleCategories: [] });
+    reread = await queries.getUserById(u.id);
+    expect(reread!.visibleCategories).toEqual([]);
+  });
+});
+
+describe("sanitizeToolCategories", () => {
+  it("accepts valid lists, deduping and restoring canonical order", () => {
+    expect(sanitizeToolCategories(["marketing", "swim", "swim"])).toEqual(["swim", "marketing"]);
+    expect(sanitizeToolCategories([])).toEqual([]);
+    expect(sanitizeToolCategories(ALL_TOOL_CATEGORIES)).toEqual(["swim", "fit", "marketing"]);
+  });
+
+  it("rejects non-arrays and unknown categories", () => {
+    expect(sanitizeToolCategories("swim")).toBeNull();
+    expect(sanitizeToolCategories(undefined)).toBeNull();
+    expect(sanitizeToolCategories(["swim", "system"])).toBeNull();
+    expect(sanitizeToolCategories(["gym"])).toBeNull();
+  });
 });
 
 describe("capability matrix (default permission config)", () => {
@@ -122,6 +152,7 @@ describe("capability matrix (default permission config)", () => {
     role,
     coachId: null,
     gymStaffId: null,
+    visibleCategories: ALL_TOOL_CATEGORIES,
     active: true,
   });
 

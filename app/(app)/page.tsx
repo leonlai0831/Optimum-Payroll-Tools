@@ -165,13 +165,26 @@ export default async function HubPage() {
   const user = await getCurrentUser();
   const caps = user ? await getCapabilities(user) : new Set<Capability>();
   const isSuperAdmin = user?.role === "super_admin";
+  // Category Visibility (System Setting): non-super-admins only see the brand
+  // groups granted on their account; super_admin always sees everything. The
+  // System group needs no entry here — its tools are superAdmin-gated below.
+  const visibleBrands = new Set<Brand>(
+    isSuperAdmin
+      ? ["swim", "fit", "marketing", "system"]
+      : (user?.visibleCategories ?? []),
+  );
   // The Marketing group's cards are owned by the marketing sandbox
   // (lib/marketing/tools.ts), so that module can add cards without touching this
   // shared launcher. Everything else is defined in TOOLS above.
   const tools = [
     ...TOOLS,
     ...MARKETING_TOOLS.map((t): Tool => ({ ...t, brand: "marketing" })),
-  ].filter((tool) => (!tool.cap || caps.has(tool.cap)) && (!tool.superAdmin || isSuperAdmin));
+  ].filter(
+    (tool) =>
+      (!tool.cap || caps.has(tool.cap)) &&
+      (!tool.superAdmin || isSuperAdmin) &&
+      visibleBrands.has(tool.brand ?? "swim"),
+  );
   if (user?.coachId && caps.has("view_own")) {
     tools.push({
       href: `/staff/${user.coachId}`,

@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { deleteUser, getUserById, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
-import { ROLES, type Role } from "@/lib/auth/types";
+import { ROLES, sanitizeToolCategories, type Role } from "@/lib/auth/types";
 
 async function otherActiveSuperAdmins(exceptId: number) {
   return (await listUsers()).filter(
@@ -28,6 +28,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     displayName?: string;
     coachId?: number | null;
     gymStaffId?: number | null;
+    visibleCategories?: unknown;
     password?: string;
   };
 
@@ -52,6 +53,20 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     patch.coachId = link.coachId;
     patch.gymStaffId = link.gymStaffId;
   }
+  if (body.visibleCategories !== undefined) {
+    // Category Visibility is a super_admin-only module (System Setting).
+    if (actor.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Only a super admin can change category visibility." },
+        { status: 403 },
+      );
+    }
+    const categories = sanitizeToolCategories(body.visibleCategories);
+    if (!categories) {
+      return NextResponse.json({ error: "Invalid categories." }, { status: 400 });
+    }
+    patch.visibleCategories = categories;
+  }
   if (typeof body.password === "string" && body.password) patch.password = body.password;
 
   // Never strand the system without an active super_admin.
@@ -72,6 +87,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     patch.role !== undefined && `role→${patch.role}`,
     patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
     (patch.coachId !== undefined || patch.gymStaffId !== undefined) && "linked employee",
+    patch.visibleCategories !== undefined &&
+      `categories→${patch.visibleCategories.join("+") || "none"}`,
     patch.password !== undefined && "password reset",
   ].filter(Boolean);
   await recordAudit({
