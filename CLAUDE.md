@@ -204,8 +204,12 @@ The three sections (Allowance / KPI / Staff) and their per-section settings page
 are intentionally stable. When a "where should X go?" question comes up, resolve it with the
 rule below rather than relocating UI:
 
-- **Entities live under Staff.** Centers (`/staff/settings`), Users / accounts
-  (`/staff/users`), Permissions matrix (`/staff/permissions`, super_admin only).
+- **Staff entities live under Staff; system administration lives under System Setting.**
+  The staff directory and Centers (`/staff/settings`) stay under Staff. **Users / accounts
+  (`/system/users`), Audit log (`/system/audit`), and the Permissions matrix
+  (`/system/permissions`) live under the System Setting section** (`/system/*`) — which,
+  together with its launcher group, is gated to `role === "super_admin"`. The old
+  `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`).
 - **Calculator math lives under its calculator.** Allowance tiers + rate tables
   (`/allowance/settings`), KPI metrics + weights + min/max (`/kpi/settings`).
 - **All three section tabs are labeled "Settings"** — Allowance, KPI, and Staff — never

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getCapabilities } from "@/lib/auth/permissions";
 import { listCoaches, listGymStaff, listUsers } from "@/lib/db/queries";
 import {
   UserManager,
@@ -14,8 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const caps = await getCapabilities(user);
-  if (!caps.has("manage_users")) redirect("/");
+  if (user.role !== "super_admin") redirect("/");
 
   const [userRecords, coaches, gymStaff] = await Promise.all([
     listUsers(),

@@ -34,7 +34,10 @@ type SectionItem = {
 };
 type SectionConfig = { title: string; items: SectionItem[] };
 
-const NAVS: Record<"allowance" | "kpi" | "staff" | "commission" | "assessment", SectionConfig> = {
+const NAVS: Record<
+  "allowance" | "kpi" | "staff" | "commission" | "assessment" | "system",
+  SectionConfig
+> = {
   assessment: {
     title: "Instructor Assessment",
     items: [
@@ -79,19 +82,6 @@ const NAVS: Record<"allowance" | "kpi" | "staff" | "commission" | "assessment", 
         icon: SlidersHorizontal,
         requires: { cap: "view_all_staff" },
       },
-      { href: "/staff/users", label: "Users", icon: UserCog, requires: { cap: "manage_users" } },
-      {
-        href: "/staff/audit",
-        label: "Audit log",
-        icon: ScrollText,
-        requires: { cap: "view_audit" },
-      },
-      {
-        href: "/staff/permissions",
-        label: "Permissions",
-        icon: ShieldCheck,
-        requires: { superAdmin: true },
-      },
     ],
   },
   commission: {
@@ -103,6 +93,19 @@ const NAVS: Record<"allowance" | "kpi" | "staff" | "commission" | "assessment", 
       { href: "/commission/history", label: "History", icon: History },
       { href: "/commission/trends", label: "Trends", icon: BarChart3 },
       { href: "/commission/settings", label: "Settings", icon: SlidersHorizontal },
+    ],
+  },
+  system: {
+    title: "System Setting",
+    items: [
+      { href: "/system/users", label: "Users", icon: UserCog, requires: { superAdmin: true } },
+      { href: "/system/audit", label: "Audit log", icon: ScrollText, requires: { superAdmin: true } },
+      {
+        href: "/system/permissions",
+        label: "Permissions",
+        icon: ShieldCheck,
+        requires: { superAdmin: true },
+      },
     ],
   },
 };

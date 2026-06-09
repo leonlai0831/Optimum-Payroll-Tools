@@ -3,9 +3,11 @@ import {
   ChevronRight,
   ClipboardCheck,
   Dumbbell,
+  ScrollText,
   ShieldCheck,
   Trophy,
   UserCircle,
+  UserCog,
   Users,
   Wallet,
   type LucideIcon,
@@ -25,6 +27,8 @@ type Tool = {
   icon: LucideIcon;
   disabled?: boolean;
   cap?: Capability;
+  /** Gate to super_admin only (on top of any cap). */
+  superAdmin?: boolean;
   /** Which brand this tool belongs to on the launcher. Defaults to swim. */
   brand?: Brand;
 };
@@ -74,6 +78,30 @@ const TOOLS: Tool[] = [
     cap: "run_commission",
     brand: "fit",
   },
+  {
+    href: "/system/users",
+    title: "Users",
+    subtitle: "Accounts, roles & staff links",
+    icon: UserCog,
+    superAdmin: true,
+    brand: "system",
+  },
+  {
+    href: "/system/audit",
+    title: "Audit log",
+    subtitle: "History of sensitive changes",
+    icon: ScrollText,
+    superAdmin: true,
+    brand: "system",
+  },
+  {
+    href: "/system/permissions",
+    title: "Permissions",
+    subtitle: "Role → capability matrix",
+    icon: ShieldCheck,
+    superAdmin: true,
+    brand: "system",
+  },
 ];
 
 /** Launcher groups, in display order. */
@@ -81,6 +109,7 @@ const BRAND_GROUPS: { brand: Brand; label: string }[] = [
   { brand: "swim", label: "Optimum Swim School" },
   { brand: "fit", label: "Optimum Fit" },
   { brand: "marketing", label: "Optimum Marketing" },
+  { brand: "system", label: "System Setting" },
 ];
 
 function ToolCard({ tool }: { tool: Tool }) {
@@ -135,13 +164,14 @@ export const dynamic = "force-dynamic";
 export default async function HubPage() {
   const user = await getCurrentUser();
   const caps = user ? await getCapabilities(user) : new Set<Capability>();
+  const isSuperAdmin = user?.role === "super_admin";
   // The Marketing group's cards are owned by the marketing sandbox
   // (lib/marketing/tools.ts), so that module can add cards without touching this
   // shared launcher. Everything else is defined in TOOLS above.
   const tools = [
     ...TOOLS,
     ...MARKETING_TOOLS.map((t): Tool => ({ ...t, brand: "marketing" })),
-  ].filter((tool) => !tool.cap || caps.has(tool.cap));
+  ].filter((tool) => (!tool.cap || caps.has(tool.cap)) && (!tool.superAdmin || isSuperAdmin));
   if (user?.coachId && caps.has("view_own")) {
     tools.push({
       href: `/staff/${user.coachId}`,

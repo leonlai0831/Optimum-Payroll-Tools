@@ -107,6 +107,32 @@
   --color-info-bg: #ede9fe;
 }
 
+/* System Setting skin (super_admin admin area). Scoped to `[data-brand="system"]`
+   on the launcher group — a neutral slate ramp so it reads as "admin", distinct
+   from the coloured brands. */
+[data-brand="system"] {
+  --color-brand: #475569;
+  --color-brand-dark: #334155;
+  --color-brand-light: #f1f5f9;
+  --color-accent: #fcb731;
+  --color-accent-bright: #ffca30;
+
+  --color-indigo-50: #f8fafc;
+  --color-indigo-100: #f1f5f9;
+  --color-indigo-200: #e2e8f0;
+  --color-indigo-300: #cbd5e1;
+  --color-indigo-400: #94a3b8;
+  --color-indigo-500: #64748b;
+  --color-indigo-600: #475569;
+  --color-indigo-700: #334155;
+  --color-indigo-800: #1e293b;
+  --color-indigo-900: #0f172a;
+  --color-indigo-950: #020617;
+
+  --color-info: #475569;
+  --color-info-bg: #f1f5f9;
+}
+
 /* Typography composites (Phase 1 design tokens).
    Single-class shortcuts that bundle font-size + line-height + weight for each
    role. Color is intentionally NOT included — pair with `text-gray-900` for
