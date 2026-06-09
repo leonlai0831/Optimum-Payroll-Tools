@@ -3,6 +3,33 @@
 How to bring a second developer onto this repo to build a **bounded module**
 (e.g. Marketing KPI) without giving them the run of the whole codebase.
 
+## Quick start (for the new developer)
+
+You own the **Marketing KPI** module. To get going:
+
+1. **Accept the GitHub invite** — check your email or github.com/notifications and
+   accept the collaborator invite to `leonlai0831/Optimum-Payroll-Tools`.
+2. **Have a Claude plan** — Claude Pro or Max (Claude Code needs it).
+3. **Connect Claude Code** — open https://claude.ai/code → sign in → authorize the
+   GitHub App → pick this repo. (Or the local CLI:
+   `curl -fsSL https://claude.ai/install.sh | bash`.)
+4. **Read this file and `CLAUDE.md`** — Claude Code auto-loads `CLAUDE.md` every
+   session, so the agent already follows the project rules; skim it yourself too.
+5. **Your sandbox** — work only in `app/(app)/marketing/`, `lib/marketing/`,
+   `components/marketing/`. The launcher already has an **Optimum Marketing** entry
+   pointing at `/marketing`. Don't change anything outside the sandbox without the
+   owner's sign-off (CODEOWNERS routes that to them).
+6. **Workflow** — one task → one branch → one **draft PR**. CI runs
+   `build` / `test` / `e2e`; the owner reviews and merges. Nothing reaches `main`
+   without their approval.
+7. **Run it locally** — no database needed: with `POSTGRES_URL` unset the app uses
+   PGlite. Put `SESSION_SECRET=<32+ random chars>` in `.env.local`, then
+   `npm install` and `npm run dev`. Before opening a PR:
+   `npm run typecheck && npm run lint && npm run build && npm test`.
+8. **First PR** — make a tiny change in the marketing placeholder page and take it
+   through branch → PR → CI → review → merge, to confirm the pipeline works before
+   building real features.
+
 ## Mental model — three separate kinds of access
 
 1. **Claude Code itself** is powered by the developer's **own Claude plan**

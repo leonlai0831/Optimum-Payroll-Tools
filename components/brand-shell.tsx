@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { Nav } from "@/components/nav";
 import type { Role } from "@/lib/auth/types";
 
-export type Brand = "swim" | "fit";
+export type Brand = "swim" | "fit" | "marketing";
 
 /**
  * Which brand a route belongs to. Everything under /commission is Optimum Fit

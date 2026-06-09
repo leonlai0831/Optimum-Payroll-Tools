@@ -16,6 +16,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import type { Capability } from "@/lib/auth/types";
 import type { Brand } from "@/components/brand-shell";
+import { MARKETING_TOOLS } from "@/lib/marketing/tools";
 
 type Tool = {
   href?: string;
@@ -79,6 +80,7 @@ const TOOLS: Tool[] = [
 const BRAND_GROUPS: { brand: Brand; label: string }[] = [
   { brand: "swim", label: "Optimum Swim School" },
   { brand: "fit", label: "Optimum Fit" },
+  { brand: "marketing", label: "Optimum Marketing" },
 ];
 
 function ToolCard({ tool }: { tool: Tool }) {
@@ -133,7 +135,13 @@ export const dynamic = "force-dynamic";
 export default async function HubPage() {
   const user = await getCurrentUser();
   const caps = user ? await getCapabilities(user) : new Set<Capability>();
-  const tools = TOOLS.filter((tool) => !tool.cap || caps.has(tool.cap));
+  // The Marketing group's cards are owned by the marketing sandbox
+  // (lib/marketing/tools.ts), so that module can add cards without touching this
+  // shared launcher. Everything else is defined in TOOLS above.
+  const tools = [
+    ...TOOLS,
+    ...MARKETING_TOOLS.map((t): Tool => ({ ...t, brand: "marketing" })),
+  ].filter((tool) => !tool.cap || caps.has(tool.cap));
   if (user?.coachId && caps.has("view_own")) {
     tools.push({
       href: `/staff/${user.coachId}`,

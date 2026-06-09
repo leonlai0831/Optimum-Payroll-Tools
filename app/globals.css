@@ -79,6 +79,34 @@
   --color-info-bg: #f4f4f5;
 }
 
+/* Optimum Marketing brand skin. Scoped to `[data-brand="marketing"]`, applied to
+   that group on the launcher (same mechanism as Fit). Re-declaring the tokens
+   re-skins `bg-brand` / `text-brand` / remapped `indigo-*` inside the scope.
+   Main color shifts blue -> violet; the gold accent is shared with Swim. */
+[data-brand="marketing"] {
+  --color-brand: #7c3aed;
+  --color-brand-dark: #6d28d9;
+  --color-brand-light: #ede9fe;
+  --color-accent: #fcb731;
+  --color-accent-bright: #ffca30;
+
+  /* Remap the indigo scale (used app-wide as the primary) to a violet ramp. */
+  --color-indigo-50: #f5f3ff;
+  --color-indigo-100: #ede9fe;
+  --color-indigo-200: #ddd6fe;
+  --color-indigo-300: #c4b5fd;
+  --color-indigo-400: #a78bfa;
+  --color-indigo-500: #8b5cf6;
+  --color-indigo-600: #7c3aed;
+  --color-indigo-700: #6d28d9;
+  --color-indigo-800: #5b21b6;
+  --color-indigo-900: #4c1d95;
+  --color-indigo-950: #2e1065;
+
+  --color-info: #7c3aed;
+  --color-info-bg: #ede9fe;
+}
+
 /* Typography composites (Phase 1 design tokens).
    Single-class shortcuts that bundle font-size + line-height + weight for each
    role. Color is intentionally NOT included — pair with `text-gray-900` for

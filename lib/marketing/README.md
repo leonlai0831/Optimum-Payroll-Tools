@@ -3,6 +3,12 @@
 Home for the **Marketing KPI** module's non-UI logic (pure functions, types, DB
 queries). Keep UI in `components/marketing/` and routes in `app/(app)/marketing/`.
 
+**Launcher cards:** `tools.ts` here is the list of cards shown under the
+"Optimum Marketing" group on the home page — add one entry per feature (each
+`href` points at a route you build under `app/(app)/marketing/`). The shared
+launcher (`app/(app)/page.tsx`) just renders this list, so you never have to
+edit it to add a card.
+
 Mirror the existing `lib/kpi/` shape when you build this out, e.g.:
 
 - `types.ts` — module types
