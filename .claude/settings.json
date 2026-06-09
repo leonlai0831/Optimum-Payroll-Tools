@@ -1,4 +1,6 @@
 {
+  "skillListingBudgetFraction": 0.05,
+  "skillListingMaxDescChars": 3000,
   "hooks": {
     "SessionStart": [
       {
