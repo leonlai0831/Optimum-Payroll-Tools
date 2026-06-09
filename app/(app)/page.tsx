@@ -3,6 +3,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Dumbbell,
+  Megaphone,
   ShieldCheck,
   Trophy,
   UserCircle,
@@ -73,12 +74,20 @@ const TOOLS: Tool[] = [
     cap: "run_commission",
     brand: "fit",
   },
+  {
+    href: "/marketing",
+    title: "Marketing KPI",
+    subtitle: "Marketing performance & campaign KPIs",
+    icon: Megaphone,
+    brand: "marketing",
+  },
 ];
 
 /** Launcher groups, in display order. */
 const BRAND_GROUPS: { brand: Brand; label: string }[] = [
   { brand: "swim", label: "Optimum Swim School" },
   { brand: "fit", label: "Optimum Fit" },
+  { brand: "marketing", label: "Optimum Marketing" },
 ];
 
 function ToolCard({ tool }: { tool: Tool }) {

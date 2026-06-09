@@ -14,8 +14,11 @@ import type { Brand } from "@/components/brand-shell";
  * none (ink fills 100%). Rendering Fit a notch shorter equalizes their optical
  * height so the lockup looks balanced.
  */
+// Only the two company logos appear in the header lockup; other brands (e.g.
+// marketing) are launcher categories, not header logos, so this map is keyed to
+// just these two rather than the full Brand union.
 const BRANDS: Record<
-  Brand,
+  "swim" | "fit",
   { src: string; alt: string; width: number; height: number; hCls: string }
 > = {
   // hCls carries both heights as literals so Tailwind keeps the responsive variants.
@@ -38,7 +41,7 @@ export function Nav({ email, role }: { email: string; role: Role; brand?: Brand 
         <Link href="/" className="flex items-center gap-2 sm:gap-3" aria-label="Home">
           {/* Both brand logos, side by side, in full color — on mobile too. */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {(["swim", "fit"] as Brand[]).map((key, i) => {
+            {(["swim", "fit"] as const).map((key, i) => {
               const x = BRANDS[key];
               return (
                 <div key={key} className="flex items-center gap-2 sm:gap-3">
