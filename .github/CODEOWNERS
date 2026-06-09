@@ -1,0 +1,21 @@
+# CODEOWNERS — who must review changes to which paths.
+#
+# Pairs with branch protection on `main`: once you enable
+# "Require review from Code Owners", a PR that touches an owned path needs an
+# approving review from that owner before it can merge.
+#
+# Matching is last-rule-wins, gitignore-style globs.
+
+# Default: the repo owner owns everything and gates every PR.
+*                         @leonlai0831
+
+# --- Marketing KPI module -------------------------------------------------
+# Hand the marketing developer ownership of *just* their sandbox, so their PRs
+# inside it don't need your review, but anything they touch OUTSIDE it (shared
+# DB schema, nav, ui, CLAUDE.md, …) still falls under the `*` rule above = your
+# review. To activate:
+#   1. Add them as a repo collaborator with Write access.
+#   2. Replace USERNAME with their GitHub handle and uncomment the three lines.
+# /app/(app)/marketing/     @USERNAME
+# /lib/marketing/           @USERNAME
+# /components/marketing/    @USERNAME
