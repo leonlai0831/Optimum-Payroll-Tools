@@ -114,6 +114,16 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(reread!.coachId).toBeNull();
   });
 
+  it("createUser can narrow categories at creation", async () => {
+    const u = await queries.createUser({
+      email: "cat-create@x.io",
+      password: "pw",
+      role: "staff",
+      visibleCategories: ["marketing"],
+    });
+    expect(u.visibleCategories).toEqual(["marketing"]);
+  });
+
   it("new users default to every launcher category; updateUser narrows them", async () => {
     const u = await queries.createUser({ email: "cat@x.io", password: "pw", role: "staff" });
     expect(u.visibleCategories).toEqual(["swim", "fit", "marketing"]);

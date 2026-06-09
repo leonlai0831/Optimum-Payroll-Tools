@@ -10,7 +10,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import type { PermissionConfig, Role, ToolCategory } from "@/lib/auth/types";
+import { ALL_TOOL_CATEGORIES, type PermissionConfig, type Role, type ToolCategory } from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -91,7 +91,7 @@ export const users = pgTable("users", {
   visibleCategories: jsonb("visible_categories")
     .$type<ToolCategory[]>()
     .notNull()
-    .default(["swim", "fit", "marketing"]),
+    .default(ALL_TOOL_CATEGORIES),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

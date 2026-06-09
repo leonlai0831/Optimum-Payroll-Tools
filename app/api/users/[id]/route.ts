@@ -61,6 +61,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
         { status: 403 },
       );
     }
+    // A super_admin target always sees everything; storing a narrower list would
+    // be invisible everywhere and silently re-apply on a later demotion.
+    if (target.role === "super_admin") {
+      return NextResponse.json(
+        { error: "Super admins always see every category." },
+        { status: 400 },
+      );
+    }
     const categories = sanitizeToolCategories(body.visibleCategories);
     if (!categories) {
       return NextResponse.json({ error: "Invalid categories." }, { status: 400 });

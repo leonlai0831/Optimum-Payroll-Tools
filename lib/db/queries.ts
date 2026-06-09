@@ -1738,6 +1738,7 @@ export async function createUser(input: {
   displayName?: string;
   coachId?: number | null;
   gymStaffId?: number | null;
+  visibleCategories?: ToolCategory[];
 }): Promise<UserRecord> {
   const db = await getDb();
   const email = normalizeEmail(input.email);
@@ -1753,6 +1754,10 @@ export async function createUser(input: {
       role: input.role,
       coachId: input.coachId ?? null,
       gymStaffId: input.gymStaffId ?? null,
+      // Omitted → column default (all categories).
+      ...(input.visibleCategories !== undefined
+        ? { visibleCategories: input.visibleCategories }
+        : {}),
     })
     .returning();
   return row;

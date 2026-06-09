@@ -27,8 +27,54 @@ export interface CategoryUser {
  * System Setting → Category Visibility: per-account checkboxes for which home
  * launcher groups (Swim / Fit / Marketing) the user sees. super_admin rows are
  * locked — they always see every category.
+ *
+ * All mutation state lives HERE (not in the per-user rows): each user renders
+ * twice (mobile card + desktop row, per responsive-table.tsx), so row-local
+ * state would fork between the two mounts. Updates are optimistic — `selected`
+ * flips immediately and reverts on failure — and the row stays disabled while
+ * its PATCH is in flight so a quick second tap can't compute the next list
+ * from stale data.
  */
 export function CategoryVisibilityManager({ users }: { users: CategoryUser[] }) {
+  const router = useRouter();
+  const toast = useToast();
+  // Last list we know per user; starts from server props, updated optimistically.
+  const [selectedById, setSelectedById] = useState<Record<number, ToolCategory[]>>(
+    () =>
+      Object.fromEntries(
+        // Intersect with the known set so a stale/hand-edited DB value can't
+        // make every subsequent PATCH fail validation (self-heals on next save).
+        users.map((u) => [u.id, TOOL_CATEGORIES.filter((c) => u.visibleCategories.includes(c))]),
+      ),
+  );
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  async function toggle(user: CategoryUser, category: ToolCategory) {
+    const current = selectedById[user.id] ?? [];
+    const next = current.includes(category)
+      ? current.filter((c) => c !== category)
+      : TOOL_CATEGORIES.filter((c) => c === category || current.includes(c));
+    setSelectedById((m) => ({ ...m, [user.id]: next }));
+    setBusyId(user.id);
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibleCategories: next }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error || "Update failed");
+      }
+      router.refresh();
+    } catch (e) {
+      setSelectedById((m) => ({ ...m, [user.id]: current }));
+      toast.error(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="p-4 text-sm text-gray-500">
@@ -43,7 +89,14 @@ export function CategoryVisibilityManager({ users }: { users: CategoryUser[] }) 
         </div>
         <MobileCards>
           {users.map((u) => (
-            <UserCategories key={u.id} user={u} layout="card" />
+            <UserCategories
+              key={u.id}
+              user={u}
+              layout="card"
+              selected={selectedById[u.id] ?? []}
+              busy={busyId === u.id}
+              onToggle={(c) => toggle(u, c)}
+            />
           ))}
         </MobileCards>
         <DesktopTable>
@@ -61,7 +114,14 @@ export function CategoryVisibilityManager({ users }: { users: CategoryUser[] }) 
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.map((u) => (
-                <UserCategories key={u.id} user={u} layout="row" />
+                <UserCategories
+                  key={u.id}
+                  user={u}
+                  layout="row"
+                  selected={selectedById[u.id] ?? []}
+                  busy={busyId === u.id}
+                  onToggle={(c) => toggle(u, c)}
+                />
               ))}
             </tbody>
           </table>
@@ -71,35 +131,23 @@ export function CategoryVisibilityManager({ users }: { users: CategoryUser[] }) 
   );
 }
 
-function UserCategories({ user, layout }: { user: CategoryUser; layout: "card" | "row" }) {
-  const router = useRouter();
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const locked = user.role === "super_admin";
-  const selected = locked ? [...TOOL_CATEGORIES] : user.visibleCategories;
+const LOCKED_NOTE = "Always sees every category.";
 
-  async function toggle(category: ToolCategory) {
-    const next = selected.includes(category)
-      ? selected.filter((c) => c !== category)
-      : [...selected, category];
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visibleCategories: next }),
-      });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(d.error || "Update failed");
-      }
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Update failed");
-    } finally {
-      setBusy(false);
-    }
-  }
+/** Purely presentational — state and mutations live in the parent. */
+function UserCategories({
+  user,
+  layout,
+  selected,
+  busy,
+  onToggle,
+}: {
+  user: CategoryUser;
+  layout: "card" | "row";
+  selected: ToolCategory[];
+  busy: boolean;
+  onToggle: (category: ToolCategory) => void;
+}) {
+  const locked = user.role === "super_admin";
 
   const identity = (
     <>
@@ -128,7 +176,7 @@ function UserCategories({ user, layout }: { user: CategoryUser; layout: "card" |
           {roleBadge}
         </div>
         {locked ? (
-          <p className="text-xs text-gray-400">Always sees every category.</p>
+          <p className="text-xs text-gray-400">{LOCKED_NOTE}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {TOOL_CATEGORIES.map((c) => (
@@ -137,7 +185,7 @@ function UserCategories({ user, layout }: { user: CategoryUser; layout: "card" |
                 category={c}
                 checked={selected.includes(c)}
                 disabled={busy}
-                onToggle={() => toggle(c)}
+                onToggle={() => onToggle(c)}
               />
             ))}
           </div>
@@ -150,22 +198,24 @@ function UserCategories({ user, layout }: { user: CategoryUser; layout: "card" |
     <tr className={busy ? "opacity-60" : undefined}>
       <td className="px-4 py-2">{identity}</td>
       <td className="px-4 py-2">{roleBadge}</td>
-      {TOOL_CATEGORIES.map((c) => (
-        <td key={c} className="px-4 py-2 text-center">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-indigo-600 disabled:opacity-50"
-            checked={selected.includes(c)}
-            disabled={busy || locked}
-            onChange={() => toggle(c)}
-            title={
-              locked
-                ? "Super Admins always see every category"
-                : TOOL_CATEGORY_LABELS[c]
-            }
-          />
+      {locked ? (
+        <td colSpan={TOOL_CATEGORIES.length} className="px-4 py-2 text-center text-xs text-gray-400">
+          {LOCKED_NOTE}
         </td>
-      ))}
+      ) : (
+        TOOL_CATEGORIES.map((c) => (
+          <td key={c} className="px-4 py-2 text-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-indigo-600 disabled:opacity-50"
+              checked={selected.includes(c)}
+              disabled={busy}
+              onChange={() => onToggle(c)}
+              title={TOOL_CATEGORY_LABELS[c]}
+            />
+          </td>
+        ))
+      )}
     </tr>
   );
 }
