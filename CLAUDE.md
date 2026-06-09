@@ -181,8 +181,9 @@ npm run db:migrate   # apply migrations explicitly (optional; auto-applied on fi
 - **Mobile-first (hard rule).** Management works primarily on phones, so design every view
   mobile-first: base styles target small screens, `sm:`/`md:`/`lg:` add desktop. **Data tables
   must not rely on horizontal scroll** on phones — use a **cards-on-mobile / table-on-desktop**
-  pattern (reference: the KPI leaderboard in `components/dashboard.tsx`, which renders cards
-  below `lg` and the editable table at `lg`+). Touch targets ≥ ~44px, ≥ 8px apart; no
+  pattern via the shared `MobileCards` / `DesktopTable` wrappers in
+  `components/responsive-table.tsx` (they flip at `lg`; reference card markup: the KPI
+  leaderboard in `components/dashboard.tsx`). Touch targets ≥ ~44px, ≥ 8px apart; no
   hover-only affordances (phones have no hover); tabular figures for numeric columns.
 - **Next 16**: middleware is **`proxy.ts`**, not `middleware.ts`. Per `AGENTS.md`, read
   `node_modules/next/dist/docs/` before using Next APIs — several differ from older versions.

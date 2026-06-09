@@ -17,6 +17,7 @@ import {
   makeComparator,
   useSortState,
 } from "@/components/table-controls";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import type { AllowanceRunSummary } from "@/lib/db/queries";
 import { cn, rm, splitCenters } from "@/lib/utils";
 
@@ -334,7 +335,75 @@ export function AllowanceHistoryView({
                 </div>
               </div>
               {open && (
-              <div className="overflow-x-auto">
+                <>
+                  <MobileCards>
+                    {list.map((r) => {
+                      const centers = splitCenters(r.center);
+                      return (
+                        <div key={r.id} className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold text-gray-900">
+                                {r.canonicalName}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-gray-400">
+                                {r.tier || "—"}
+                                {centers.length > 0 && <span> · {centers.join(", ")}</span>}
+                              </div>
+                              {savers?.[r.id] && (
+                                <div className="text-[11px] text-gray-400">
+                                  edited by {savers[r.id]}
+                                </div>
+                              )}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <div className="text-base font-bold tabular-nums text-green-700">
+                                {rm(r.grandTotal)}
+                              </div>
+                              <div className="text-[11px] text-gray-400">total</div>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            <div>
+                              <div className="text-overline text-muted">Attendance</div>
+                              <div className="mt-0.5 text-sm tabular-nums text-gray-700">
+                                {rm(r.attendance)}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-overline text-muted">Teaching</div>
+                              <div className="mt-0.5 text-sm tabular-nums text-gray-700">
+                                {rm(r.teaching)}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-overline text-muted">Other</div>
+                              <div className="mt-0.5 text-sm tabular-nums text-gray-700">
+                                {rm(r.other)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex gap-2">
+                            {canEdit && !locked && (
+                              <Link
+                                href={`/allowance?edit=${r.id}`}
+                                className="flex-1 rounded-md border border-gray-200 py-2 text-center text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+                              >
+                                Edit
+                              </Link>
+                            )}
+                            <Link
+                              href={`/allowance/history/${r.id}`}
+                              className="flex-1 rounded-md border border-gray-200 py-2 text-center text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+                            >
+                              View
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </MobileCards>
+                  <DesktopTable>
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                   <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
@@ -419,7 +488,8 @@ export function AllowanceHistoryView({
                     ))}
                   </tbody>
                 </table>
-              </div>
+                  </DesktopTable>
+                </>
               )}
             </Card>
           );
