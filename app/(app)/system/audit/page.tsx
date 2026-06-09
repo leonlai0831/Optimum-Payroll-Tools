@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { ScrollText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getCapabilities } from "@/lib/auth/permissions";
 import { listAuditLog } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
@@ -11,8 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function AuditPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const caps = await getCapabilities(user);
-  if (!caps.has("view_audit")) redirect("/");
+  if (user.role !== "super_admin") redirect("/");
 
   const entries = await listAuditLog();
 
