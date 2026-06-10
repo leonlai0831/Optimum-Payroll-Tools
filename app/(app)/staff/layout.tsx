@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
  * permission-gated tabs (Directory, Users, Audit, Permissions, …) flicker out
  * during the loading frame. Per-page redirects still enforce access; the layout
  * only ensures a login + renders the nav. Mirrors the commission section layout.
+ *
+ * Deliberately NOT gated on the "swim" launcher category: `/staff/[id]` must
+ * stay reachable for the user's OWN coach profile (the launcher's My Profile
+ * card is category-independent). The directory and settings pages gate "swim"
+ * individually; `/staff/[id]` gates it only when viewing someone ELSE'S profile.
  */
 export default async function StaffLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await getCurrentUser();

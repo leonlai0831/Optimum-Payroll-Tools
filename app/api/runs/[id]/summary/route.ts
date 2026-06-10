@@ -9,7 +9,7 @@ const BOM = String.fromCharCode(0xfeff);
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/runs/[id]/summary">) {
   // Bulk all-coach pay data — restrict to staff-wide viewers.
-  const denied = await requireCapability("view_all_staff");
+  const denied = await requireCapability("swim_view_staff");
   if (denied) return denied;
 
   const { id } = await ctx.params;

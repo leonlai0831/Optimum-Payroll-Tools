@@ -12,7 +12,7 @@ import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
 /** PATCH a coach's KPI-link override: mark not-applicable, and/or edit aliases. */
 export async function PATCH(req: Request, ctx: RouteContext<"/api/kpi/links/[id]">) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("swim_edit_staff");
   if (denied) return denied;
   const { id } = await ctx.params;
   const coachId = Number(id);

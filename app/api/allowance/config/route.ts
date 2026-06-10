@@ -29,11 +29,11 @@ function sanitizeRateTable(table: unknown): Record<string, Record<string, number
 }
 
 export async function PUT(req: Request) {
-  const denied = await requireCapability("edit_settings");
+  const denied = await requireCapability("swim_edit_settings");
   if (denied) return denied;
   const data = (await req.json().catch(() => null)) as AllowanceConfig | null;
 
-  // Hardening (route already requires edit_settings): reject malformed bodies and
+  // Hardening (route already requires swim_edit_settings): reject malformed bodies and
   // clamp the rate-table amounts to sane non-negative ringgit before persisting.
   // `saveAllowanceRates` already preserves centers/aliases (managed under Staff).
   if (!isObject(data)) {

@@ -12,7 +12,7 @@ const MAX_RUNS = 3; // recent finalized months to base the distribution on
  * recommends adjustments. Advisory only — nothing is written to config here.
  */
 export async function GET() {
-  const denied = await requireCapability("edit_settings");
+  const denied = await requireCapability("swim_edit_settings");
   if (denied) return denied;
 
   const config = await getConfig();

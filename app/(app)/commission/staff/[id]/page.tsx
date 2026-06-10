@@ -23,7 +23,7 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
   // Same access rule as the export route: anyone who can view all staff, or the
   // staff member viewing their own earnings. The gate runs BEFORE any member
   // data is fetched; the remaining lookups then share one round-trip.
-  const canViewAll = caps.has("view_all_staff");
+  const canViewAll = caps.has("fit_view_staff");
   const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
   if (!canViewAll && !isOwn) redirect("/");
 
@@ -33,7 +33,7 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
     getGymStaffEarnings(member),
     listGymNotes(member.id),
   ]);
-  const canEdit = caps.has("edit_staff");
+  const canEdit = caps.has("fit_edit_staff");
   const notes: NoteView[] = noteRecords.map((n) => ({
     id: n.id,
     noteDate: n.noteDate.toISOString(),

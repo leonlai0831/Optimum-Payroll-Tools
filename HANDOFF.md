@@ -82,14 +82,14 @@ check is green → sign in. Migrations auto-apply on first DB connect.
    merge): per-coach PDF payslip (`GET /api/coaches/[id]/payslip?period=…` via
    `pdf-lib` + a "Payslips" card on the staff profile) **and** the monthly
    all-coach summary CSV (`GET /api/runs/[id]/summary` + a "CSV" action per month
-   on `/kpi/history`, gated by `view_all_staff`, audited as `summary.export`).
+   on `/kpi/history`, gated by `swim_view_staff`, audited as `summary.export`).
 3. **Supervisor role** — **done in PR #9** (pending merge): `supervisor` is now a
    first-class configurable account role (added to the RBAC matrix + user role
    picker; default capabilities = oversee & review the team + run the monthly
    numbers, with no profile edits / user management / settings edits / audit
    access). `users.role` is a text column so no migration was needed, and stored
    matrices backfill the new role's defaults on read. *Deliberately not done:*
-   center-scoped visibility — supervisors still see all staff via `view_all_staff`
+   center-scoped visibility — supervisors still see all staff via `swim_view_staff`
    like admins; per-center scoping is a larger follow-up.
 4. **Observability** — **done in PR #9**: structured logs (`lib/log.ts`, one JSON
    record per line; `LOG_LEVEL` env, default `info` in prod) **and** Sentry error

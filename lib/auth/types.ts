@@ -9,13 +9,21 @@ export const ROLE_LABELS: Record<Role, string> = {
   staff: "Staff",
 };
 
-/** Granular capabilities checked across the app. */
+/**
+ * Granular capabilities checked across the app. Staff and settings access is
+ * brand-scoped (`swim_*` / `fit_*`) so e.g. a gym manager can hold the Optimum
+ * Fit staff directory without also seeing the whole swim directory.
+ */
 export const CAPABILITIES = [
   "manage_users",
-  "edit_settings",
-  "view_settings",
-  "edit_staff",
-  "view_all_staff",
+  "swim_view_settings",
+  "swim_edit_settings",
+  "fit_view_settings",
+  "fit_edit_settings",
+  "swim_view_staff",
+  "swim_edit_staff",
+  "fit_view_staff",
+  "fit_edit_staff",
   "view_own",
   "edit_appraisals",
   "edit_notes",
@@ -31,10 +39,14 @@ export type Capability = (typeof CAPABILITIES)[number];
 
 export const CAPABILITY_LABELS: Record<Capability, string> = {
   manage_users: "Manage user accounts",
-  edit_settings: "Edit settings",
-  view_settings: "View settings",
-  edit_staff: "Edit staff profiles",
-  view_all_staff: "View all staff",
+  swim_view_settings: "View swim settings",
+  swim_edit_settings: "Edit swim settings",
+  fit_view_settings: "View fit settings",
+  fit_edit_settings: "Edit fit settings",
+  swim_view_staff: "View all swim staff",
+  swim_edit_staff: "Edit swim staff profiles",
+  fit_view_staff: "View all gym staff",
+  fit_edit_staff: "Edit gym staff profiles",
   view_own: "View own profile",
   edit_appraisals: "Create instructor assessments",
   edit_notes: "Create/edit notes",
@@ -45,6 +57,20 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   view_audit: "View audit log",
   edit_lesson_plans: "Create & edit lesson plans",
   review_lesson_plans: "Review lesson plans",
+};
+
+/**
+ * Retired cross-brand capabilities → their brand-scoped replacements. A stored
+ * matrix that granted a legacy key grants BOTH new keys, so the split changes
+ * nothing about a deployment's effective access until the owner edits the
+ * matrix. Applied on read by `normalizePermissionConfig` (lib/db/queries.ts),
+ * which also drops the legacy keys.
+ */
+export const LEGACY_CAPABILITY_MAP: Record<string, Capability[]> = {
+  view_all_staff: ["swim_view_staff", "fit_view_staff"],
+  edit_staff: ["swim_edit_staff", "fit_edit_staff"],
+  view_settings: ["swim_view_settings", "fit_view_settings"],
+  edit_settings: ["swim_edit_settings", "fit_edit_settings"],
 };
 
 /**
@@ -102,8 +128,12 @@ export interface PermissionConfig {
   categories: Record<ConfigurableRole, ToolCategory[]>;
 }
 
-/** The pre-`categories` stored shape, still accepted on read. */
-export type LegacyPermissionConfig = Record<ConfigurableRole, Capability[]>;
+/**
+ * The pre-`categories` stored shape, still accepted on read. `string[]` (not
+ * `Capability[]`) because stored rows of either shape may also carry the retired
+ * cross-brand keys (see {@link LEGACY_CAPABILITY_MAP}).
+ */
+export type LegacyPermissionConfig = Record<ConfigurableRole, string[]>;
 
 /**
  * Resolve the launcher categories an account effectively sees:
@@ -122,10 +152,15 @@ export function effectiveCategories(
 }
 
 const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
+  // The brand-scoped pairs mirror the pre-split defaults: a role that held the
+  // legacy cross-brand key holds BOTH scoped keys.
   admin: [
-    "view_settings",
-    "edit_staff",
-    "view_all_staff",
+    "swim_view_settings",
+    "fit_view_settings",
+    "swim_edit_staff",
+    "fit_edit_staff",
+    "swim_view_staff",
+    "fit_view_staff",
     "view_own",
     "edit_appraisals",
     "edit_notes",
@@ -142,8 +177,10 @@ const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
   // numbers, but no profile edits, user management, settings edits, or audit log.
   // Deliberately NOT granted `finalize_kpi` (closing a month is admin-only).
   supervisor: [
-    "view_settings",
-    "view_all_staff",
+    "swim_view_settings",
+    "fit_view_settings",
+    "swim_view_staff",
+    "fit_view_staff",
     "view_own",
     "edit_appraisals",
     "edit_notes",

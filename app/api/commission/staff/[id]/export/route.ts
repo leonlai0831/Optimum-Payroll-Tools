@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // Same access rule as the payslip route: anyone who can view all staff, or the
   // staff member viewing their own earnings.
   const caps = await getCapabilities(user);
-  const canViewAll = caps.has("view_all_staff");
+  const canViewAll = caps.has("fit_view_staff");
   const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
   if (!canViewAll && !isOwn) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });

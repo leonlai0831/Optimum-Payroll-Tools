@@ -8,11 +8,11 @@ import { narrateRetention } from "@/lib/ai/anthropic";
  * GET supportive retention check-in signals. The watch list is computed
  * deterministically and transparently from KPI score history
  * (lib/kpi/retention.ts) — it is NOT an attrition prediction. Gated on
- * view_all_staff: this is sensitive people data, so only management-level roles
+ * swim_view_staff: this is sensitive people data, so only management-level roles
  * who can already see all staff get it.
  */
 export async function GET() {
-  const denied = await requireCapability("view_all_staff");
+  const denied = await requireCapability("swim_view_staff");
   if (denied) return denied;
 
   const trend = await getTrendData();

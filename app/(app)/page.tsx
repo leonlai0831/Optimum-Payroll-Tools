@@ -56,7 +56,7 @@ const TOOLS: Tool[] = [
     title: "Staff",
     subtitle: "Employee directory, profiles & notes",
     icon: Users,
-    cap: "view_all_staff",
+    cap: "swim_view_staff",
   },
   {
     href: "/assessment",

@@ -20,12 +20,12 @@ function enabledWeightsTotal100(list: MetricConfig[]): boolean {
 }
 
 export async function PUT(req: Request) {
-  const denied = await requireCapability("edit_settings");
+  const denied = await requireCapability("swim_edit_settings");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const data = (await req.json().catch(() => null)) as AppConfig | null;
 
-  // Hardening (route already requires edit_settings): reject malformed bodies and
+  // Hardening (route already requires swim_edit_settings): reject malformed bodies and
   // enforce the documented "enabled metric weights total 100%" invariant in both
   // the personal and center KPI lists before persisting.
   if (!isObject(data) || !Array.isArray(data.personalKpi) || !Array.isArray(data.centerKpi)) {

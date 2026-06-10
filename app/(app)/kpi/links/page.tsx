@@ -10,8 +10,8 @@ export default async function KpiLinksPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
-  const canEdit = caps.has("edit_staff");
-  if (!canEdit && !caps.has("view_all_staff")) redirect("/");
+  const canEdit = caps.has("swim_edit_staff");
+  if (!canEdit && !caps.has("swim_view_staff")) redirect("/");
 
   const [coaches, accountNames] = await Promise.all([listCoaches(), listAllCsvAccountNames()]);
   const linkCoaches: LinkCoach[] = coaches.map((c) => ({

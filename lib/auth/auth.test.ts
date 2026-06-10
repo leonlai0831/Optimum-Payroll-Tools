@@ -211,32 +211,39 @@ describe("capability matrix (default permission config)", () => {
   it("super_admin holds every capability", async () => {
     const caps = await getCapabilities(asRole("super_admin"));
     expect(caps.has("manage_users")).toBe(true);
-    expect(caps.has("edit_settings")).toBe(true);
+    expect(caps.has("swim_edit_settings")).toBe(true);
+    expect(caps.has("fit_edit_settings")).toBe(true);
   });
 
   it("admin edits data but not settings or users", async () => {
     const admin = asRole("admin");
-    expect(await userCan(admin, "edit_staff")).toBe(true);
+    // Staff/settings access is brand-scoped; admin defaults hold both brands.
+    expect(await userCan(admin, "swim_edit_staff")).toBe(true);
+    expect(await userCan(admin, "fit_edit_staff")).toBe(true);
     expect(await userCan(admin, "run_kpi")).toBe(true);
     // Deleting a saved KPI month (DELETE /api/runs/[id]) is gated on finalize_kpi.
     expect(await userCan(admin, "finalize_kpi")).toBe(true);
-    expect(await userCan(admin, "view_settings")).toBe(true);
-    expect(await userCan(admin, "edit_settings")).toBe(false);
+    expect(await userCan(admin, "swim_view_settings")).toBe(true);
+    expect(await userCan(admin, "fit_view_settings")).toBe(true);
+    expect(await userCan(admin, "swim_edit_settings")).toBe(false);
+    expect(await userCan(admin, "fit_edit_settings")).toBe(false);
     expect(await userCan(admin, "manage_users")).toBe(false);
   });
 
   it("staff can only view its own profile", async () => {
     const staff = asRole("staff");
     expect(await userCan(staff, "view_own")).toBe(true);
-    // Gates the Optimum Fit staff directory + other coaches' earnings pages
+    // Gates the staff directories + other staff's earnings pages
     // (view_own only grants the staff member's own profile/earnings).
-    expect(await userCan(staff, "view_all_staff")).toBe(false);
+    expect(await userCan(staff, "swim_view_staff")).toBe(false);
+    expect(await userCan(staff, "fit_view_staff")).toBe(false);
     expect(await userCan(staff, "run_allowance")).toBe(false);
   });
 
   it("supervisor oversees and reviews the team but cannot administer", async () => {
     const sup = asRole("supervisor");
-    expect(await userCan(sup, "view_all_staff")).toBe(true);
+    expect(await userCan(sup, "swim_view_staff")).toBe(true);
+    expect(await userCan(sup, "fit_view_staff")).toBe(true);
     expect(await userCan(sup, "edit_appraisals")).toBe(true);
     expect(await userCan(sup, "edit_notes")).toBe(true);
     expect(await userCan(sup, "run_kpi")).toBe(true);
@@ -244,9 +251,11 @@ describe("capability matrix (default permission config)", () => {
     // ...but not the administrative capabilities:
     // run_kpi alone must NOT allow deleting a saved month (DELETE /api/runs/[id]).
     expect(await userCan(sup, "finalize_kpi")).toBe(false);
-    expect(await userCan(sup, "edit_staff")).toBe(false);
+    expect(await userCan(sup, "swim_edit_staff")).toBe(false);
+    expect(await userCan(sup, "fit_edit_staff")).toBe(false);
     expect(await userCan(sup, "view_audit")).toBe(false);
     expect(await userCan(sup, "manage_users")).toBe(false);
-    expect(await userCan(sup, "edit_settings")).toBe(false);
+    expect(await userCan(sup, "swim_edit_settings")).toBe(false);
+    expect(await userCan(sup, "fit_edit_settings")).toBe(false);
   });
 });

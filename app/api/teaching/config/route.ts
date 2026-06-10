@@ -18,12 +18,12 @@ const clampRate = (v: unknown): number => {
 };
 
 export async function PUT(req: Request) {
-  const denied = await requireCapability("edit_settings");
+  const denied = await requireCapability("fit_edit_settings");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const raw = (await req.json().catch(() => null)) as TeachingConfig | null;
 
-  // Hardening (route already requires edit_settings): reject malformed bodies and
+  // Hardening (route already requires fit_edit_settings): reject malformed bodies and
   // clamp the per-session/attendee rates to sane non-negative ringgit.
   if (!isObject(raw)) {
     return NextResponse.json({ error: "invalid config body" }, { status: 400 });

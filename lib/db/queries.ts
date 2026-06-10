@@ -38,8 +38,10 @@ import {
 import { hashPassword } from "@/lib/auth/password";
 import {
   ALL_TOOL_CATEGORIES,
+  CAPABILITIES,
   CONFIGURABLE_ROLES,
   DEFAULT_PERMISSION_CONFIG,
+  LEGACY_CAPABILITY_MAP,
   sanitizeToolCategories,
   type Capability,
   type ConfigurableRole,
@@ -2102,6 +2104,10 @@ const BACKFILL_CAPS: Capability[] = ["finalize_kpi", "edit_lesson_plans", "revie
  * - Accepts BOTH stored shapes: the current `{ capabilities, categories }` and
  *   the legacy flat `Record<role, Capability[]>` written before launcher
  *   categories joined the matrix.
+ * - Migrates the retired cross-brand capability keys to their brand-scoped
+ *   pairs via {@link LEGACY_CAPABILITY_MAP} (a role that held `view_all_staff`
+ *   comes out holding `swim_view_staff` + `fit_view_staff`, etc.) and drops the
+ *   legacy keys.
  * - Backfills any configurable role missing from `capabilities` with its
  *   defaults (lets a newly added role work with no migration), plus the
  *   {@link BACKFILL_CAPS}.
@@ -2116,24 +2122,33 @@ export function normalizePermissionConfig(
     "capabilities" in data && isPlainObject(data.capabilities)
       ? data.capabilities
       : data
-  ) as Partial<Record<ConfigurableRole, Capability[]>>;
+  ) as Partial<Record<ConfigurableRole, string[]>>;
   const rawCats =
     "categories" in data && isPlainObject(data.categories)
       ? (data.categories as Partial<Record<ConfigurableRole, ToolCategory[]>>)
       : {};
 
+  const validCaps = new Set<string>(CAPABILITIES);
   const out: PermissionConfig = {
     capabilities: {} as PermissionConfig["capabilities"],
     categories: {} as PermissionConfig["categories"],
   };
   for (const role of CONFIGURABLE_ROLES) {
-    let caps = Array.isArray(rawCaps[role])
-      ? [...rawCaps[role]]
-      : [...DEFAULT_PERMISSION_CONFIG.capabilities[role]];
+    const stored = Array.isArray(rawCaps[role])
+      ? rawCaps[role]
+      : DEFAULT_PERMISSION_CONFIG.capabilities[role];
+    // Legacy cross-brand keys expand to both brand-scoped keys (exact same
+    // effective access as before the split); anything unknown is dropped.
+    const caps: Capability[] = [];
+    const add = (cap: Capability) => {
+      if (!caps.includes(cap)) caps.push(cap);
+    };
+    for (const cap of stored) {
+      for (const mapped of LEGACY_CAPABILITY_MAP[cap] ?? []) add(mapped);
+      if (validCaps.has(cap)) add(cap as Capability);
+    }
     for (const cap of BACKFILL_CAPS) {
-      if (DEFAULT_PERMISSION_CONFIG.capabilities[role].includes(cap) && !caps.includes(cap)) {
-        caps = [...caps, cap];
-      }
+      if (DEFAULT_PERMISSION_CONFIG.capabilities[role].includes(cap)) add(cap);
     }
     out.capabilities[role] = caps;
     // Unknown/invalid stored values fall back to all (sanitize self-heals order/dupes).

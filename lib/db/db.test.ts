@@ -336,6 +336,70 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(normalized.categories.admin).toEqual(["swim", "fit", "marketing"]);
   });
 
+  it("migrates retired cross-brand capability keys to both brand-scoped keys", () => {
+    // A stored matrix that granted the legacy keys must come out granting BOTH
+    // new keys per legacy key — exact same effective access — with the legacy
+    // keys dropped.
+    const normalized = queries.normalizePermissionConfig({
+      capabilities: {
+        admin: ["view_all_staff", "edit_settings", "run_kpi"],
+        supervisor: ["view_settings"],
+        staff: ["view_own"],
+      },
+      categories: { admin: ["swim"], supervisor: ["swim"], staff: ["swim"] },
+    } as never);
+
+    expect(normalized.capabilities.admin).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_edit_settings", "fit_edit_settings", "run_kpi"]),
+    );
+    expect(normalized.capabilities.supervisor).toEqual(
+      expect.arrayContaining(["swim_view_settings", "fit_view_settings"]),
+    );
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      for (const legacy of ["view_all_staff", "edit_staff", "view_settings", "edit_settings"]) {
+        expect(normalized.capabilities[role]).not.toContain(legacy);
+      }
+    }
+    // A role that never held a legacy key gains none of its replacements.
+    expect(normalized.capabilities.staff.filter((c) => c.includes("staff") || c.includes("settings"))).toEqual([]);
+    expect(normalized.capabilities.admin).not.toContain("swim_edit_staff");
+    expect(normalized.capabilities.supervisor).not.toContain("swim_edit_settings");
+  });
+
+  it("migrates legacy keys in the old flat shape too, and dedupes", () => {
+    const normalized = queries.normalizePermissionConfig({
+      // Legacy key + one of its replacements already present → no duplicates.
+      admin: ["edit_staff", "swim_edit_staff"],
+      supervisor: ["view_all_staff"],
+      staff: ["view_own"],
+    });
+    expect(normalized.capabilities.admin.filter((c) => c === "swim_edit_staff")).toHaveLength(1);
+    expect(normalized.capabilities.admin).toContain("fit_edit_staff");
+    expect(normalized.capabilities.supervisor).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff"]),
+    );
+    expect(normalized.capabilities.supervisor).not.toContain("view_all_staff");
+  });
+
+  it("default permission config holds only valid, brand-scoped capabilities", async () => {
+    const { DEFAULT_PERMISSION_CONFIG, CAPABILITIES } = await import("../auth/types");
+    const valid = new Set<string>(CAPABILITIES);
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      for (const cap of DEFAULT_PERMISSION_CONFIG.capabilities[role]) {
+        expect(valid.has(cap)).toBe(true);
+      }
+    }
+    // Defaults mirror the pre-split grants: both brands per legacy grant.
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.admin).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_edit_staff", "fit_edit_staff", "swim_view_settings", "fit_view_settings"]),
+    );
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.supervisor).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_view_settings", "fit_view_settings"]),
+    );
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.supervisor).not.toContain("swim_edit_staff");
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.staff).toEqual(["view_own", "edit_lesson_plans"]);
+  });
+
   it("lists distinct CSV account names across runs, sorted and trimmed", async () => {
     const row = (Instructor: string) => ({
       Center: "Berkeley",
