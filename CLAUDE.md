@@ -19,7 +19,7 @@ Re-develop the legacy HTML tool — which had no real persistence (some `localSt
 hardcoded "AI analysis" template — into a maintainable app that:
 
 - **Deploys to Vercel** and **saves past monthly records in a cloud database** (shared across devices).
-- Is protected by a **single shared password** (env var) gating the whole app.
+- Is protected by per-user accounts with roles + a capability matrix (originally one shared password).
 - Works on **mobile/tablet**, adds **month-over-month comparison/trends**, and replaces the fake
   analysis with **real Claude AI analysis**.
 - Ships a **configurable scoring formula** (metrics enable/disable, weights, min/max, grade
@@ -125,6 +125,33 @@ management assessment (when that metric is enabled), or group/center hours (for 
 
 Groupings are editable in the UI (split / move accounts) before saving.
 
+## Lesson Plan (`lib/lesson-plan`, `/lesson-plans`)
+
+Digital version of the two paper lesson-plan templates (swim group). Two types:
+**actual** (free-form procedure rows) and **replacement** (Low/Medium/High level
+types whose skill checklists are **hardcoded verbatim from the paper forms** in
+`lib/lesson-plan/templates.ts` — Low = N/B/1, Medium = 2/3/4, High = 4/5/6/7 —
+plus a 16-question yes/no self-evaluation). Review workflow:
+`draft → submitted → approved / changes_requested`; **any content edit resets the
+plan to draft** (last review note stays visible) and it can be resubmitted.
+Capabilities: `edit_lesson_plans` (staff+supervisor+admin; creators see only
+their own) and `review_lesson_plans` (supervisor+admin; see all, approve/request
+changes). PDF export per type via `lib/reports/lesson-plan.ts` (pdf-lib, mirrors
+the payslip builder). Table `lesson_plans`: promoted list columns + jsonb body;
+access rules live in `lib/lesson-plan/access.ts`.
+
+## Design language (since the 2026-06 redesign)
+
+Notion-calm base × Optimum CI: warm paper canvas `#f6f5f4`, warm-grey ink ramp
+(the Tailwind `gray-*` tokens are remapped — don't re-introduce cool greys),
+hairline borders + the layered `.shadow-card` micro-shadow, Nunito 800 headings
+with negative tracking, **pill** primary/secondary/danger buttons vs 8px
+outline/ghost utility chrome, form fields `text-base` at phone widths (iOS
+anti-zoom). The CI guide's footer wave is traced 1:1 into
+`components/ci-wave.tsx` (launcher hero + login). Brand skins still come from
+`data-brand` CSS variables. Every legacy side-scroll table has been converted to
+`MobileCards`/`DesktopTable` — new data views must ship both layouts.
+
 ## Data model (Drizzle / Postgres)
 
 - **`config`** — singleton row (`id = 1`), `data` jsonb = `{ personalKpi, centerKpi, centerTargets,
@@ -138,14 +165,21 @@ Groupings are editable in the UI (split / move accounts) before saving.
 
 ## Auth
 
-Single shared password, no password stored in DB or client bundle.
+Per-user accounts (email + password, bcrypt-style hash in the `users` table) with roles
+`super_admin / admin / supervisor / staff`; a role → capability matrix (`/system/permissions`)
+gates everything else. Per-user **Category Visibility** additionally controls which launcher
+brand groups (swim / fit / marketing) an account sees, enforced on the launcher AND in the
+brand-section layouts.
 
 - **`proxy.ts`** is an *optimistic* gate: redirects to `/login` when the `kpi_session` cookie is
   **absent**. Public paths: `/login`, `/api/auth/*`. (Matcher excludes `_next/static`, images, favicon.)
-- **Authoritative** checks: the `(app)` layout and `isAuthed()` in every API route validate the
-  iron-session via decryption — so a present-but-invalid cookie still gets a JSON `401`.
-- `/api/auth/login` compares to `APP_PASSWORD` (dev fallback `swim123` when not production);
-  `SESSION_SECRET` (≥ 32 chars) encrypts the cookie. `/api/auth/logout` destroys the session.
+- **Authoritative** checks: the `(app)` layout and `getCurrentUser()`/`requireCapability()` in API
+  routes re-validate the iron-session against the DB — a present-but-invalid cookie or a
+  deactivated account still gets a JSON `401`/`403`.
+- `/api/auth/login` checks the `users` table (in-process rate-limit per IP+email; session is
+  destroyed and re-issued on login). `SESSION_SECRET` (≥ 32 chars) encrypts the cookie.
+- First boot seeds a super admin from `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`
+  (dev fallback `admin@local` / `swim123`).
 
 ## AI (`lib/ai/anthropic.ts`)
 
@@ -157,7 +191,7 @@ without `ANTHROPIC_API_KEY`: `matchInstructorNames` → `[]` (deterministic merg
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `APP_PASSWORD` | yes (prod) | Single shared login password (dev falls back to `swim123`). |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | yes (prod, first boot) | Seeds the first super-admin account (dev falls back to `admin@local` / `swim123`). |
 | `SESSION_SECRET` | yes | ≥ 32 random chars; encrypts the session cookie. |
 | `POSTGRES_URL` (or `DATABASE_URL`) | yes (prod) | Postgres connection string. Unset → PGlite at `./.pglite`. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
@@ -230,7 +264,8 @@ rule below rather than relocating UI:
 
 ## Deploy
 
-Import to Vercel → add Postgres (Neon) → set `APP_PASSWORD` / `SESSION_SECRET` /
+Import to Vercel → add Postgres (Neon, **ap-southeast-1**; functions pinned to `sin1`
+via `vercel.json`) → set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` / `SESSION_SECRET` /
 `ANTHROPIC_API_KEY` → deploy. **Migrations auto-apply on first DB connect** (`lib/db/index.ts`), so
 a fresh prod database needs no manual SQL; you can still run `npm run db:migrate` against the prod
 DB to apply them explicitly ahead of traffic. See `README.md` for step-by-step details.
