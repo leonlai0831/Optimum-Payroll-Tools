@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
@@ -409,6 +409,154 @@ export async function deleteCoach(id: number): Promise<void> {
     await tx.delete(assessments).where(eq(assessments.coachId, id));
     await tx.delete(notes).where(eq(notes.coachId, id));
     await tx.delete(coaches).where(eq(coaches.id, id));
+  });
+}
+
+/** Outcome of {@link mergeCoaches}, for the audit line + UI toast. */
+export interface MergeCoachesResult {
+  survivorName: string;
+  duplicateName: string;
+  movedAllowanceRuns: number;
+  /**
+   * Allowance periods where BOTH profiles already had a saved record — the
+   * (period, canonical_name) unique index forbids renaming those onto the
+   * survivor, so they keep the duplicate's name (still re-pointed by coachId,
+   * so they show on the survivor's profile). Reported for the operator to
+   * reconcile by hand.
+   */
+  conflictingPeriods: string[];
+}
+
+/**
+ * Merge a duplicate staff profile into a survivor, in one transaction.
+ * Fixes the "same person, two profiles" split that happens when a KPI upload
+ * auto-creates a coach under a cleaned CSV name (e.g. "ARIF") while the person
+ * already exists under their full name (e.g. "ARIF FARHAN"):
+ *
+ * - the duplicate's canonical name + aliases become aliases of the survivor,
+ *   so future uploads AND the KPI history matcher resolve to the survivor
+ *   (saved runs' jsonb is matched by name set — nothing to rewrite there);
+ * - assessments, notes, and login links are re-pointed;
+ * - allowance history is re-pointed and renamed onto the survivor where the
+ *   period doesn't collide (see {@link MergeCoachesResult.conflictingPeriods});
+ * - profile fields the survivor lacks (tier, allowance, center) carry over,
+ *   and the newer management assessment of the two wins;
+ * - the duplicate profile row is deleted.
+ */
+export async function mergeCoaches(
+  survivorId: number,
+  duplicateId: number,
+): Promise<MergeCoachesResult> {
+  if (survivorId === duplicateId) throw new Error("Pick two different employees.");
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(coaches)
+      .where(inArray(coaches.id, [survivorId, duplicateId]));
+    const survivor = rows.find((r) => r.id === survivorId);
+    const dup = rows.find((r) => r.id === duplicateId);
+    if (!survivor || !dup) throw new Error("Employee not found.");
+
+    // The duplicate's identity becomes part of the survivor's alias set.
+    const aliases = [
+      ...new Set([...survivor.aliases, ...dup.aliases, dup.canonicalName]),
+    ].sort();
+    // The newer management assessment of the two wins.
+    const mgmtUpdate =
+      dup.lastMgmtAssessmentAt &&
+      (!survivor.lastMgmtAssessmentAt || dup.lastMgmtAssessmentAt > survivor.lastMgmtAssessmentAt)
+        ? {
+            lastMgmtAssessment: dup.lastMgmtAssessment,
+            lastMgmtAssessmentAt: dup.lastMgmtAssessmentAt,
+          }
+        : {};
+    await tx
+      .update(coaches)
+      .set({
+        aliases,
+        center: survivor.center || dup.center,
+        allowanceTier: survivor.allowanceTier ?? dup.allowanceTier,
+        lastAllowance: survivor.lastAllowance ?? dup.lastAllowance,
+        active: survivor.active || dup.active,
+        ...mgmtUpdate,
+        updatedAt: new Date(),
+      })
+      .where(eq(coaches.id, survivorId));
+
+    // Re-point dependents (no DB-level FKs — cascade by hand, like deleteCoach).
+    await tx
+      .update(assessments)
+      .set({ coachId: survivorId })
+      .where(eq(assessments.coachId, duplicateId));
+    await tx.update(notes).set({ coachId: survivorId }).where(eq(notes.coachId, duplicateId));
+    await tx
+      .update(users)
+      .set({ coachId: survivorId, updatedAt: new Date() })
+      .where(eq(users.coachId, duplicateId));
+
+    // Allowance history: rename onto the survivor where the period is free;
+    // colliding periods only get re-pointed (the unique index forbids the rename).
+    const survivorPeriods = new Set(
+      (
+        await tx
+          .select({ periodLabel: allowanceRuns.periodLabel })
+          .from(allowanceRuns)
+          .where(
+            or(
+              eq(allowanceRuns.coachId, survivorId),
+              eq(allowanceRuns.canonicalName, survivor.canonicalName),
+            ),
+          )
+      ).map((r) => r.periodLabel),
+    );
+    const dupRuns = await tx
+      .select({ id: allowanceRuns.id, periodLabel: allowanceRuns.periodLabel })
+      .from(allowanceRuns)
+      .where(
+        or(
+          eq(allowanceRuns.coachId, duplicateId),
+          eq(allowanceRuns.canonicalName, dup.canonicalName),
+        ),
+      );
+    const movable = dupRuns.filter((r) => !survivorPeriods.has(r.periodLabel));
+    const conflicting = dupRuns.filter((r) => survivorPeriods.has(r.periodLabel));
+    if (movable.length > 0) {
+      await tx
+        .update(allowanceRuns)
+        .set({
+          coachId: survivorId,
+          canonicalName: survivor.canonicalName,
+          // Keep the snapshot input's display name in step with the rename.
+          input: sql`jsonb_set(${allowanceRuns.input}, '{name}', to_jsonb(${survivor.canonicalName}::text))`,
+        })
+        .where(
+          inArray(
+            allowanceRuns.id,
+            movable.map((r) => r.id),
+          ),
+        );
+    }
+    if (conflicting.length > 0) {
+      await tx
+        .update(allowanceRuns)
+        .set({ coachId: survivorId })
+        .where(
+          inArray(
+            allowanceRuns.id,
+            conflicting.map((r) => r.id),
+          ),
+        );
+    }
+
+    await tx.delete(coaches).where(eq(coaches.id, duplicateId));
+
+    return {
+      survivorName: survivor.canonicalName,
+      duplicateName: dup.canonicalName,
+      movedAllowanceRuns: movable.length,
+      conflictingPeriods: [...new Set(conflicting.map((r) => r.periodLabel))].sort(),
+    };
   });
 }
 
