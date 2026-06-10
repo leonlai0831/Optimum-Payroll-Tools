@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, RotateCcw, Save } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
+import { cn } from "@/lib/utils";
 import {
   ASSESSMENT_FORM,
   CLASS_TYPES,
@@ -207,7 +209,50 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
                 {p.percent.toFixed(0)}% · {GRADE_LABEL[p.grade]}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: stacked criterion rows with tappable rating buttons (a
+                5-column radio table only side-scrolls on a phone). */}
+            <MobileCards>
+              {part.subCategories.map((sub) => (
+                <div key={sub.key} className="py-3">
+                  <div className="text-xs font-semibold text-gray-700">
+                    {sub.label} ({sub.weight}%){" "}
+                    <span className="text-gray-400">· {subScore(sub.key).toFixed(1)}%</span>
+                  </div>
+                  <div className="mt-2 space-y-3">
+                    {sub.criteria.map((c) => (
+                      <div key={c.key}>
+                        <div className="text-sm text-gray-700">{c.label}</div>
+                        <div
+                          className="mt-1.5 grid grid-cols-2 gap-2"
+                          role="radiogroup"
+                          aria-label={c.label}
+                        >
+                          {RATINGS.map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              role="radio"
+                              aria-checked={ratings[c.key] === r}
+                              onClick={() => setRating(c.key, r)}
+                              className={cn(
+                                "min-h-11 rounded-lg border px-2 py-1.5 text-sm font-medium transition",
+                                ratings[c.key] === r
+                                  ? "border-indigo-600 bg-indigo-600 text-white"
+                                  : "border-gray-200 bg-white text-gray-600 active:bg-gray-100",
+                              )}
+                            >
+                              {RATING_LABELS[r]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </MobileCards>
+            {/* Desktop: the original criterion × rating radio matrix. */}
+            <DesktopTable>
               <table className="min-w-full text-sm">
                 <thead className="text-[11px] uppercase tracking-wide text-gray-400">
                   <tr>
@@ -232,7 +277,7 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
                   ))}
                 </tbody>
               </table>
-            </div>
+            </DesktopTable>
           </div>
         );
       })}

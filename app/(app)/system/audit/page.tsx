@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { listAuditLog } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,28 @@ export default async function AuditPage() {
             body="Sensitive changes — settings, permissions, users, staff profiles, assessments, notes, and saved runs — will appear here."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <MobileCards>
+              {entries.map((e) => (
+                <div key={e.id} className="space-y-1.5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium text-gray-800">
+                      {e.actorEmail || "—"}
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-400">
+                      {new Date(e.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+                      {e.action}
+                    </code>
+                  </div>
+                  <p className="text-sm text-gray-700">{e.summary}</p>
+                </div>
+              ))}
+            </MobileCards>
+            <DesktopTable>
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                 <tr>
@@ -60,7 +82,8 @@ export default async function AuditPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </DesktopTable>
+          </>
         )}
       </Card>
     </>
