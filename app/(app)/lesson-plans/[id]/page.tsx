@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, MessageSquareWarning } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ClipboardCheck, Clock, MessageSquareWarning } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
-import { getLessonPlan } from "@/lib/db/queries";
+import { getLessonPlan, listAssessmentsForLessonPlan } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
 import { LessonPlanActions } from "@/components/lesson-plan-actions";
 import { LessonPlanStatusBadge, LessonPlanTypeBadge } from "@/components/lesson-plan-badges";
@@ -64,6 +64,9 @@ export default async function LessonPlanDetailPage({
   const isOwner = canEdit && plan.createdByUserId === user.id;
   // Editors only ever open their own plans; reviewers can open anyone's.
   if (!isOwner && !canReview) notFound();
+
+  // Assessments filed against this plan's class (link back to the coach profile).
+  const linkedAssessments = await listAssessmentsForLessonPlan(plan.id);
 
   const d = plan.data;
   const dateLabel = plan.lessonDate.toISOString().slice(0, 10);
@@ -130,6 +133,23 @@ export default async function LessonPlanDetailPage({
           <span>
             Last review note{reviewedStamp && <> ({reviewedStamp})</>}: {plan.reviewNote}
           </span>
+        </div>
+      )}
+
+      {/* Instructor assessments filed against this class. */}
+      {linkedAssessments.length > 0 && (
+        <div className="space-y-1 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
+          {linkedAssessments.map((a) => (
+            <div key={a.id} className="flex items-start gap-2">
+              <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Assessed on {a.observedOn.toLocaleDateString("en-US")} —{" "}
+                <Link href={`/staff/${a.coachId}`} className="font-semibold underline">
+                  view assessment
+                </Link>
+              </span>
+            </div>
+          ))}
         </div>
       )}
 

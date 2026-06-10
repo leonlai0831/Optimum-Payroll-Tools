@@ -2195,10 +2195,41 @@ export async function createAssessment(input: {
   totalPercent: number;
   finalGrade: GradeKey;
   comments: string;
+  /** Optional link to the lesson plan of the observed class (validated by the API). */
+  lessonPlanId?: number | null;
 }): Promise<AssessmentRecord> {
   const db = await getDb();
   const [row] = await db.insert(assessments).values(input).returning();
   return row;
+}
+
+/**
+ * Validate an assessment → lesson-plan link before storing it: the plan must
+ * exist AND belong to the assessed coach (`plan.coachId === coachId`). There is
+ * no DB-level FK (repo convention), so this helper is the only integrity gate.
+ */
+export async function validateAssessmentLessonPlanLink(
+  lessonPlanId: number,
+  coachId: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const plan = await getLessonPlan(lessonPlanId);
+  if (!plan) return { ok: false, error: "lesson plan not found" };
+  if (plan.coachId !== coachId) {
+    return { ok: false, error: "lesson plan belongs to a different coach" };
+  }
+  return { ok: true };
+}
+
+/** Assessments that link to one lesson plan (the plan page's back-links), newest first. */
+export async function listAssessmentsForLessonPlan(
+  lessonPlanId: number,
+): Promise<AssessmentRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.lessonPlanId, lessonPlanId))
+    .orderBy(desc(assessments.observedOn));
 }
 
 export async function deleteAssessment(id: number): Promise<void> {
@@ -2230,6 +2261,7 @@ export interface RecentAssessment {
   poolType: string;
   totalPercent: number;
   finalGrade: GradeKey;
+  lessonPlanId: number | null;
 }
 
 /** The most recent assessments across all instructors, with the coach name joined. */
@@ -2246,6 +2278,7 @@ export async function listRecentAssessments(limit = 20): Promise<RecentAssessmen
       poolType: assessments.poolType,
       totalPercent: assessments.totalPercent,
       finalGrade: assessments.finalGrade,
+      lessonPlanId: assessments.lessonPlanId,
     })
     .from(assessments)
     .leftJoin(coaches, eq(assessments.coachId, coaches.id))
@@ -2409,9 +2442,11 @@ export interface LessonPlanListRow {
 /**
  * List plans, newest lesson first. Pass `forUserId` to scope to one creator
  * (the editor's own-plans view); omit it for the reviewer's all-plans view.
+ * Pass `coachId` to scope to one coach profile (the assessment form's
+ * lesson-plan picker for the assessed coach).
  */
 export async function listLessonPlans(
-  opts: { forUserId?: number } = {},
+  opts: { forUserId?: number; coachId?: number } = {},
 ): Promise<LessonPlanListRow[]> {
   const db = await getDb();
   const projection = {
@@ -2431,9 +2466,12 @@ export async function listLessonPlans(
     createdAt: lessonPlans.createdAt,
     updatedAt: lessonPlans.updatedAt,
   };
+  const conditions = [
+    ...(opts.forUserId != null ? [eq(lessonPlans.createdByUserId, opts.forUserId)] : []),
+    ...(opts.coachId != null ? [eq(lessonPlans.coachId, opts.coachId)] : []),
+  ];
   const base = db.select(projection).from(lessonPlans);
-  const query =
-    opts.forUserId != null ? base.where(eq(lessonPlans.createdByUserId, opts.forUserId)) : base;
+  const query = conditions.length > 0 ? base.where(and(...conditions)) : base;
   return query.orderBy(desc(lessonPlans.lessonDate), desc(lessonPlans.id));
 }
 

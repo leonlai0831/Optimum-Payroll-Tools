@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createAssessment, recordAudit } from "@/lib/db/queries";
+import {
+  createAssessment,
+  recordAudit,
+  validateAssessmentLessonPlanLink,
+} from "@/lib/db/queries";
 import { computeAssessment } from "@/lib/assessment/calc";
 import { LEVELS, MAX_PAX, type RatingMap } from "@/lib/assessment/types";
 
@@ -21,9 +25,22 @@ export async function POST(req: Request) {
     hasHelper?: boolean;
     ratings?: RatingMap;
     comments?: string;
+    lessonPlanId?: number | null;
   };
   if (typeof body.coachId !== "number") {
     return NextResponse.json({ error: "coachId is required" }, { status: 400 });
+  }
+
+  // Optional link to the observed class's lesson plan — must exist and belong
+  // to the assessed coach (no DB-level FK, so this is the integrity gate).
+  let lessonPlanId: number | null = null;
+  if (body.lessonPlanId != null) {
+    if (typeof body.lessonPlanId !== "number" || !Number.isInteger(body.lessonPlanId)) {
+      return NextResponse.json({ error: "lessonPlanId must be an integer" }, { status: 400 });
+    }
+    const link = await validateAssessmentLessonPlanLink(body.lessonPlanId, body.coachId);
+    if (!link.ok) return NextResponse.json({ error: link.error }, { status: 400 });
+    lessonPlanId = body.lessonPlanId;
   }
 
   const ratings = (body.ratings ?? {}) as RatingMap;
@@ -52,6 +69,7 @@ export async function POST(req: Request) {
     totalPercent,
     finalGrade,
     comments: (body.comments ?? "").trim(),
+    lessonPlanId,
   });
   if (actor) {
     await recordAudit({
