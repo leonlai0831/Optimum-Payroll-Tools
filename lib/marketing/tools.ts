@@ -24,8 +24,9 @@ export const MARKETING_TOOLS: MarketingTool[] = [
   {
     href: "/marketing",
     title: "Marketing KPI",
-    subtitle: "Marketing performance & campaign KPIs",
+    subtitle: "Coming soon",
     icon: Megaphone,
+    disabled: true,
   },
   // Add more cards here, e.g.:
   // {
