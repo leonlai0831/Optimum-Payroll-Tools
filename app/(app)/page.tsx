@@ -205,12 +205,31 @@ export default async function HubPage() {
 
   return (
     <div className="fade-in space-y-6">
-      {/* The one brand "splash" moment (design.md hero-band × CI wave motif);
+      {/* The one brand "splash" moment: Brand Blue band closing in the CI's
+          organic yellow-and-paper wave crossover (see the CI guide footers);
           everything below stays quiet paper-and-hairline chrome. */}
-      <section className="wave-texture overflow-hidden rounded-2xl bg-brand px-6 py-7 sm:px-8">
+      <section className="relative overflow-hidden rounded-2xl bg-brand px-6 pt-7 pb-16 sm:px-8 sm:pb-20">
         <p className="text-overline text-white/70">Optimum · Staff Operations</p>
         <h1 className="text-display mt-1 text-white">Optimum Payroll Tools</h1>
         <p className="mt-2 text-body text-white/85">Choose a calculator to get started.</p>
+        <svg
+          className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20"
+          viewBox="0 0 1440 120"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          {/* Yellow crest behind… */}
+          <path
+            d="M0 34 C320 108 560 12 820 38 C1060 62 1260 24 1440 50 L1440 120 L0 120 Z"
+            fill="var(--color-accent)"
+          />
+          {/* …paper wave in front, crossing it (canvas color, so the band melts
+              into the page background). */}
+          <path
+            d="M0 86 C260 42 520 114 800 86 C1080 58 1280 94 1440 76 L1440 120 L0 120 Z"
+            fill="var(--background)"
+          />
+        </svg>
       </section>
 
       {tools.length === 0 && !profileTool ? (

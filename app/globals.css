@@ -226,22 +226,6 @@ table {
     0 4px 18px rgba(33, 29, 27, 0.04);
 }
 
-/* ── Optimum personality layer (CI guide) ────────────────────────────────────
-   The CI's scallop-wave motif as a decorative texture for brand-colored bands
-   (launcher hero, section flourishes). Decoration only — never structure. */
-.wave-texture {
-  position: relative;
-  isolation: isolate;
-}
-.wave-texture::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.1;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='36' viewBox='0 0 72 36'%3E%3Cpath d='M0 27c6 0 6-9 12-9s6 9 12 9 6-9 12-9 6 9 12 9 6-9 12-9 6 9 12 9' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-size: 72px 36px;
-}
 
 /* Clear, brand-tinted keyboard focus for interactive chrome (links, buttons,
    tabs). :where() keeps specificity 0 so component styles still win; form fields
