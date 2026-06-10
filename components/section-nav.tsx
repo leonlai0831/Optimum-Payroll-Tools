@@ -10,6 +10,7 @@ import {
   Dumbbell,
   History,
   Home,
+  Inbox,
   Layers,
   LayoutDashboard,
   Link2,
@@ -68,6 +69,7 @@ const NAVS: Record<
     title: "Instructor KPI Bonus",
     items: [
       { href: "/kpi", label: "Calculator", icon: LayoutDashboard, exact: true },
+      { href: "/kpi/ingests", label: "Uploads", icon: Inbox, requires: { cap: "run_kpi" } },
       { href: "/kpi/links", label: "Links", icon: Link2, requires: { cap: "swim_view_staff" } },
       { href: "/kpi/history", label: "History", icon: History },
       { href: "/kpi/trends", label: "Trends", icon: BarChart3 },

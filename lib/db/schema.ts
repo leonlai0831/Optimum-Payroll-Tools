@@ -118,6 +118,34 @@ export const runs = pgTable("runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("runs_created_idx").on(t.createdAt)]);
 
+/**
+ * A staged KPI data delivery pushed by the external system (POST /api/ingest/kpi).
+ * `rows` is already normalized to canonical InstructorRow[] at receive time, so
+ * the owner can review/edit it and load it into the calculator exactly like an
+ * uploaded CSV. Rows are NEVER hard-deleted: "discarded" is a status, and an
+ * imported delivery keeps its rows viewable forever (with `importedRunId`
+ * pointing at the saved run it became).
+ */
+export const kpiIngests = pgTable("kpi_ingests", {
+  id: serial("id").primaryKey(),
+  periodLabel: text("period_label").notNull(),
+  /** Source filename / free-form note supplied by the sender. */
+  label: text("label").default("").notNull(),
+  rows: jsonb("rows").$type<InstructorRow[]>().notNull(),
+  status: text("status")
+    .$type<"pending" | "imported" | "discarded">()
+    .default("pending")
+    .notNull(),
+  importedRunId: integer("imported_run_id"),
+  importedAt: timestamp("imported_at", { withTimezone: true }),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // The dashboard's "Pending uploads" card filters by status; the list orders by receivedAt.
+  index("kpi_ingests_status_idx").on(t.status),
+  index("kpi_ingests_received_idx").on(t.receivedAt),
+]);
+
 /** Singleton allowance rate tables (one row, id = 1). */
 export const allowanceConfig = pgTable("allowance_config", {
   id: integer("id").primaryKey().default(1),
@@ -358,6 +386,7 @@ export type AssessmentRecord = typeof assessments.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
 export type CoachRecord = typeof coaches.$inferSelect;
 export type RunRecord = typeof runs.$inferSelect;
+export type KpiIngestRecord = typeof kpiIngests.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;
 export type AllowanceConfigRecord = typeof allowanceConfig.$inferSelect;
 export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
