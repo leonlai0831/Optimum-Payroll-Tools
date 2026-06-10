@@ -93,7 +93,9 @@ const TOOLS: Tool[] = [
     title: "Users",
     subtitle: "Accounts, roles & staff links",
     icon: UserCog,
-    superAdmin: true,
+    // Hierarchy-scoped: a manage_users holder administers only roles below
+    // their own (the other System cards stay super_admin-only).
+    cap: "manage_users",
     brand: "system",
   },
   {
@@ -191,7 +193,9 @@ export default async function HubPage() {
     (tool) =>
       (!tool.cap || caps.has(tool.cap)) &&
       (!tool.superAdmin || isSuperAdmin) &&
-      (isSuperAdmin || visibleBrands.has(tool.brand ?? "swim")),
+      // "system" is not an assignable launcher category — its cards are gated
+      // purely by cap/superAdmin above (e.g. hierarchy-scoped manage_users).
+      (isSuperAdmin || tool.brand === "system" || visibleBrands.has(tool.brand ?? "swim")),
   );
   // The user's own profile is not a category tool — it stays reachable in its
   // own group even when every brand category is hidden for the account.
@@ -211,9 +215,13 @@ export default async function HubPage() {
           white sheet, Brand Blue heading, the guide's own footer wave (traced
           1:1 from its vector artwork). Everything below stays quiet chrome. */}
       <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 pt-7 pb-20 shadow-card sm:px-8 sm:pb-24">
-        <p className="text-overline text-gray-400">Optimum · Staff Operations</p>
+        {user && (
+          <p className="text-overline text-gray-400">
+            Welcome, {user.displayName.trim() || user.email.split("@")[0]}
+          </p>
+        )}
         <h1 className="text-display mt-1 text-brand">Optimum Payroll Tools</h1>
-        <p className="mt-2 text-body text-muted">Choose a calculator to get started.</p>
+        <p className="mt-2 text-body text-muted">Choose a tool to get started.</p>
         <CiWave className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20" />
       </section>
 

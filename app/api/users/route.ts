@@ -3,7 +3,14 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { createUser, listUsers, recordAudit } from "@/lib/db/queries";
-import { ROLES, sanitizeToolCategories, type Role, type ToolCategory } from "@/lib/auth/types";
+import {
+  ROLES,
+  canManageUserRole,
+  canViewUserRole,
+  sanitizeToolCategories,
+  type Role,
+  type ToolCategory,
+} from "@/lib/auth/types";
 import type { UserRecord } from "@/lib/db/schema";
 
 /** Never expose the password hash to the client. */
@@ -22,7 +29,14 @@ function safeUser(u: UserRecord) {
 export async function GET() {
   const denied = await requireCapability("manage_users");
   if (denied) return denied;
-  return NextResponse.json((await listUsers()).map(safeUser));
+  const actor = await getCurrentUser();
+  if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Hierarchy scope: accounts ranked above the actor are invisible.
+  return NextResponse.json(
+    (await listUsers())
+      .filter((u) => canViewUserRole(actor.role, u.role))
+      .map(safeUser),
+  );
 }
 
 export async function POST(req: Request) {
@@ -49,9 +63,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid role." }, { status: 400 });
   }
   const role = body.role as Role;
-  // Only a super_admin may mint another super_admin.
-  if (role === "super_admin" && actor.role !== "super_admin") {
-    return NextResponse.json({ error: "Only a super admin can create a super admin." }, { status: 403 });
+  // Hierarchy scope: you may only create accounts ranked strictly below your
+  // own role (super_admin may create anything, incl. another super_admin).
+  if (!canManageUserRole(actor.role, role)) {
+    return NextResponse.json(
+      { error: "You can only create accounts with a role below your own." },
+      { status: 403 },
+    );
   }
   const link = resolveEmployeeLink(body);
   if ("error" in link) return link.error;

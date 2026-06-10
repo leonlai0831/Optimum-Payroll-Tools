@@ -6,15 +6,17 @@ import { SectionNav } from "@/components/section-nav";
 export const dynamic = "force-dynamic";
 
 /**
- * System Setting shell — super_admin only. Renders the section nav once so it
- * persists across sub-navigation (Users / Audit log / Permissions), mirroring
- * the staff/commission section layouts. Each page also re-checks super_admin.
+ * System Setting shell. super_admin owns the whole section; a `manage_users`
+ * holder may enter for the Users page only — Audit log and Permissions each
+ * re-check super_admin themselves, and the section nav hides their tabs.
+ * Renders the section nav once so it persists across sub-navigation,
+ * mirroring the staff/commission section layouts.
  */
 export default async function SystemLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "super_admin") redirect("/");
   const caps = await getCapabilities(user);
+  if (user.role !== "super_admin" && !caps.has("manage_users")) redirect("/");
 
   return (
     <div className="fade-in space-y-4">

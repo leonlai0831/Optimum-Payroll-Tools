@@ -197,6 +197,15 @@ tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role 
 all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in the brand-section
 layouts. The old `/system/categories` page 301-redirects to `/system/permissions`.
 
+**User management is hierarchy-scoped** (`ROLE_RANK` + `canViewUserRole` / `canManageUserRole`
+in `lib/auth/types.ts`): a `manage_users` holder manages only accounts ranked **strictly below**
+their own role, sees same-rank accounts **read-only** ("View only" rows; 403 on write), and never
+sees higher-ranked accounts at all (lists filter them; direct API access 404s so existence doesn't
+leak). Creating and role-assignment are limited to roles below the actor's own. super_admin is
+all-access, incl. over fellow super_admins (last-active-super-admin safeguards still apply).
+`/system/users` (page, layout, section-nav tab, launcher card) is gated on `manage_users`, not
+`super_admin` — the other System pages (Audit log, Permissions) stay super_admin-only.
+
 Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
 `swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,
 `swim_edit_settings` / `fit_edit_settings` — so e.g. a gym manager can hold the Optimum Fit
@@ -282,8 +291,10 @@ rule below rather than relocating UI:
   The staff directory and Centers (`/staff/settings`) stay under Staff. **Users / accounts
   (`/system/users`), Audit log (`/system/audit`), and the Permissions matrix
   (`/system/permissions` — role capabilities, role-default launcher categories, AND per-user
-  category overrides, all on one page) live under the System Setting section** (`/system/*`) —
-  which, together with its launcher group, is gated to `role === "super_admin"`. The old
+  category overrides, all on one page) live under the System Setting section** (`/system/*`).
+  Audit log and Permissions are gated to `role === "super_admin"`; **Users is gated on the
+  `manage_users` capability** (hierarchy-scoped — see Auth) and is the one System surface a
+  non-super-admin can hold. The old
   `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`),
   and `/system/categories` (the retired Category Visibility page) 301s to `/system/permissions`.
 - **Calculator math lives under its calculator.** Allowance tiers + rate tables

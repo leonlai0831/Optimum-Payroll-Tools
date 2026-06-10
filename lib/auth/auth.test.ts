@@ -8,6 +8,9 @@ import { hashPassword, verifyPassword } from "./password";
 import { getCapabilities, userCan } from "./permissions";
 import {
   ALL_TOOL_CATEGORIES,
+  ROLES,
+  canManageUserRole,
+  canViewUserRole,
   effectiveCategories,
   sanitizeToolCategories,
   type PermissionConfig,
@@ -193,6 +196,34 @@ describe("sanitizeToolCategories", () => {
     expect(sanitizeToolCategories(undefined)).toBeNull();
     expect(sanitizeToolCategories(["swim", "system"])).toBeNull();
     expect(sanitizeToolCategories(["gym"])).toBeNull();
+  });
+});
+
+describe("user-management hierarchy (manage_users scope)", () => {
+  it("manages strictly below own rank only — same rank is view-only, higher is hidden", () => {
+    // admin: manages supervisor+staff, views fellow admins, never sees super_admins.
+    expect(canManageUserRole("admin", "supervisor")).toBe(true);
+    expect(canManageUserRole("admin", "staff")).toBe(true);
+    expect(canManageUserRole("admin", "admin")).toBe(false);
+    expect(canViewUserRole("admin", "admin")).toBe(true);
+    expect(canViewUserRole("admin", "super_admin")).toBe(false);
+
+    // supervisor: manages staff only, views fellow supervisors.
+    expect(canManageUserRole("supervisor", "staff")).toBe(true);
+    expect(canManageUserRole("supervisor", "supervisor")).toBe(false);
+    expect(canViewUserRole("supervisor", "supervisor")).toBe(true);
+    expect(canViewUserRole("supervisor", "admin")).toBe(false);
+
+    // staff: manages nobody (no rank below), views only fellow staff.
+    expect(ROLES.filter((r) => canManageUserRole("staff", r))).toEqual([]);
+    expect(ROLES.filter((r) => canViewUserRole("staff", r))).toEqual(["staff"]);
+  });
+
+  it("super_admin is all-access, including over fellow super_admins", () => {
+    for (const r of ROLES) {
+      expect(canViewUserRole("super_admin", r)).toBe(true);
+      expect(canManageUserRole("super_admin", r)).toBe(true);
+    }
   });
 });
 

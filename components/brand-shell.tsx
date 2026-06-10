@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Nav } from "@/components/nav";
+import { LoaderOverlayHost } from "@/components/branded-loader";
 import type { Role, ToolCategory } from "@/lib/auth/types";
 
 /**
@@ -40,6 +41,10 @@ export function BrandShell({
     <div data-brand={brand} className="min-h-screen">
       <Nav email={email} role={role} brand={brand} />
       <main className="mx-auto max-w-7xl p-4 md:p-6">{children}</main>
+      {/* Persistent loading overlay — lives outside the Suspense boundaries so
+          the clip can finish its cycle after a fast load (branded-loader.tsx).
+          Inside the data-brand scope so the label adopts the brand color. */}
+      <LoaderOverlayHost />
     </div>
   );
 }

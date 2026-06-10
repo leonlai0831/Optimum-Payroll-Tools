@@ -191,6 +191,67 @@ body {
 .fade-in {
   animation: fadeIn 0.4s ease-in-out;
 }
+
+/* Login hero entrance (app/login/page.tsx): the headline settles down from
+   above while the support line rises from below — deliberately slow, with the
+   support line trailing slightly. `both` keeps the delayed line invisible
+   until its turn. Stilled by the global prefers-reduced-motion rule. */
+.enter-from-top {
+  animation: enterFromTop 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.enter-from-bottom {
+  animation: enterFromBottom 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+@keyframes enterFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes enterFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* CI wave drift (components/ci-wave.tsx): the two traced layers slide in
+   opposite directions at different speeds, like a slow swell. The original
+   artwork overdraws the viewBox on both sides — accent ~-1227..1450, brand
+   ~-886..1405 against a 0..1190 crop — and that overdraw is the travel
+   budget; keep the amplitudes inside it or the edges show. px here = SVG
+   user units (paths default to transform-box: view-box). Stilled globally
+   by the prefers-reduced-motion rule below. */
+.ci-wave-back {
+  animation: ciWaveBack 21s ease-in-out infinite alternate;
+}
+.ci-wave-front {
+  animation: ciWaveFront 14s ease-in-out infinite alternate;
+}
+@keyframes ciWaveBack {
+  from {
+    transform: translate(-65px, 0);
+  }
+  to {
+    transform: translate(65px, 6px);
+  }
+}
+@keyframes ciWaveFront {
+  from {
+    transform: translate(80px, 4px);
+  }
+  to {
+    transform: translate(-80px, 0);
+  }
+}
 @keyframes fadeIn {
   from {
     opacity: 0;

@@ -10,6 +10,35 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 /**
+ * Role seniority for hierarchy-scoped user management. A `manage_users` holder
+ * may MANAGE only accounts ranked strictly below their own role, sees accounts
+ * of their OWN rank read-only, and never sees higher-ranked accounts at all
+ * (lists filter them out; direct API access 404s so existence doesn't leak).
+ * super_admin is the one exception: all-access by definition, including over
+ * fellow super_admins (the last-active-super-admin safeguards in the user API
+ * keep that safe).
+ */
+export const ROLE_RANK: Record<Role, number> = {
+  super_admin: 3,
+  admin: 2,
+  supervisor: 1,
+  staff: 0,
+};
+
+/** May `actor` see accounts of role `target`? Strictly higher ranks are hidden. */
+export function canViewUserRole(actor: Role, target: Role): boolean {
+  return ROLE_RANK[actor] >= ROLE_RANK[target];
+}
+
+/**
+ * May `actor` manage (create / edit / delete / assign) accounts of role
+ * `target`? Same rank is view-only — except super_admin, which manages peers.
+ */
+export function canManageUserRole(actor: Role, target: Role): boolean {
+  return actor === "super_admin" || ROLE_RANK[actor] > ROLE_RANK[target];
+}
+
+/**
  * Granular capabilities checked across the app. Staff and settings access is
  * brand-scoped (`swim_*` / `fit_*`) so e.g. a gym manager can hold the Optimum
  * Fit staff directory without also seeing the whole swim directory.
