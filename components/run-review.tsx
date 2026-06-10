@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Button, Card, Input } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
 import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
 import { computeCoach } from "@/lib/kpi/coach";
@@ -80,6 +81,12 @@ export function RunReview({
     }),
   );
   const [saving, setSaving] = useState<"idle" | "progress" | "finalize">("idle");
+  // Pending "move this account from another coach" awaiting confirmation in a modal.
+  const [pendingMove, setPendingMove] = useState<{
+    account: string;
+    fromIdx: number;
+    toIdx: number;
+  } | null>(null);
 
   // Per-account student totals (from the stored CSV) so the reviewer can sanity-check
   // which class data is attributed to whom.
@@ -138,19 +145,22 @@ export function RunReview({
 
   /**
    * Add a CSV account to a coach. Accounts are exclusive — a class is scored for
-   * exactly one coach — so if it currently belongs to someone else, confirm and
-   * move it (removing it from the previous owner) rather than double-counting.
+   * exactly one coach — so if it currently belongs to someone else, confirm (via
+   * modal) and move it (removing it from the previous owner) rather than
+   * double-counting.
    */
   function addAccount(idx: number, account: string) {
     const ownerIdx = rows.findIndex((r) => r.rc.accounts.includes(account));
     if (ownerIdx === idx) return; // already here
     if (ownerIdx !== -1) {
-      const owner = rows[ownerIdx].rc.canonicalName;
-      const me = rows[idx].rc.canonicalName;
-      if (!window.confirm(`"${account}" is currently linked to ${owner}. Move it to ${me}?`)) {
-        return;
-      }
+      setPendingMove({ account, fromIdx: ownerIdx, toIdx: idx });
+      return;
     }
+    applyAddAccount(idx, account, -1);
+  }
+
+  /** Apply the add/move (after any confirmation): recompute both coaches. */
+  function applyAddAccount(idx: number, account: string, ownerIdx: number) {
     setRows((prev) => {
       const next = [...prev];
       if (ownerIdx !== -1) {
@@ -329,6 +339,24 @@ export function RunReview({
           {active.length - completeCount} coach(es) still incomplete — finalize is locked.
         </p>
       )}
+
+      {/* Confirm moving an account that already belongs to another coach. */}
+      <ConfirmModal
+        open={pendingMove != null}
+        onClose={() => setPendingMove(null)}
+        onConfirm={() => {
+          if (!pendingMove) return;
+          applyAddAccount(pendingMove.toIdx, pendingMove.account, pendingMove.fromIdx);
+          setPendingMove(null);
+        }}
+        title="Move class data?"
+        message={
+          pendingMove
+            ? `"${pendingMove.account}" is currently linked to ${rows[pendingMove.fromIdx].rc.canonicalName}. Move it to ${rows[pendingMove.toIdx].rc.canonicalName}?`
+            : ""
+        }
+        confirmLabel="Move"
+      />
     </div>
   );
 }

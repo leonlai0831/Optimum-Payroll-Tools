@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sparkles, Target } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { fetchJson } from "@/lib/http";
 
 interface TargetStat {
@@ -51,33 +52,62 @@ export function TargetSuggestions() {
       {data && (
         <div className="mt-3 space-y-3">
           {data.stats.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="text-gray-500">
-                  <tr>
-                    <th className="px-2 py-1 text-left font-medium">Metric</th>
-                    <th className="px-2 py-1 text-center font-medium">Current</th>
-                    <th className="px-2 py-1 text-center font-medium">Achieved (min/med/max)</th>
-                    <th className="px-2 py-1 text-center font-medium">n</th>
-                  </tr>
-                </thead>
-                <tbody className="text-gray-700">
-                  {data.stats.map((s) => (
-                    <tr key={s.name} className="border-t border-gray-100">
-                      <td className="px-2 py-1 font-medium">{s.name}</td>
-                      <td className="px-2 py-1 text-center">
-                        {s.currentMin}–{s.currentMax}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        {s.achievedMin.toFixed(2)} / {s.achievedMedian.toFixed(2)} /{" "}
-                        {s.achievedMax.toFixed(2)}
-                      </td>
-                      <td className="px-2 py-1 text-center text-gray-400">{s.count}</td>
+            <>
+              {/* Mobile (< lg): one hairline-divided card per metric. */}
+              <MobileCards className="rounded-lg border border-gray-100">
+                {data.stats.map((s) => (
+                  <div key={s.name} className="px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-gray-800">{s.name}</span>
+                      <span className="nums shrink-0 text-[11px] text-gray-400">n = {s.count}</span>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-overline text-muted">Current</span>
+                        <div className="nums mt-0.5 text-xs text-gray-700">
+                          {s.currentMin}–{s.currentMax}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-overline text-muted">Achieved (min/med/max)</span>
+                        <div className="nums mt-0.5 text-xs text-gray-700">
+                          {s.achievedMin.toFixed(2)} / {s.achievedMedian.toFixed(2)} /{" "}
+                          {s.achievedMax.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </MobileCards>
+              {/* Desktop (lg+): compact stats table. */}
+              <DesktopTable>
+                <table className="min-w-full text-xs">
+                  <thead className="text-gray-500">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-medium">Metric</th>
+                      <th className="px-2 py-1 text-center font-medium">Current</th>
+                      <th className="px-2 py-1 text-center font-medium">Achieved (min/med/max)</th>
+                      <th className="px-2 py-1 text-center font-medium">n</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="text-gray-700">
+                    {data.stats.map((s) => (
+                      <tr key={s.name} className="border-t border-gray-100">
+                        <td className="px-2 py-1 font-medium">{s.name}</td>
+                        <td className="px-2 py-1 text-center">
+                          {s.currentMin}–{s.currentMax}
+                        </td>
+                        <td className="px-2 py-1 text-center">
+                          {s.achievedMin.toFixed(2)} / {s.achievedMedian.toFixed(2)} /{" "}
+                          {s.achievedMax.toFixed(2)}
+                        </td>
+                        <td className="px-2 py-1 text-center text-gray-400">{s.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </DesktopTable>
+            </>
           )}
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{data.text}</p>
           <p className="text-[11px] text-gray-400">
