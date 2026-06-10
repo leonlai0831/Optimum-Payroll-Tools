@@ -900,6 +900,30 @@ export interface KpiIngestSummary {
 }
 
 /**
+ * A period is CLOSED to machine pushes once payroll has acted on it: a
+ * FINALIZED run exists for the periodLabel (draft runs do NOT block — the
+ * month is still being worked), or any staged delivery for it was already
+ * imported into a run. POST /api/ingest/kpi rejects a push for a closed
+ * period with 409 before staging, superseding, or auditing anything; the
+ * payroll admin reopens the month first if a correction is needed.
+ */
+export async function isKpiPeriodClosed(periodLabel: string): Promise<boolean> {
+  const db = await getDb();
+  const finalized = await db
+    .select({ id: runs.id })
+    .from(runs)
+    .where(and(eq(runs.periodLabel, periodLabel), eq(runs.status, "finalized")))
+    .limit(1);
+  if (finalized.length > 0) return true;
+  const imported = await db
+    .select({ id: kpiIngests.id })
+    .from(kpiIngests)
+    .where(and(eq(kpiIngests.periodLabel, periodLabel), eq(kpiIngests.status, "imported")))
+    .limit(1);
+  return imported.length > 0;
+}
+
+/**
  * Stage a pushed delivery as pending. Rows must already be normalized
  * InstructorRow[]. A re-push for the same period is a correction: any still-
  * PENDING deliveries for that periodLabel are flipped to "superseded" (status

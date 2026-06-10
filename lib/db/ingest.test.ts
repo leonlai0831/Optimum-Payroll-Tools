@@ -187,6 +187,51 @@ describe("KPI ingests (PGlite in-memory)", () => {
     expect(audit?.actorEmail).toBe("ingest-api");
   });
 
+  it("isKpiPeriodClosed: a finalized run closes the period; a draft run does not; reopen reopens it", async () => {
+    // Nothing for the period yet → open.
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+
+    // A pending delivery doesn't close it.
+    await queries.createKpiIngest({ periodLabel: "2026-11", label: "nov-v1", rows: [row()] });
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+
+    // A DRAFT run doesn't close it — the month is still being worked.
+    const runId = await queries.createRun({
+      periodLabel: "2026-11",
+      filename: "nov-draft",
+      csvRows: [row()],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+
+    // Finalizing the run closes the period; reopening it (the documented
+    // correction path) opens it again.
+    await queries.updateRunReview(runId, [], "finalized");
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(true);
+    expect(await queries.reopenRun(runId)).toBe(true);
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+  });
+
+  it("isKpiPeriodClosed: an imported delivery closes the period even without a finalized run", async () => {
+    const { id } = await queries.createKpiIngest({ periodLabel: "2026-12", label: "dec-v1", rows: [row()] });
+    // Import it into a DRAFT run — closure must come from the ingest status alone.
+    const runId = await queries.createRun({
+      periodLabel: "2026-12",
+      filename: "dec-draft",
+      csvRows: [row()],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+    expect(await queries.isKpiPeriodClosed("2026-12")).toBe(false);
+    expect(await queries.importKpiIngest(id, runId)).toBe(true);
+    expect(await queries.isKpiPeriodClosed("2026-12")).toBe(true);
+    // Discarded/superseded deliveries never close a period (other periods unaffected).
+    expect(await queries.isKpiPeriodClosed("2027-01")).toBe(false);
+  });
+
   it("a re-push never touches imported (or discarded) deliveries for the period", async () => {
     const rows = [row({ Instructor: "OCT [BK]" })];
     const imported = await queries.createKpiIngest({ periodLabel: "2026-10", label: "oct-v1", rows });

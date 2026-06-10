@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { checkIngestBearer } from "@/lib/ingest/auth";
 import { parseCsvBody, resolveIngestBodyMode } from "@/lib/ingest/csv-body";
 import { hasInstructorHeader, mapCsvRows } from "@/lib/kpi/csv";
-import { createKpiIngest, recordAudit } from "@/lib/db/queries";
+import { createKpiIngest, isKpiPeriodClosed, recordAudit } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,10 @@ export const dynamic = "force-dynamic";
  * `kpi_ingests` row — it is never scored or saved as a run directly; the owner
  * reviews/edits it on /kpi/ingests and loads it into the calculator. Pushing
  * again for the same period supersedes any still-pending earlier deliveries
- * (imported/discarded ones are never touched).
+ * (imported/discarded ones are never touched). A push for a CLOSED period —
+ * a finalized run exists for it, or a delivery for it was already imported —
+ * is rejected with 409 before anything is staged or superseded (draft runs
+ * do not block).
  *
  * Two body formats, identical staging behavior and response shape:
  * - JSON (default): `{ periodLabel: "YYYY-MM", label?, rows }`.
@@ -159,6 +162,21 @@ export async function POST(req: Request) {
     }
     rawRows = body.rows as RawRow[];
     label = typeof body.label === "string" ? body.label.trim().slice(0, 200) : "";
+  }
+
+  // Closed-period guard (both modes, right after period validation): once the
+  // month is closed — a FINALIZED run exists for the period (drafts don't
+  // block), or a delivery for it was already imported — a push is rejected
+  // outright. Nothing is staged, superseded, or audited for a rejection; the
+  // payroll admin reopens the month first if a correction is needed.
+  if (await isKpiPeriodClosed(periodLabel)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `${periodLabel} is already finalized — ask the payroll admin to reopen it if a correction is needed.`,
+      },
+      { status: 409 },
+    );
   }
 
   if (!hasInstructorHeader(rawRows)) {
