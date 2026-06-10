@@ -40,12 +40,12 @@ export default function LoginPage() {
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
         <div className="max-w-xl text-center lg:flex-1 lg:text-left">
-          <h1 className="text-4xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-5xl xl:text-6xl">
+          <h1 className="enter-from-top text-4xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-5xl xl:text-6xl">
             Optimizing
             <br className="hidden lg:block" /> Joy at Work
           </h1>
-          <p className="mt-3 text-base text-muted sm:text-lg xl:text-xl">
-            Powering the people behind it.
+          <p className="enter-from-bottom mt-3 text-base text-muted sm:text-lg xl:text-xl">
+            Powering the people behind
           </p>
         </div>
         <Card className="relative w-full max-w-md shrink-0 overflow-hidden border-t-4 border-t-brand">
