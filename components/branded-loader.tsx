@@ -145,7 +145,7 @@ export function LoaderOverlayHost() {
       <video
         key={snap.src}
         ref={videoRef}
-        className="w-28 max-w-[60vw] rounded-2xl shadow-sm"
+        className="w-44 max-w-[70vw] rounded-2xl shadow-sm sm:w-52"
         loop
         muted
         playsInline
