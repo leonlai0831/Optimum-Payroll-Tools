@@ -118,10 +118,14 @@ export function buildMonthlySummaryCsv(summary: MonthlySummary): string {
   let sumTotal = 0;
 
   const body: (string | number)[][] = summary.rows.map((r) => {
-    const bonus = r.kpi?.bonus ?? 0;
-    const total = bonus + r.allowance;
+    // Round each money line ONCE, then derive every total by summing the
+    // already-rounded values — so the printed lines always add up to the
+    // printed totals (10.5 + 10.5 must show 11 + 11 = 22, never 21).
+    const bonus = r.kpi ? Math.round(r.kpi.bonus) : 0;
+    const allowance = Math.round(r.allowance);
+    const total = bonus + allowance;
     sumBonus += bonus;
-    sumAllowance += r.allowance;
+    sumAllowance += allowance;
     sumTotal += total;
     return [
       // User-derived text is neutralized against spreadsheet formula injection;
@@ -134,13 +138,14 @@ export function buildMonthlySummaryCsv(summary: MonthlySummary): string {
       r.kpi ? r.kpi.students : "",
       r.kpi ? r.kpi.score.toFixed(3) : "",
       r.kpi ? r.kpi.grade : "",
-      r.kpi ? Math.round(bonus) : "",
-      Math.round(r.allowance),
-      Math.round(total),
+      r.kpi ? bonus : "",
+      allowance,
+      total,
       r.kpi ? (r.kpi.complete ? "yes" : "no") : "",
     ];
   });
 
+  // Already sums of whole-RM values — emit as-is so columns reconcile exactly.
   const totals: (string | number)[] = [
     "",
     "TOTAL",
@@ -150,9 +155,9 @@ export function buildMonthlySummaryCsv(summary: MonthlySummary): string {
     "",
     "",
     "",
-    Math.round(sumBonus),
-    Math.round(sumAllowance),
-    Math.round(sumTotal),
+    sumBonus,
+    sumAllowance,
+    sumTotal,
     "",
   ];
 

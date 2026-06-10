@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPayslipPdf, type PayslipData } from "./payslip";
+import { buildPayslipPdf, payslipAmounts, type PayslipData } from "./payslip";
 
 const base: PayslipData = {
   companyName: "Optimum Swim School",
@@ -56,6 +56,38 @@ describe("buildPayslipPdf", () => {
       allowance: { ...base.allowance!, otherItems },
     });
     expect(magic(bytes)).toBe("%PDF-");
+  });
+
+  it("payslipAmounts: printed lines sum to the printed totals (half-ringgit case)", () => {
+    // RM10.50 everywhere: each line prints as 11 (rounded once), and every total
+    // must be the sum of those printed lines — never a rounding of the raw sum
+    // (round(10.5 + 10.5) = 21 would not match the printed 11 + 11 = 22).
+    const amounts = payslipAmounts({
+      kpi: { ...base.kpi!, bonus: 10.5 },
+      allowance: { ...base.allowance!, attendance: 10.5, teaching: 10.5, other: 0 },
+    });
+    expect(amounts.bonus).toBe(11);
+    expect(amounts.attendance).toBe(11);
+    expect(amounts.teaching).toBe(11);
+    expect(amounts.other).toBe(0);
+    // Allowance total = sum of its printed lines (22, not round(21) = 21).
+    expect(amounts.allowanceTotal).toBe(
+      amounts.attendance! + amounts.teaching! + amounts.other!,
+    );
+    expect(amounts.allowanceTotal).toBe(22);
+    // Grand total = sum of the printed section totals.
+    expect(amounts.total).toBe(amounts.bonus! + amounts.allowanceTotal!);
+    expect(amounts.total).toBe(33);
+  });
+
+  it("payslipAmounts: missing sections are null and the total reconciles", () => {
+    const kpiOnly = payslipAmounts({ kpi: { ...base.kpi!, bonus: 10.5 }, allowance: null });
+    expect(kpiOnly.allowanceTotal).toBeNull();
+    expect(kpiOnly.total).toBe(11);
+
+    const allowanceOnly = payslipAmounts({ kpi: null, allowance: base.allowance });
+    expect(allowanceOnly.bonus).toBeNull();
+    expect(allowanceOnly.total).toBe(allowanceOnly.allowanceTotal);
   });
 
   it("sanitizes non-Latin-1 text (names/notes) instead of throwing", async () => {

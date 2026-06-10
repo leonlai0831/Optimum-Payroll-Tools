@@ -151,6 +151,40 @@ describe("DB layer (PGlite in-memory)", () => {
     expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("finalized");
   });
 
+  it("dedupes a twice-saved month in trends and the coach profile (latest save wins)", async () => {
+    // The same period label saved twice (e.g. a retry, or a corrected re-upload).
+    await queries.createRun({
+      periodLabel: "2027-03",
+      filename: "mar-v1.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("TWICE TINA", { finalScore: 1, payout: 1000 })],
+    });
+    await queries.createRun({
+      periodLabel: "2027-03",
+      filename: "mar-v2.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("TWICE TINA", { finalScore: 1.2, payout: 1200 })],
+    });
+
+    // Trends: exactly ONE point for the period, from the latest save.
+    const trend = await queries.getTrendData();
+    expect(trend.periods.filter((p) => p === "2027-03")).toHaveLength(1);
+    const tina = trend.coaches.find((c) => c.name === "TWICE TINA")!;
+    const points = tina.points.filter((p) => p.period === "2027-03");
+    expect(points).toHaveLength(1);
+    expect(points[0].payout).toBe(1200);
+
+    // Coach profile: same dedup, latest save wins.
+    const coach = (await queries.listCoaches()).find((c) => c.canonicalName === "TWICE TINA")!;
+    const profile = await queries.getCoachProfile(coach.id);
+    const kpiPoints = profile!.kpi.filter((p) => p.period === "2027-03");
+    expect(kpiPoints).toHaveLength(1);
+    expect(kpiPoints[0].payout).toBe(1200);
+    expect(kpiPoints[0].finalScore).toBe(1.2);
+  });
+
   it("backfills finalize_kpi for admin but not supervisor/staff", () => {
     const normalized = queries.normalizePermissionConfig({
       admin: ["run_kpi"],

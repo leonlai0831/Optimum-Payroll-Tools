@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createRun, listRuns, recordAudit, runStatusFromResults } from "@/lib/db/queries";
+import { validateRunPayload } from "@/lib/kpi/run-validate";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { RunCoach } from "@/lib/types";
 
@@ -28,6 +29,13 @@ export async function POST(req: Request) {
   };
   if (!body.periodLabel) {
     return NextResponse.json({ error: "periodLabel is required" }, { status: 400 });
+  }
+  // The KPI engine runs client-side, so never trust client-computed money
+  // blindly: require a config snapshot + coach array, and re-check the
+  // payout = finalScore × teachingAllowance invariant before persisting.
+  const invalid = validateRunPayload(body);
+  if (invalid) {
+    return NextResponse.json({ error: invalid }, { status: 400 });
   }
   // A month with any incomplete coach (e.g. management review pending) is saved as
   // a draft; it becomes finalized only once every coach is complete.

@@ -77,6 +77,8 @@ import {
 } from "@/lib/allowance/types";
 import { previousPeriod } from "@/lib/allowance/period";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
+import { calcAllowance } from "@/lib/allowance/calc";
+import { extractCenterHours, mergeBulkRow } from "@/lib/allowance/bulk";
 
 /**
  * A query executor: either the pooled `DB` or a transaction handle. The tx type
@@ -291,7 +293,10 @@ export async function getCoachProfile(coachId: number): Promise<CoachProfileData
   if (!coach) return null;
 
   const names = new Set([coach.canonicalName, ...(coach.aliases ?? [])]);
-  const kpi: CoachKpiPoint[] = [];
+  // Ordered asc by createdAt: when the same period label was saved twice, the
+  // LATER save overwrites the earlier point — one point per period, never
+  // duplicates (mirrors the commission/teaching trend builders).
+  const kpiByPeriod = new Map<string, CoachKpiPoint>();
   for (const r of runRows) {
     const rc = r.coachResults.find(
       (c) =>
@@ -300,7 +305,7 @@ export async function getCoachProfile(coachId: number): Promise<CoachProfileData
         c.accounts.some((a) => names.has(a)),
     );
     if (rc) {
-      kpi.push({
+      kpiByPeriod.set(r.periodLabel, {
         period: r.periodLabel,
         finalScore: rc.finalScore,
         grade: rc.grade,
@@ -309,6 +314,7 @@ export async function getCoachProfile(coachId: number): Promise<CoachProfileData
       });
     }
   }
+  const kpi = [...kpiByPeriod.values()];
 
   const allowance = allowanceRows.filter(
     (a) => a.coachId === coachId || a.canonicalName === coach.canonicalName,
@@ -414,45 +420,51 @@ export async function upsertCoachesFromRun(coachResults: RunCoach[]): Promise<vo
   // One transaction so the `listCoaches` read + conditional insert is atomic:
   // two concurrent finalized runs can't both miss the same coach and each insert
   // a duplicate profile.
-  await db.transaction(async (tx) => {
-    const existing = await listCoachesWith(tx);
-    for (const rc of coachResults) {
-      const match =
-        (rc.coachId && existing.find((c) => c.id === rc.coachId)) ||
-        existing.find((c) => c.canonicalName === rc.canonicalName) ||
-        existing.find((c) => c.aliases?.some((a) => rc.accounts.includes(a)));
+  await db.transaction((tx) => upsertCoachesFromRunWith(tx, coachResults));
+}
 
-      const mergedAliases = [...new Set([...(match?.aliases ?? []), ...rc.accounts])].sort();
-      const mgmtUpdate =
-        rc.mgmtAssessment != null
-          ? { lastMgmtAssessment: rc.mgmtAssessment, lastMgmtAssessmentAt: new Date() }
-          : {};
+/**
+ * Executor-threaded core of `upsertCoachesFromRun`, so a caller (e.g. `createRun`)
+ * can run the run insert and the profile carry-over in ONE transaction.
+ */
+async function upsertCoachesFromRunWith(tx: Tx, coachResults: RunCoach[]): Promise<void> {
+  const existing = await listCoachesWith(tx);
+  for (const rc of coachResults) {
+    const match =
+      (rc.coachId && existing.find((c) => c.id === rc.coachId)) ||
+      existing.find((c) => c.canonicalName === rc.canonicalName) ||
+      existing.find((c) => c.aliases?.some((a) => rc.accounts.includes(a)));
 
-      if (match) {
-        await tx
-          .update(coaches)
-          .set({
-            aliases: mergedAliases,
-            center: rc.center || match.center,
-            defaultPosition: rc.position,
-            lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
-            ...mgmtUpdate,
-            updatedAt: new Date(),
-          })
-          .where(eq(coaches.id, match.id));
-      } else {
-        await tx.insert(coaches).values({
-          canonicalName: rc.canonicalName,
+    const mergedAliases = [...new Set([...(match?.aliases ?? []), ...rc.accounts])].sort();
+    const mgmtUpdate =
+      rc.mgmtAssessment != null
+        ? { lastMgmtAssessment: rc.mgmtAssessment, lastMgmtAssessmentAt: new Date() }
+        : {};
+
+    if (match) {
+      await tx
+        .update(coaches)
+        .set({
           aliases: mergedAliases,
-          center: rc.center,
+          center: rc.center || match.center,
           defaultPosition: rc.position,
-          lastAllowance: rc.teachingAllowance,
-          lastMgmtAssessment: rc.mgmtAssessment ?? null,
-          lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
-        });
-      }
+          lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
+          ...mgmtUpdate,
+          updatedAt: new Date(),
+        })
+        .where(eq(coaches.id, match.id));
+    } else {
+      await tx.insert(coaches).values({
+        canonicalName: rc.canonicalName,
+        aliases: mergedAliases,
+        center: rc.center,
+        defaultPosition: rc.position,
+        lastAllowance: rc.teachingAllowance,
+        lastMgmtAssessment: rc.mgmtAssessment ?? null,
+        lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
+      });
     }
-  });
+  }
 }
 
 /** One coach's headline result within a saved month (for the History accordion). */
@@ -540,18 +552,26 @@ async function _getTrendData(): Promise<TrendData> {
     .orderBy(runs.createdAt);
 
   const periods: string[] = [];
-  const byCoach = new Map<string, TrendData["coaches"][number]>();
+  const byCoach = new Map<string, Map<string, { score: number; payout: number }>>();
+  // Ordered asc by createdAt, so when the same period label was saved twice the
+  // LATER save wins per (period, coach) — one point each, never duplicates
+  // (mirrors the commission/teaching trend builders).
   for (const r of rows) {
     if (!periods.includes(r.periodLabel)) periods.push(r.periodLabel);
     for (const c of r.coachResults) {
-      const entry = byCoach.get(c.canonicalName) ?? { name: c.canonicalName, points: [] };
-      entry.points.push({ period: r.periodLabel, score: c.finalScore, payout: c.payout });
-      byCoach.set(c.canonicalName, entry);
+      const m = byCoach.get(c.canonicalName) ?? new Map<string, { score: number; payout: number }>();
+      m.set(r.periodLabel, { score: c.finalScore, payout: c.payout });
+      byCoach.set(c.canonicalName, m);
     }
   }
   return {
     periods,
-    coaches: [...byCoach.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    coaches: [...byCoach.entries()]
+      .map(([name, m]) => ({
+        name,
+        points: [...m.entries()].map(([period, p]) => ({ period, ...p })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
@@ -581,23 +601,30 @@ export async function createRun(input: {
 }): Promise<number> {
   const db = await getDb();
   const status = input.status ?? "finalized";
-  const [row] = await db
-    .insert(runs)
-    .values({
-      periodLabel: input.periodLabel,
-      filename: input.filename,
-      csvRows: input.csvRows,
-      configSnapshot: input.configSnapshot,
-      coachResults: input.coachResults,
-      status,
-    })
-    .returning({ id: runs.id });
-  // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
-  // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
-  if (status === "finalized") await upsertCoachesFromRun(input.coachResults);
+  // One transaction: the run insert and the coach-profile carry-over commit (or
+  // roll back) together, so a crash/retry between the two can't leave a saved
+  // month whose profiles were never carried forward — or carried-forward
+  // profiles for a month that was never saved.
+  const id = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(runs)
+      .values({
+        periodLabel: input.periodLabel,
+        filename: input.filename,
+        csvRows: input.csvRows,
+        configSnapshot: input.configSnapshot,
+        coachResults: input.coachResults,
+        status,
+      })
+      .returning({ id: runs.id });
+    // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
+    // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
+    if (status === "finalized") await upsertCoachesFromRunWith(tx, input.coachResults);
+    return row.id;
+  });
   invalidateSingleton("kpi-runs");
   invalidateSingleton("kpi-trend");
-  return row.id;
+  return id;
 }
 
 /**
@@ -1242,6 +1269,57 @@ interface AllowanceRunData {
   input: AllowanceInput;
   result: AllowanceResult;
   configSnapshot: AllowanceConfig;
+  /**
+   * Set by the bulk-by-center entry screen: this save edits ONLY this center's
+   * teaching hours (plus the staff-level attendance fields/tier). When set and a
+   * record already exists for (periodLabel, name), the stored record is re-read
+   * inside the save transaction and only this center's slice is replaced — so a
+   * bulk save merged client-side against a stale snapshot can't wipe hours
+   * another manager saved for a different center in the meantime. Whole-record
+   * saves (the single-coach calculator) leave it unset and replace as before.
+   */
+  mergeCenter?: string;
+}
+
+/**
+ * Re-merge a bulk-by-center save against the STORED record (see
+ * `AllowanceRunData.mergeCenter`): stored input is the base; only the merge
+ * center's teaching row and the staff-level fields come from the incoming
+ * input; `otherItems` stay as stored. The result is recomputed from the merged
+ * input so the persisted breakdown always matches it. Callers serialize saves
+ * per period via the advisory lock in `createAllowanceRunIfUnlocked`, so the
+ * read here sees the latest committed record.
+ */
+async function withMergedCenterSlice(
+  exec: DbOrTx,
+  data: AllowanceRunData,
+): Promise<AllowanceRunData> {
+  const target = data.mergeCenter?.trim();
+  if (!target) return data;
+  const stored = await exec
+    .select({ input: allowanceRuns.input })
+    .from(allowanceRuns)
+    .where(
+      and(
+        eq(allowanceRuns.periodLabel, data.periodLabel),
+        eq(allowanceRuns.canonicalName, data.input.name),
+      ),
+    )
+    .limit(1);
+  if (!stored[0]) return data; // nothing saved yet — the incoming record stands
+  const merged = mergeBulkRow(
+    {
+      coachId: data.input.coachId,
+      name: data.input.name,
+      tier: data.input.tier,
+      center: target,
+      opHours: data.input.opHours,
+      leaveHours: data.input.leaveHours,
+      ...extractCenterHours(data.input, target),
+    },
+    stored[0].input,
+  );
+  return { ...data, input: merged, result: calcAllowance(merged, data.configSnapshot) };
 }
 
 /**
@@ -1254,7 +1332,8 @@ interface AllowanceRunData {
  * atomic statement replaces the old delete-then-insert, so re-saving the same
  * coach+month is idempotent and two concurrent saves can't leave a duplicate row.
  */
-async function insertAllowanceRunWith(exec: DbOrTx, data: AllowanceRunData): Promise<number> {
+async function insertAllowanceRunWith(exec: DbOrTx, rawData: AllowanceRunData): Promise<number> {
+  const data = await withMergedCenterSlice(exec, rawData);
   const coachId = await ensureCoachForAllowanceWith(exec, {
     coachId: data.input.coachId,
     canonicalName: data.input.name,

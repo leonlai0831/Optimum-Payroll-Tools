@@ -244,6 +244,82 @@ describe("Allowance DB layer (PGlite in-memory)", () => {
     expect(list[0].teaching).toBe(150);
   });
 
+  it("bulk merge (mergeCenter): a stale bulk save can't clobber another center's just-saved hours", async () => {
+    const { calcAllowance } = await import("./calc");
+    const cfg = await queries.getAllowanceConfig();
+    const period = "2027-03";
+    const mkInput = (rows: { center: string; normalH: number }[]) => ({
+      coachId: null,
+      name: "SPLIT SARA",
+      tier: "I3" as const,
+      center: rows.map((r) => r.center).join(", ") || "HQ",
+      opHours: 160,
+      leaveHours: 0,
+      teachingRows: rows.map((r) => ({ ...r, ysH: 0, precompH: 0 })),
+      otherItems: [],
+    });
+
+    // Manager A saves Sara's HQ hours.
+    const hqInput = mkInput([{ center: "HQ", normalH: 10 }]);
+    await queries.createAllowanceRunIfUnlocked({
+      periodLabel: period,
+      input: hqInput,
+      result: calcAllowance(hqInput, cfg),
+      configSnapshot: cfg,
+    });
+
+    // Manager B bulk-saves Sara's BK hours from a snapshot loaded BEFORE A's
+    // save — so B's client-side merge knows nothing about the HQ row.
+    const staleBkInput = mkInput([{ center: "BK", normalH: 5 }]);
+    const saved = await queries.createAllowanceRunIfUnlocked({
+      periodLabel: period,
+      input: staleBkInput,
+      result: calcAllowance(staleBkInput, cfg),
+      configSnapshot: cfg,
+      mergeCenter: "BK",
+    });
+    expect(saved.locked).toBe(false);
+
+    // The stored record keeps BOTH centers (server merged against the stored
+    // row inside the transaction), and the result was recomputed to match.
+    const stored = (await queries.getAllowanceInputsForPeriod(period)).get("SPLIT SARA")!;
+    expect(
+      stored.teachingRows.map((t) => [t.center, t.normalH]).sort(),
+    ).toEqual([
+      ["BK", 5],
+      ["HQ", 10],
+    ]);
+    expect(stored.center).toContain("HQ");
+    expect(stored.center).toContain("BK");
+    const [rec] = await queries.listAllowanceRuns(period);
+    expect(rec.teaching).toBe(calcAllowance(stored, cfg).teaching);
+    expect(rec.grandTotal).toBe(calcAllowance(stored, cfg).grandTotal);
+
+    // Zeroing one center via a bulk save removes ONLY that center's row.
+    const zeroBk = mkInput([]);
+    await queries.createAllowanceRunIfUnlocked({
+      periodLabel: period,
+      input: zeroBk,
+      result: calcAllowance(zeroBk, cfg),
+      configSnapshot: cfg,
+      mergeCenter: "BK",
+    });
+    const afterZero = (await queries.getAllowanceInputsForPeriod(period)).get("SPLIT SARA")!;
+    expect(afterZero.teachingRows.map((t) => t.center)).toEqual(["HQ"]);
+
+    // A whole-record save (no mergeCenter — the single-coach calculator)
+    // still replaces the record outright, including deleting a center.
+    const replaceAll = mkInput([{ center: "PJ", normalH: 2 }]);
+    await queries.createAllowanceRunIfUnlocked({
+      periodLabel: period,
+      input: replaceAll,
+      result: calcAllowance(replaceAll, cfg),
+      configSnapshot: cfg,
+    });
+    const afterReplace = (await queries.getAllowanceInputsForPeriod(period)).get("SPLIT SARA")!;
+    expect(afterReplace.teachingRows.map((t) => t.center)).toEqual(["PJ"]);
+  });
+
   it("builds allowance trend data; center slices sum back to the staff total", async () => {
     const cfg = await queries.getAllowanceConfig();
     // A two-center month: teaching split across HQ and BK.
