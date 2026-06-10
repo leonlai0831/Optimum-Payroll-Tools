@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { CiWave } from "@/components/ci-wave";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
@@ -205,31 +206,14 @@ export default async function HubPage() {
 
   return (
     <div className="fade-in space-y-6">
-      {/* The one brand "splash" moment: Brand Blue band closing in the CI's
-          organic yellow-and-paper wave crossover (see the CI guide footers);
-          everything below stays quiet paper-and-hairline chrome. */}
-      <section className="relative overflow-hidden rounded-2xl bg-brand px-6 pt-7 pb-16 sm:px-8 sm:pb-20">
-        <p className="text-overline text-white/70">Optimum · Staff Operations</p>
-        <h1 className="text-display mt-1 text-white">Optimum Payroll Tools</h1>
-        <p className="mt-2 text-body text-white/85">Choose a calculator to get started.</p>
-        <svg
-          className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20"
-          viewBox="0 0 1440 120"
-          preserveAspectRatio="none"
-          aria-hidden
-        >
-          {/* Yellow crest behind… */}
-          <path
-            d="M0 34 C320 108 560 12 820 38 C1060 62 1260 24 1440 50 L1440 120 L0 120 Z"
-            fill="var(--color-accent)"
-          />
-          {/* …paper wave in front, crossing it (canvas color, so the band melts
-              into the page background). */}
-          <path
-            d="M0 86 C260 42 520 114 800 86 C1080 58 1280 94 1440 76 L1440 120 L0 120 Z"
-            fill="var(--background)"
-          />
-        </svg>
+      {/* The one brand "splash" moment, photocopied from a CI guide page:
+          white sheet, Brand Blue heading, the guide's own footer wave (traced
+          1:1 from its vector artwork). Everything below stays quiet chrome. */}
+      <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 pt-7 pb-20 shadow-card sm:px-8 sm:pb-24">
+        <p className="text-overline text-gray-400">Optimum · Staff Operations</p>
+        <h1 className="text-display mt-1 text-brand">Optimum Payroll Tools</h1>
+        <p className="mt-2 text-body text-muted">Choose a calculator to get started.</p>
+        <CiWave className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20" />
       </section>
 
       {tools.length === 0 && !profileTool ? (
