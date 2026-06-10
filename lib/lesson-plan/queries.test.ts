@@ -155,3 +155,24 @@ describe("Lesson plan DB layer (PGlite in-memory)", () => {
     expect(normalized.staff).not.toContain("review_lesson_plans");
   });
 });
+
+describe("canDeletePlan", () => {
+  it("creator only while draft; admin and super_admin at any status", async () => {
+    const { canDeletePlan } = await import("./access");
+    const user = (role: string, id = 1) =>
+      ({ user: { id, role }, canEdit: true, canReview: false }) as Parameters<
+        typeof canDeletePlan
+      >[0];
+    const plan = (createdByUserId: number, status: string) => ({ createdByUserId, status });
+
+    // Creator: draft only.
+    expect(canDeletePlan(user("staff"), plan(1, "draft"))).toBe(true);
+    expect(canDeletePlan(user("staff"), plan(1, "submitted"))).toBe(false);
+    expect(canDeletePlan(user("staff"), plan(1, "approved"))).toBe(false);
+    // Not the creator, not admin: never.
+    expect(canDeletePlan(user("supervisor", 2), plan(1, "draft"))).toBe(false);
+    // Admin / super_admin: any plan, any status.
+    expect(canDeletePlan(user("admin", 2), plan(1, "approved"))).toBe(true);
+    expect(canDeletePlan(user("super_admin", 2), plan(1, "submitted"))).toBe(true);
+  });
+});

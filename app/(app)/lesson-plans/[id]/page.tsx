@@ -89,7 +89,13 @@ export default async function LessonPlanDetailPage({
             {plan.createdByName && <> · created by {plan.createdByName}</>}
           </p>
         </div>
-        <LessonPlanActions id={plan.id} status={plan.status} isOwner={isOwner} canReview={canReview} />
+        <LessonPlanActions
+          id={plan.id}
+          status={plan.status}
+          isOwner={isOwner}
+          canReview={canReview}
+          isAdmin={user.role === "admin" || user.role === "super_admin"}
+        />
       </div>
 
       {/* Status banner — the last review note stays visible even after edits. */}

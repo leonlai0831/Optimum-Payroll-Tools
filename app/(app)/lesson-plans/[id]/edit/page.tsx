@@ -28,6 +28,7 @@ export default async function EditLessonPlanPage({
   return (
     <LessonPlanForm
       centers={[...config.centers]}
+      instructorName={user.displayName || user.email}
       initial={{
         id: plan.id,
         type: plan.type,

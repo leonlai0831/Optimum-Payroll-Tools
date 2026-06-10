@@ -20,11 +20,14 @@ export function LessonPlanActions({
   status,
   isOwner,
   canReview,
+  isAdmin = false,
 }: {
   id: number;
   status: LessonPlanStatus;
   isOwner: boolean;
   canReview: boolean;
+  /** admin / super_admin: may delete any plan at any status. */
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -107,12 +110,12 @@ export function LessonPlanActions({
               {busy ? <Spinner /> : <Send className="h-4 w-4" />} Submit for review
             </Button>
           )}
-          {status === "draft" && (
-            <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={busy}>
-              <Trash2 className="h-4 w-4" /> Delete
-            </Button>
-          )}
         </>
+      )}
+      {((isOwner && status === "draft") || isAdmin) && (
+        <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={busy}>
+          <Trash2 className="h-4 w-4" /> Delete
+        </Button>
       )}
       {canReview && status === "submitted" && (
         <>
