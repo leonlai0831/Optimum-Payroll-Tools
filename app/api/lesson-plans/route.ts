@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { userCan } from "@/lib/auth/permissions";
 import { createLessonPlan, listLessonPlans } from "@/lib/db/queries";
 import { lessonPlanAccess } from "@/lib/lesson-plan/access";
 import { LESSON_PLAN_TYPES, type LessonPlanType } from "@/lib/lesson-plan/types";
@@ -6,8 +8,29 @@ import { parseLessonPlanContent, type LessonPlanContentBody } from "@/lib/lesson
 
 export const dynamic = "force-dynamic";
 
-/** List lesson plans: reviewers see all, editors see only their own. */
-export async function GET() {
+/**
+ * List lesson plans: reviewers see all, editors see only their own.
+ *
+ * With `?coachId=N` the list is instead scoped to that coach's plans — this
+ * powers the assessment form's lesson-plan picker, so it is allowed for
+ * `review_lesson_plans` OR `edit_appraisals` holders (an assessor must see the
+ * assessed coach's plans even without lesson-plan review rights).
+ */
+export async function GET(req: Request) {
+  const coachIdParam = new URL(req.url).searchParams.get("coachId");
+  if (coachIdParam != null) {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const allowed =
+      (await userCan(user, "review_lesson_plans")) || (await userCan(user, "edit_appraisals"));
+    if (!allowed) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const coachId = Number(coachIdParam);
+    if (!Number.isInteger(coachId)) {
+      return NextResponse.json({ error: "coachId must be an integer" }, { status: 400 });
+    }
+    return NextResponse.json({ plans: await listLessonPlans({ coachId }) });
+  }
+
   const gate = await lessonPlanAccess();
   if ("error" in gate) return gate.error;
   const { user, canReview } = gate.access;

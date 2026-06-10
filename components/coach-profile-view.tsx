@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardCheck, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, BookOpen, ClipboardCheck, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { ConfirmModal } from "@/components/modal";
 import dynamic from "next/dynamic";
@@ -26,6 +26,8 @@ export interface AssessmentView {
   poolType: string;
   totalPercent: number;
   finalGrade: GradeKey;
+  /** Lesson plan of the observed class, when one was linked. */
+  lessonPlanId: number | null;
 }
 import {
   EMPLOYEE_ROLE_LABELS,
@@ -149,6 +151,14 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
                 {a.assessor || "—"}
                 <span> · {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}</span>
               </div>
+              {a.lessonPlanId != null && (
+                <Link
+                  href={`/lesson-plans/${a.lessonPlanId}`}
+                  className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:underline"
+                >
+                  <BookOpen className="h-3 w-3" /> Lesson plan
+                </Link>
+              )}
             </div>
             <div className="shrink-0 text-right">
               <div className="text-base font-bold tabular-nums text-gray-900">
@@ -186,6 +196,14 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
                 <td className="px-4 py-2 text-gray-500">{a.assessor || "—"}</td>
                 <td className="px-4 py-2 text-gray-500">
                   {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}
+                  {a.lessonPlanId != null && (
+                    <Link
+                      href={`/lesson-plans/${a.lessonPlanId}`}
+                      className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
+                    >
+                      <BookOpen className="h-3 w-3" /> Lesson plan
+                    </Link>
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
                   {a.totalPercent.toFixed(1)}%

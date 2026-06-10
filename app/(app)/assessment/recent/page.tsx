@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { History } from "lucide-react";
+import { BookOpen, History } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listRecentAssessments } from "@/lib/db/queries";
 import { Badge, Card } from "@/components/ui";
@@ -49,6 +49,14 @@ export default async function RecentAssessmentsPage() {
                   <div className="text-[11px] text-gray-400">
                     {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}
                   </div>
+                  {a.lessonPlanId != null && (
+                    <Link
+                      href={`/lesson-plans/${a.lessonPlanId}`}
+                      className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:underline"
+                    >
+                      <BookOpen className="h-3 w-3" /> Lesson plan
+                    </Link>
+                  )}
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-base font-bold tabular-nums text-gray-900">
@@ -87,6 +95,14 @@ export default async function RecentAssessmentsPage() {
                   <td className="px-4 py-2 text-gray-500">{a.assessor || "—"}</td>
                   <td className="px-4 py-2 text-gray-500">
                     {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}
+                    {a.lessonPlanId != null && (
+                      <Link
+                        href={`/lesson-plans/${a.lessonPlanId}`}
+                        className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
+                      >
+                        <BookOpen className="h-3 w-3" /> Lesson plan
+                      </Link>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
                     {a.totalPercent.toFixed(1)}%

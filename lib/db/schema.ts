@@ -245,6 +245,9 @@ export const assessments = pgTable("assessments", {
   totalPercent: real("total_percent").notNull(),
   finalGrade: text("final_grade").$type<GradeKey>().notNull(),
   comments: text("comments").default("").notNull(),
+  // Optional link to the lesson plan of the class being observed. No DB-level
+  // FK (repo convention) — the API validates plan.coachId === coachId on save.
+  lessonPlanId: integer("lesson_plan_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   index("assessments_coach_idx").on(t.coachId),

@@ -64,6 +64,7 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
     poolType: a.poolType,
     totalPercent: a.totalPercent,
     finalGrade: a.finalGrade,
+    lessonPlanId: a.lessonPlanId,
   }));
   const allowancePoints: AllowancePoint[] = allowance.map((a) => ({
     id: a.id,
