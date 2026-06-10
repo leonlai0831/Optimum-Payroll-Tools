@@ -1,12 +1,14 @@
 "use client";
 
 import { type KeyboardEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Link2, Lock, Search, TriangleAlert, X } from "lucide-react";
 import { Badge, Card, Input, Select } from "@/components/ui";
 import { SortTh, useTableSort } from "@/components/table-controls";
 import { useToast } from "@/components/toast";
 import { isLinkableTier } from "@/lib/allowance/tier-rules";
+import { findDuplicateAliases } from "@/lib/kpi/alias-conflicts";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +79,10 @@ export function KpiLinkManager({
   const [busy, setBusy] = useState<number | null>(null);
   /** Coach whose Accounts cell is in edit mode (null = none). */
   const [editingId, setEditingId] = useState<number | null>(null);
+
+  // Aliases claimed by 2+ profiles — uploads match these ambiguously, so the
+  // coach's KPI history forks. Surfaced loudly; fixed by merging in Staff.
+  const duplicateAliases = useMemo(() => findDuplicateAliases(coaches), [coaches]);
 
   const counts = useMemo(() => {
     let linkable = 0;
@@ -195,6 +201,40 @@ export function KpiLinkManager({
         teaching tier. Editing a coach&apos;s accounts here teaches next month&apos;s upload which CSV
         names belong to them.
       </p>
+
+      {duplicateAliases.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">
+                {duplicateAliases.length === 1
+                  ? "1 account is claimed by more than one profile"
+                  : `${duplicateAliases.length} accounts are claimed by more than one profile`}
+              </p>
+              <p className="mt-0.5 text-amber-800">
+                Uploads can&apos;t tell which coach these accounts belong to, so their KPI
+                histories fork. Use the Merge tool in{" "}
+                <Link href="/staff" className="font-medium underline">
+                  Staff → Directory
+                </Link>{" "}
+                to combine the duplicate profiles.
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {duplicateAliases.map((d) => (
+                  <li
+                    key={d.alias.toLowerCase()}
+                    className="rounded-md bg-white/70 px-2.5 py-1.5"
+                  >
+                    <span className="font-medium break-words">{d.alias}</span>
+                    <span className="text-amber-800"> — on {d.owners.join(", ")}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {counts.recheck > 0 && (
         <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
