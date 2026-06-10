@@ -174,6 +174,19 @@ tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role 
 all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in the brand-section
 layouts. The old `/system/categories` page 301-redirects to `/system/permissions`.
 
+Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
+`swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,
+`swim_edit_settings` / `fit_edit_settings` — so e.g. a gym manager can hold the Optimum Fit
+roster without seeing the swim directory. The retired cross-brand keys (`view_all_staff`,
+`edit_staff`, `view_settings`, `edit_settings`) are migrated on read by
+`normalizePermissionConfig` (`LEGACY_CAPABILITY_MAP`): a role that held a legacy key holds
+BOTH scoped keys, so stored matrices keep their exact behavior. **Effective access to a brand
+surface = launcher category visible AND capability granted** — the swim sections
+(`/allowance`, `/kpi`, `/assessment`, `/lesson-plans`, `/staff` directory + settings) gate the
+"swim" category just like `/commission` gates "fit" and `/marketing` gates "marketing"; the
+one exception is `/staff/[id]` for the user's OWN coach profile, which stays reachable
+regardless of category (the launcher's My Profile card is category-independent).
+
 - **`proxy.ts`** is an *optimistic* gate: redirects to `/login` when the `kpi_session` cookie is
   **absent**. Public paths: `/login`, `/api/auth/*`. (Matcher excludes `_next/static`, images, favicon.)
 - **Authoritative** checks: the `(app)` layout and `getCurrentUser()`/`requireCapability()` in API

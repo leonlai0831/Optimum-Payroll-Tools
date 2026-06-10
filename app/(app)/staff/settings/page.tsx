@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
+import { canSeeCategory } from "@/lib/auth/types";
 import { getAllowanceConfig } from "@/lib/db/queries";
 import { CentersCard } from "@/components/centers-card";
 
@@ -10,8 +11,10 @@ export default async function StaffSettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
-  const canEdit = caps.has("edit_settings");
-  if (!canEdit && !caps.has("view_settings") && !caps.has("view_all_staff")) redirect("/");
+  // Swim brand surface — category gated per-page (see the staff layout note).
+  if (!canSeeCategory(user, "swim")) redirect("/");
+  const canEdit = caps.has("swim_edit_settings");
+  if (!canEdit && !caps.has("swim_view_settings") && !caps.has("swim_view_staff")) redirect("/");
 
   const allowanceConfig = await getAllowanceConfig();
   return (

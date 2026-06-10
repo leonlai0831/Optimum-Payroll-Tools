@@ -20,13 +20,36 @@ import {
 } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
-const GROUPS: { title: string; caps: Capability[] }[] = [
-  { title: "Settings", caps: ["view_settings", "edit_settings"] },
-  { title: "Staff", caps: ["view_all_staff", "edit_staff", "view_own"] },
-  { title: "Performance", caps: ["edit_appraisals", "edit_notes"] },
-  { title: "Lesson Plans", caps: ["edit_lesson_plans", "review_lesson_plans"] },
-  { title: "Operations", caps: ["run_kpi", "run_allowance"] },
-  { title: "Accounts", caps: ["manage_users"] },
+type CapGroup = { title: string; caps: Capability[]; emptyNote?: string };
+
+/** Capability groups, by brand — mirrors the launcher's brand sections. */
+const GROUPS: CapGroup[] = [
+  { title: "Shared", caps: ["view_own", "manage_users", "view_audit"] },
+  {
+    title: TOOL_CATEGORY_LABELS.swim,
+    caps: [
+      "swim_view_staff",
+      "swim_edit_staff",
+      "edit_appraisals",
+      "edit_notes",
+      "edit_lesson_plans",
+      "review_lesson_plans",
+      "run_kpi",
+      "finalize_kpi",
+      "run_allowance",
+      "swim_view_settings",
+      "swim_edit_settings",
+    ],
+  },
+  {
+    title: TOOL_CATEGORY_LABELS.fit,
+    caps: ["fit_view_staff", "fit_edit_staff", "run_commission", "fit_view_settings", "fit_edit_settings"],
+  },
+  {
+    title: TOOL_CATEGORY_LABELS.marketing,
+    caps: [],
+    emptyNote: "No capabilities yet — the marketing module is coming soon.",
+  },
 ];
 
 const CATEGORIES_GROUP_TITLE = "Launcher categories";
@@ -189,6 +212,9 @@ export function PermissionsForm({
                     {group.title}
                   </div>
                   <div className="mt-1">
+                    {group.caps.length === 0 && (
+                      <p className="py-1.5 text-sm text-gray-400">{group.emptyNote}</p>
+                    )}
                     {group.caps.map((cap) => (
                       <label
                         key={cap}
@@ -301,7 +327,7 @@ function GroupRows({
   cfg,
   onToggle,
 }: {
-  group: { title: string; caps: Capability[] };
+  group: CapGroup;
   cfg: PermissionConfig;
   onToggle: (role: ConfigurableRole, cap: Capability) => void;
 }) {
@@ -315,6 +341,13 @@ function GroupRows({
           {group.title}
         </td>
       </tr>
+      {group.caps.length === 0 && (
+        <tr>
+          <td colSpan={CONFIGURABLE_ROLES.length + 2} className="px-4 py-2 text-sm text-gray-400">
+            {group.emptyNote}
+          </td>
+        </tr>
+      )}
       {group.caps.map((cap) => (
         <tr key={cap}>
           <td className="px-4 py-2 text-gray-700">{CAPABILITY_LABELS[cap]}</td>

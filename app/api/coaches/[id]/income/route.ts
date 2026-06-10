@@ -19,7 +19,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/coaches/[id]/inc
   // Same access rule as the staff profile page: anyone who can view all staff,
   // or the coach viewing their own profile.
   const caps = await getCapabilities(user);
-  const canViewAll = caps.has("view_all_staff");
+  const canViewAll = caps.has("swim_view_staff");
   const isOwn = caps.has("view_own") && user.coachId === coachId;
   if (!canViewAll && !isOwn) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });

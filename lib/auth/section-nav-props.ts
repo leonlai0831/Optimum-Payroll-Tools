@@ -4,7 +4,7 @@ import type { Capability } from "@/lib/auth/types";
 
 /**
  * Props the section nav needs to decide which permission-gated tabs to show
- * (e.g. the KPI "Links" tab requires `view_all_staff`). Pages that don't
+ * (e.g. the KPI "Links" tab requires `swim_view_staff`). Pages that don't
  * already load the user can spread this into <SectionNav {...props} />.
  *
  * Defaults to no caps / not-super-admin when signed out, so the nav simply

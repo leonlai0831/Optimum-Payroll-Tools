@@ -28,7 +28,7 @@ export async function userCan(user: CurrentUser, capability: Capability): Promis
 /**
  * Route-handler guard: returns a 401/403 response to short-circuit with, or null
  * when the current user holds `capability`. Usage:
- *   const denied = await requireCapability("edit_settings");
+ *   const denied = await requireCapability("swim_edit_settings");
  *   if (denied) return denied;
  *
  * The session helper is imported lazily so this module stays import-safe outside

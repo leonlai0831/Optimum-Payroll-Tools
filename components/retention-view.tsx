@@ -18,7 +18,7 @@ interface Watch {
  * Supportive "check-in" view built on the deterministic, transparent retention
  * signals. By design this is NOT an attrition predictor: the prominent notice
  * and supportive framing are intentional, and every flag shows the exact KPI
- * numbers behind it. Run on demand by management (view_all_staff).
+ * numbers behind it. Run on demand by management (swim_view_staff).
  */
 export function RetentionView() {
   const [data, setData] = useState<{ watch: Watch[]; summary: string } | null>(null);

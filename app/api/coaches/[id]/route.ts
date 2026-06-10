@@ -7,7 +7,7 @@ import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { EMPLOYMENT_TYPES, type EmploymentType } from "@/lib/performance/types";
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("swim_edit_staff");
   if (denied) return denied;
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => ({}))) as {
@@ -71,7 +71,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
 }
 
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/coaches/[id]">) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("swim_edit_staff");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const { id } = await ctx.params;

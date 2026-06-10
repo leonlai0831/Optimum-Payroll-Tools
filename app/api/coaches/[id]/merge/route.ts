@@ -6,10 +6,10 @@ import { mergeCoaches, recordAudit } from "@/lib/db/queries";
 /**
  * Merge a duplicate staff profile into this one (`[id]` = the survivor).
  * Destructive (the duplicate row is deleted), so it is audited and gated on
- * the same `edit_staff` capability as profile edits/deletes.
+ * the same `swim_edit_staff` capability as profile edits/deletes.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/coaches/[id]/merge">) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("swim_edit_staff");
   if (denied) return denied;
   const actor = await getCurrentUser();
   if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

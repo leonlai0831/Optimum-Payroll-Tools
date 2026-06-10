@@ -28,7 +28,7 @@ export default async function HistoryPage() {
       {runs.length > 0 && <AskData />}
       <KpiHistoryView
         runs={runs}
-        canExport={caps.has("view_all_staff")}
+        canExport={caps.has("swim_view_staff")}
         savers={savers}
         centers={allowanceConfig.centers}
         centerAliases={allowanceConfig.centerAliases}
