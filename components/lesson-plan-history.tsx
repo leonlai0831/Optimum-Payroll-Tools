@@ -10,6 +10,7 @@ import { TableToolbar } from "@/components/table-controls";
 import {
   LESSON_PLAN_STATUS_LABELS,
   LESSON_PLAN_TYPE_LABELS,
+  LessonPlanSelfEvalHint,
   LessonPlanStatusBadge,
   LessonPlanTypeBadge,
 } from "@/components/lesson-plan-badges";
@@ -35,6 +36,8 @@ export interface LessonPlanHistoryRow {
   timeLabel: string;
   levelType: LevelType | null;
   classLevel: string;
+  /** ISO timestamp of the post-lesson self-eval fill; null = not filled. */
+  selfEvalAt: string | null;
 }
 
 function levelLabel(row: LessonPlanHistoryRow): string {
@@ -147,6 +150,11 @@ export function LessonPlanHistory({
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <LessonPlanTypeBadge type={r.type} />
                     <LessonPlanStatusBadge status={r.status} />
+                    <LessonPlanSelfEvalHint
+                      type={r.type}
+                      status={r.status}
+                      selfEvalAt={r.selfEvalAt}
+                    />
                   </div>
                 </div>
               </Link>
@@ -189,7 +197,14 @@ export function LessonPlanHistory({
                     <td className="px-4 py-2 text-gray-500">{r.center || "—"}</td>
                     <td className="px-4 py-2 text-gray-500">{levelLabel(r)}</td>
                     <td className="px-4 py-2">
-                      <LessonPlanStatusBadge status={r.status} />
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <LessonPlanStatusBadge status={r.status} />
+                        <LessonPlanSelfEvalHint
+                          type={r.type}
+                          status={r.status}
+                          selfEvalAt={r.selfEvalAt}
+                        />
+                      </span>
                     </td>
                     {isReviewer && (
                       <td className="px-4 py-2 text-gray-500">{r.createdByName || "—"}</td>

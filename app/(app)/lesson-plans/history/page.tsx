@@ -29,6 +29,7 @@ export default async function LessonPlanHistoryPage() {
         timeLabel: r.timeLabel,
         levelType: r.levelType,
         classLevel: r.classLevel,
+        selfEvalAt: r.selfEvalAt ? r.selfEvalAt.toISOString() : null,
       }))}
     />
   );

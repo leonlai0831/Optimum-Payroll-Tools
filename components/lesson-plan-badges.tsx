@@ -1,3 +1,4 @@
+import { CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui";
 import type { LessonPlanStatus, LessonPlanType } from "@/lib/lesson-plan/types";
 
@@ -25,6 +26,35 @@ export const LESSON_PLAN_TYPE_LABELS: Record<LessonPlanType, string> = {
   actual: "Actual",
   replacement: "Replacement",
 };
+
+/**
+ * Post-lesson self-evaluation hint next to the status badge (replacement
+ * plans only): an approved plan still awaiting its self-eval gets an amber
+ * nudge; a filled one gets a subtle green tick.
+ */
+export function LessonPlanSelfEvalHint({
+  type,
+  status,
+  selfEvalAt,
+}: {
+  type: LessonPlanType;
+  status: LessonPlanStatus;
+  selfEvalAt: string | Date | null;
+}) {
+  if (type !== "replacement") return null;
+  if (selfEvalAt) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700"
+        title="Self-evaluation completed"
+      >
+        <CheckCircle2 className="h-3 w-3" /> Self-eval
+      </span>
+    );
+  }
+  if (status !== "approved") return null;
+  return <Badge className="border-amber-300 bg-amber-50 text-amber-800">Awaiting self-eval</Badge>;
+}
 
 export function LessonPlanTypeBadge({ type }: { type: LessonPlanType }) {
   return (

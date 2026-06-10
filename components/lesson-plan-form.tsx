@@ -14,7 +14,6 @@ import {
   type LevelType,
   type ProcedureRow,
   type ReplacementSectionKey,
-  type SelfEvalAnswer,
 } from "@/lib/lesson-plan/types";
 import {
   CLASS_LEVELS,
@@ -22,7 +21,6 @@ import {
   LEVEL_TYPE_LABELS,
   OBJECTIVE_HELPER,
   REPLACEMENT_SECTIONS,
-  SELF_EVAL_GROUPS,
 } from "@/lib/lesson-plan/templates";
 
 /** Prefill for editing an existing plan (dates already formatted yyyy-mm-dd). */
@@ -141,10 +139,8 @@ export function LessonPlanForm({
   const [sections, setSections] = useState<SectionState>(() =>
     initial ? sectionsFromData(initial.data) : emptySections(),
   );
-  const [remarks, setRemarks] = useState(initial?.data.remarks ?? "");
-  const [selfEval, setSelfEval] = useState<Record<string, SelfEvalAnswer>>(
-    initial?.data.selfEval ?? {},
-  );
+  // Remarks + the self-evaluation are POST-LESSON fields: they're filled from
+  // the plan page after the class, never in this pre-class form.
 
   /** Swap every checklist to the new level type; drop ticks the new lists lack. */
   function changeLevelType(next: LevelType) {
@@ -189,7 +185,7 @@ export function LessonPlanForm({
       const data: Partial<LessonPlanData> =
         type === "actual"
           ? { priorKnowledge, objectives, procedure }
-          : { priorSkills, objectives, sections: REPLACEMENT_SECTIONS.map((s) => ({ key: s.key, ...sections[s.key] })), remarks, selfEval };
+          : { priorSkills, objectives, sections: REPLACEMENT_SECTIONS.map((s) => ({ key: s.key, ...sections[s.key] })) };
       const payload = {
         type,
         actualInstructorName,
@@ -231,7 +227,7 @@ export function LessonPlanForm({
         <TypeCard
           icon={Repeat2}
           title="Replacement class"
-          body="Cover another instructor's class: level-based skill checklists, fixed procedure sections, and a self-evaluation."
+          body="Cover another instructor's class: level-based skill checklists and fixed procedure sections. The self-evaluation is filled in after the class."
           onClick={() => setType("replacement")}
         />
       </div>
@@ -552,74 +548,6 @@ export function LessonPlanForm({
             </div>
           )}
         </div>
-
-        {type === "replacement" && (
-          <>
-            {/* Remarks */}
-            <div className="mt-5">
-              <Label htmlFor="lp-remarks">Remarks</Label>
-              <Textarea
-                id="lp-remarks"
-                className="mt-1"
-                rows={3}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-              />
-            </div>
-
-            {/* Self-evaluation */}
-            <div className="mt-5">
-              <h4 className="border-b border-gray-200 pb-1 text-sm font-bold text-gray-900">
-                Teaching performance self-evaluation
-              </h4>
-              {SELF_EVAL_GROUPS.map((group) => (
-                <div key={group.key} className="mt-3">
-                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                    {group.title}
-                  </div>
-                  <div className="mt-1 divide-y divide-gray-100">
-                    {group.questions.map((q) => (
-                      <div
-                        key={q.key}
-                        className="flex flex-wrap items-center justify-between gap-2 py-2"
-                      >
-                        <span className="min-w-0 flex-1 text-sm text-gray-700">{q.label}</span>
-                        <div
-                          className="flex shrink-0 gap-2"
-                          role="radiogroup"
-                          aria-label={q.label}
-                        >
-                          {(["yes", "no"] as const).map((a) => (
-                            <button
-                              key={a}
-                              type="button"
-                              role="radio"
-                              aria-checked={selfEval[q.key] === a}
-                              onClick={() =>
-                                setSelfEval((prev) => ({
-                                  ...prev,
-                                  [q.key]: prev[q.key] === a ? "" : a,
-                                }))
-                              }
-                              className={cn(
-                                "min-h-11 min-w-14 rounded-lg border px-3 text-sm font-semibold transition",
-                                selfEval[q.key] === a
-                                  ? "border-indigo-600 bg-indigo-600 text-white"
-                                  : "border-gray-200 bg-white text-gray-600 active:bg-gray-100",
-                              )}
-                            >
-                              {a === "yes" ? "Yes" : "No"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
 
         <div className="mt-5 flex items-center gap-2">
           <Button onClick={save} disabled={busy}>

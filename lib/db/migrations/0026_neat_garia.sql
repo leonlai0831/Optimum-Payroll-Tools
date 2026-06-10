@@ -1,0 +1,1 @@
+ALTER TABLE "lesson_plans" ADD COLUMN "self_eval_at" timestamp with time zone;
