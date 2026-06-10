@@ -31,7 +31,7 @@ export interface IngestDetail {
   id: number;
   periodLabel: string;
   label: string;
-  status: "pending" | "imported" | "discarded";
+  status: "pending" | "imported" | "discarded" | "superseded";
   rows: InstructorRow[];
   importedRunId: number | null;
   importedAt: string | null;
@@ -365,6 +365,11 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
           {ingest.status === "discarded" && (
             <Badge className="border-gray-300 bg-gray-100 text-gray-600">Discarded</Badge>
           )}
+          {ingest.status === "superseded" && (
+            <Badge className="border-gray-200 bg-gray-50 text-gray-400 line-through decoration-gray-400">
+              Superseded
+            </Badge>
+          )}
         </h1>
         <p className="mt-0.5 text-xs text-gray-500">
           {ingest.label || "API upload"} · {rows.length} rows · received{" "}
@@ -386,6 +391,12 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
         {ingest.status === "discarded" && (
           <p className="mt-1 text-sm text-gray-500">
             This delivery was discarded — kept for the record, it can no longer be loaded.
+          </p>
+        )}
+        {ingest.status === "superseded" && (
+          <p className="mt-1 text-sm text-gray-500">
+            This delivery was superseded by a newer push for the same month — kept for the
+            record, it can no longer be loaded.
           </p>
         )}
       </Card>

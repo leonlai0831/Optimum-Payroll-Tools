@@ -157,4 +157,129 @@ describe("POST /api/ingest/kpi (route behavior, PGlite in-memory)", () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it("409s a push once a FINALIZED run exists for the period — nothing written, pending untouched", async () => {
+    const push = () =>
+      POST(
+        post({
+          url: `${URL_BASE}?periodLabel=2025-01&label=jan`,
+          headers: { "content-type": "text/csv" },
+          body: CSV,
+        }),
+      );
+
+    // A delivery staged BEFORE the month was finalized stays exactly as it was.
+    const first = await (await push()).json();
+    expect(first.ok).toBe(true);
+
+    await queries.createRun({
+      periodLabel: "2025-01",
+      filename: "jan.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+    }); // status defaults to "finalized"
+
+    // CSV mode rejected with the owner-approved message…
+    const csvRes = await push();
+    expect(csvRes.status).toBe(409);
+    expect((await csvRes.json()).error).toBe(
+      "2025-01 is already finalized — ask the payroll admin to reopen it if a correction is needed.",
+    );
+    // …and JSON mode too (same check, both body formats).
+    const jsonRes = await POST(
+      post({
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ periodLabel: "2025-01", rows: [{ Instructor: "A" }] }),
+      }),
+    );
+    expect(jsonRes.status).toBe(409);
+
+    // A rejected push writes NOTHING: the original delivery is still the only
+    // one for the period and is still pending (not superseded).
+    const forPeriod = (await queries.listKpiIngests()).filter((i) => i.periodLabel === "2025-01");
+    expect(forPeriod.map((i) => ({ id: i.id, status: i.status }))).toEqual([
+      { id: first.id, status: "pending" },
+    ]);
+    // …and leaves no audit trail (only the first push's "received" entry exists).
+    const audits = (await queries.listAuditLog()).filter((a) => a.summary.includes("2025-01"));
+    expect(audits.map((a) => a.action)).toEqual(["kpi_ingest.received"]);
+  });
+
+  it("a DRAFT run does not block a push — accepted, and a re-push still supersedes", async () => {
+    await queries.createRun({
+      periodLabel: "2025-02",
+      filename: "feb-draft.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+
+    const push = () =>
+      POST(
+        post({
+          url: `${URL_BASE}?periodLabel=2025-02`,
+          headers: { "content-type": "text/csv" },
+          body: CSV,
+        }),
+      );
+    const first = await (await push()).json();
+    expect(first).toMatchObject({ ok: true, superseded: 0 });
+
+    // Pending-only period (the draft run doesn't close it): the re-push is
+    // accepted and supersedes the earlier pending delivery as usual.
+    const second = await (await push()).json();
+    expect(second).toMatchObject({ ok: true, superseded: 1 });
+    expect((await queries.getKpiIngest(first.id))?.status).toBe("superseded");
+  });
+
+  it("409s once any delivery for the period was imported, even with no finalized run", async () => {
+    const push = () =>
+      POST(
+        post({
+          url: `${URL_BASE}?periodLabel=2025-03`,
+          headers: { "content-type": "text/csv" },
+          body: CSV,
+        }),
+      );
+    const { id } = await (await push()).json();
+    // Import into a DRAFT run: the 409 must come from the imported delivery alone.
+    const runId = await queries.createRun({
+      periodLabel: "2025-03",
+      filename: "mar.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+    expect(await queries.importKpiIngest(id, runId)).toBe(true);
+
+    const rejected = await push();
+    expect(rejected.status).toBe(409);
+    expect((await rejected.json()).error).toMatch(/already finalized/);
+    // The imported delivery is untouched and nothing new exists for the period.
+    expect((await queries.getKpiIngest(id))?.status).toBe("imported");
+    expect((await queries.listKpiIngests()).filter((i) => i.periodLabel === "2025-03")).toHaveLength(1);
+  });
+
+  it("re-pushing the same period reports how many pending deliveries it superseded", async () => {
+    const push = () =>
+      POST(
+        post({
+          url: `${URL_BASE}?periodLabel=2026-01&label=re-push`,
+          headers: { "content-type": "text/csv" },
+          body: CSV,
+        }),
+      );
+
+    const first = await (await push()).json();
+    expect(first).toMatchObject({ ok: true, superseded: 0 });
+
+    const second = await (await push()).json();
+    expect(second).toMatchObject({ ok: true, superseded: 1 });
+
+    expect((await queries.getKpiIngest(first.id))?.status).toBe("superseded");
+    expect((await queries.getKpiIngest(second.id))?.status).toBe("pending");
+  });
 });

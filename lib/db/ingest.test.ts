@@ -60,12 +60,13 @@ describe("KPI ingests (PGlite in-memory)", () => {
       Attended: 580,
     });
 
-    const id = await queries.createKpiIngest({
+    const { id, supersededIds } = await queries.createKpiIngest({
       periodLabel: "2026-05",
       label: "kpi_2026_05.csv",
       rows,
     });
     expect(id).toBeGreaterThan(0);
+    expect(supersededIds).toEqual([]); // first push for the period supersedes nothing
 
     const stored = await queries.getKpiIngest(id);
     expect(stored?.status).toBe("pending");
@@ -78,7 +79,7 @@ describe("KPI ingests (PGlite in-memory)", () => {
   });
 
   it("lets the owner edit rows while pending, but never after import", async () => {
-    const id = await queries.createKpiIngest({
+    const { id } = await queries.createKpiIngest({
       periodLabel: "2026-06",
       label: "june.csv",
       rows: [row()],
@@ -104,7 +105,7 @@ describe("KPI ingests (PGlite in-memory)", () => {
 
   it("import marks status + run linkage, and the rows stay readable forever", async () => {
     const rows = [row({ Instructor: "KEEPER [PK]" })];
-    const id = await queries.createKpiIngest({ periodLabel: "2026-07", label: "july", rows });
+    const { id } = await queries.createKpiIngest({ periodLabel: "2026-07", label: "july", rows });
     const runId = await queries.createRun({
       periodLabel: "2026-07",
       filename: "july",
@@ -130,7 +131,7 @@ describe("KPI ingests (PGlite in-memory)", () => {
   });
 
   it("discard is a status flip — the delivery stays listed, and only pending can flip", async () => {
-    const id = await queries.createKpiIngest({
+    const { id } = await queries.createKpiIngest({
       periodLabel: "2026-08",
       label: "bad-push",
       rows: [row()],
@@ -145,5 +146,113 @@ describe("KPI ingests (PGlite in-memory)", () => {
     // Already discarded → no-op; and a discarded delivery can't be imported.
     expect(await queries.discardKpiIngest(id)).toBe(false);
     expect(await queries.importKpiIngest(id, 1)).toBe(false);
+  });
+
+  it("a re-push for the same period supersedes the pending delivery — audited, rows kept", async () => {
+    const first = await queries.createKpiIngest({
+      periodLabel: "2026-09",
+      label: "sept-v1",
+      rows: [row()],
+    });
+    const second = await queries.createKpiIngest({
+      periodLabel: "2026-09",
+      label: "sept-v2",
+      rows: [row({ TotalStudent: 160 })],
+    });
+    expect(second.supersededIds).toEqual([first.id]);
+
+    // First delivery: status flipped, but the rows stay readable forever.
+    const old = await queries.getKpiIngest(first.id);
+    expect(old?.status).toBe("superseded");
+    expect(old?.rows).toHaveLength(1);
+    expect((await queries.listKpiIngests()).find((i) => i.id === first.id)?.status).toBe("superseded");
+
+    // Second delivery is the one (and only) pending delivery for the period.
+    expect((await queries.getKpiIngest(second.id))?.status).toBe("pending");
+    const pending = (await queries.listPendingKpiIngests()).filter((i) => i.periodLabel === "2026-09");
+    expect(pending.map((i) => i.id)).toEqual([second.id]);
+
+    // Superseded behaves like discarded: no edits, no discard, no import.
+    expect(await queries.updateKpiIngestRows(first.id, [row({ TotalStudent: 999 })])).toBe(false);
+    expect(await queries.discardKpiIngest(first.id)).toBe(false);
+    expect(await queries.importKpiIngest(first.id, 1)).toBe(false);
+
+    // The supersede is audited, naming old id → new id.
+    const audit = (await queries.listAuditLog()).find(
+      (a) => a.action === "kpi_ingest.superseded" && a.entityId === String(first.id),
+    );
+    expect(audit).toBeDefined();
+    expect(audit?.summary).toContain(`#${first.id}`);
+    expect(audit?.summary).toContain(`#${second.id}`);
+    expect(audit?.actorEmail).toBe("ingest-api");
+  });
+
+  it("isKpiPeriodClosed: a finalized run closes the period; a draft run does not; reopen reopens it", async () => {
+    // Nothing for the period yet → open.
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+
+    // A pending delivery doesn't close it.
+    await queries.createKpiIngest({ periodLabel: "2026-11", label: "nov-v1", rows: [row()] });
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+
+    // A DRAFT run doesn't close it — the month is still being worked.
+    const runId = await queries.createRun({
+      periodLabel: "2026-11",
+      filename: "nov-draft",
+      csvRows: [row()],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+
+    // Finalizing the run closes the period; reopening it (the documented
+    // correction path) opens it again.
+    await queries.updateRunReview(runId, [], "finalized");
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(true);
+    expect(await queries.reopenRun(runId)).toBe(true);
+    expect(await queries.isKpiPeriodClosed("2026-11")).toBe(false);
+  });
+
+  it("isKpiPeriodClosed: an imported delivery closes the period even without a finalized run", async () => {
+    const { id } = await queries.createKpiIngest({ periodLabel: "2026-12", label: "dec-v1", rows: [row()] });
+    // Import it into a DRAFT run — closure must come from the ingest status alone.
+    const runId = await queries.createRun({
+      periodLabel: "2026-12",
+      filename: "dec-draft",
+      csvRows: [row()],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+    expect(await queries.isKpiPeriodClosed("2026-12")).toBe(false);
+    expect(await queries.importKpiIngest(id, runId)).toBe(true);
+    expect(await queries.isKpiPeriodClosed("2026-12")).toBe(true);
+    // Discarded/superseded deliveries never close a period (other periods unaffected).
+    expect(await queries.isKpiPeriodClosed("2027-01")).toBe(false);
+  });
+
+  it("a re-push never touches imported (or discarded) deliveries for the period", async () => {
+    const rows = [row({ Instructor: "OCT [BK]" })];
+    const imported = await queries.createKpiIngest({ periodLabel: "2026-10", label: "oct-v1", rows });
+    const runId = await queries.createRun({
+      periodLabel: "2026-10",
+      filename: "oct-v1",
+      csvRows: rows,
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+    });
+    expect(await queries.importKpiIngest(imported.id, runId)).toBe(true);
+
+    const discarded = await queries.createKpiIngest({ periodLabel: "2026-10", label: "oct-v2", rows });
+    expect(await queries.discardKpiIngest(discarded.id)).toBe(true);
+
+    // Neither the imported nor the discarded delivery is pending → nothing to supersede.
+    const repush = await queries.createKpiIngest({ periodLabel: "2026-10", label: "oct-v3", rows });
+    expect(repush.supersededIds).toEqual([]);
+    expect((await queries.getKpiIngest(imported.id))?.status).toBe("imported");
+    expect((await queries.getKpiIngest(imported.id))?.importedRunId).toBe(runId);
+    expect((await queries.getKpiIngest(discarded.id))?.status).toBe("discarded");
+    expect((await queries.getKpiIngest(repush.id))?.status).toBe("pending");
   });
 });

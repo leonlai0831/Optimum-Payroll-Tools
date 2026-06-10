@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { checkIngestBearer } from "@/lib/ingest/auth";
 import { parseCsvBody, resolveIngestBodyMode } from "@/lib/ingest/csv-body";
 import { hasInstructorHeader, mapCsvRows } from "@/lib/kpi/csv";
-import { createKpiIngest, recordAudit } from "@/lib/db/queries";
+import { createKpiIngest, isKpiPeriodClosed, recordAudit } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
  * Machine endpoint: an external system pushes the monthly KPI data here instead
  * of the owner uploading a CSV by hand. The payload is STAGED as a pending
  * `kpi_ingests` row — it is never scored or saved as a run directly; the owner
- * reviews/edits it on /kpi/ingests and loads it into the calculator.
+ * reviews/edits it on /kpi/ingests and loads it into the calculator. Pushing
+ * again for the same period supersedes any still-pending earlier deliveries
+ * (imported/discarded ones are never touched). A push for a CLOSED period —
+ * a finalized run exists for it, or a delivery for it was already imported —
+ * is rejected with 409 before anything is staged or superseded (draft runs
+ * do not block).
  *
  * Two body formats, identical staging behavior and response shape:
  * - JSON (default): `{ periodLabel: "YYYY-MM", label?, rows }`.
@@ -159,6 +164,21 @@ export async function POST(req: Request) {
     label = typeof body.label === "string" ? body.label.trim().slice(0, 200) : "";
   }
 
+  // Closed-period guard (both modes, right after period validation): once the
+  // month is closed — a FINALIZED run exists for the period (drafts don't
+  // block), or a delivery for it was already imported — a push is rejected
+  // outright. Nothing is staged, superseded, or audited for a rejection; the
+  // payroll admin reopens the month first if a correction is needed.
+  if (await isKpiPeriodClosed(periodLabel)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `${periodLabel} is already finalized — ask the payroll admin to reopen it if a correction is needed.`,
+      },
+      { status: 409 },
+    );
+  }
+
   if (!hasInstructorHeader(rawRows)) {
     return NextResponse.json(
       {
@@ -172,8 +192,11 @@ export async function POST(req: Request) {
 
   // Normalize through the exact same header mapping the CSV upload uses, so a
   // staged delivery behaves identically to a hand-uploaded file from here on.
+  // A re-push for the same period atomically supersedes any still-pending
+  // deliveries (audited inside createKpiIngest); `superseded` in the response
+  // tells the sender how many earlier deliveries this push replaced.
   const rows = mapCsvRows(rawRows);
-  const id = await createKpiIngest({ periodLabel, label, rows });
+  const { id, supersededIds } = await createKpiIngest({ periodLabel, label, rows });
   await recordAudit({
     actorId: null,
     actorEmail: "ingest-api",
@@ -182,5 +205,5 @@ export async function POST(req: Request) {
     entityId: id,
     summary: `Received ${rows.length} KPI rows for ${periodLabel}${label ? ` (${label})` : ""}`,
   });
-  return NextResponse.json({ ok: true, id, rows: rows.length });
+  return NextResponse.json({ ok: true, id, rows: rows.length, superseded: supersededIds.length });
 }
