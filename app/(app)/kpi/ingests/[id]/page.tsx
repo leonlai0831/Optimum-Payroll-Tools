@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * One staged API delivery: review + edit its rows before loading them into the
- * calculator. Imported/discarded deliveries render the same view read-only —
- * the rows stay viewable forever.
+ * calculator. Imported/discarded/superseded deliveries render the same view
+ * read-only — the rows stay viewable forever.
  */
 export default async function KpiIngestDetailPage({
   params,

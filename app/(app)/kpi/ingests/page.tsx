@@ -18,13 +18,21 @@ function StatusBadge({ status }: { status: KpiIngestSummary["status"] }) {
   if (status === "imported") {
     return <Badge className="border-green-300 bg-green-100 text-green-800">Imported</Badge>;
   }
+  if (status === "superseded") {
+    // Muted + struck through: visually "replaced", distinct from a deliberate discard.
+    return (
+      <Badge className="border-gray-200 bg-gray-50 text-gray-400 line-through decoration-gray-400">
+        Superseded
+      </Badge>
+    );
+  }
   return <Badge className="border-gray-300 bg-gray-100 text-gray-600">Discarded</Badge>;
 }
 
 /**
- * Every API-pushed KPI delivery ever received — staged, imported, and discarded
- * alike. Nothing is ever hard-deleted, so this page is the permanent record of
- * what the external system sent.
+ * Every API-pushed KPI delivery ever received — staged, imported, discarded,
+ * and superseded alike. Nothing is ever hard-deleted, so this page is the
+ * permanent record of what the external system sent.
  */
 export default async function KpiIngestsPage() {
   const user = await getCurrentUser();

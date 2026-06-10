@@ -134,8 +134,11 @@ accepts `{ periodLabel: "YYYY-MM", label?, rows }` with the **same flexible head
 upload** (normalized via `mapCsvRows`). The same endpoint also accepts a **raw CSV body**
 (`Content-Type: text/csv`, parsed in `lib/ingest/csv-body.ts`; `periodLabel` required + `label`
 optional as query params) with identical staging behavior. Pushed data is **STAGED** in `kpi_ingests`
-(`pending → imported | discarded` — never hard-deleted, rows stay viewable forever), audited as
-`kpi_ingest.received`. Owners (`run_kpi`) review on `/kpi/ingests` (section tab "Uploads"):
+(`pending → imported | discarded | superseded` — never hard-deleted, rows stay viewable forever),
+audited as `kpi_ingest.received`; a **re-push for the same `periodLabel` atomically supersedes any
+still-pending earlier deliveries** (imported/discarded ones are never touched, each flip is audited
+as `kpi_ingest.superseded`, and the response reports `superseded: <count>`). Owners (`run_kpi`)
+review on `/kpi/ingests` (section tab "Uploads"):
 edit/add/delete rows while pending (PATCH `/api/kpi/ingests/[id]`, audited), discard (status
 flip), or "Load into calculator" → `/kpi?ingest=<id>` seeds the dashboard with the staged rows
 (same merge → compute → save flow; filename shows the ingest label). Saving threads `ingestId`

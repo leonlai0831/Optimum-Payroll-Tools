@@ -899,18 +899,50 @@ export interface KpiIngestSummary {
   receivedAt: Date;
 }
 
-/** Stage a pushed delivery as pending. Rows must already be normalized InstructorRow[]. */
+/**
+ * Stage a pushed delivery as pending. Rows must already be normalized
+ * InstructorRow[]. A re-push for the same period is a correction: any still-
+ * PENDING deliveries for that periodLabel are flipped to "superseded" (status
+ * only — rows stay viewable forever, like discarded) in the SAME transaction as
+ * the insert, each with its own `kpi_ingest.superseded` audit entry. Imported
+ * and discarded deliveries are never touched.
+ */
 export async function createKpiIngest(input: {
   periodLabel: string;
   label: string;
   rows: InstructorRow[];
-}): Promise<number> {
+}): Promise<{ id: number; supersededIds: number[] }> {
   const db = await getDb();
-  const [row] = await db
-    .insert(kpiIngests)
-    .values({ periodLabel: input.periodLabel, label: input.label, rows: input.rows })
-    .returning({ id: kpiIngests.id });
-  return row.id;
+  return db.transaction(async (tx) => {
+    // Flip BEFORE the insert so the new (pending) row can't match its own filter.
+    const superseded = await tx
+      .update(kpiIngests)
+      .set({ status: "superseded", updatedAt: new Date() })
+      .where(and(eq(kpiIngests.periodLabel, input.periodLabel), eq(kpiIngests.status, "pending")))
+      .returning({ id: kpiIngests.id });
+    const supersededIds = superseded.map((s) => s.id).sort((a, b) => a - b);
+
+    const [row] = await tx
+      .insert(kpiIngests)
+      .values({ periodLabel: input.periodLabel, label: input.label, rows: input.rows })
+      .returning({ id: kpiIngests.id });
+
+    // Audit inside the transaction: a supersede and its trail commit (or roll
+    // back) together — unlike recordAudit, which is fire-and-forget by design.
+    if (supersededIds.length > 0) {
+      await tx.insert(auditLog).values(
+        supersededIds.map((oldId) => ({
+          actorId: null,
+          actorEmail: "ingest-api",
+          action: "kpi_ingest.superseded",
+          entity: "kpi_ingest",
+          entityId: String(oldId),
+          summary: `Superseded staged KPI delivery #${oldId} for ${input.periodLabel} by newer push #${row.id}`,
+        })),
+      );
+    }
+    return { id: row.id, supersededIds };
+  });
 }
 
 /** ALL deliveries, newest first — discarded and imported ones stay listed forever. */

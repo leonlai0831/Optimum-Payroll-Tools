@@ -157,4 +157,24 @@ describe("POST /api/ingest/kpi (route behavior, PGlite in-memory)", () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it("re-pushing the same period reports how many pending deliveries it superseded", async () => {
+    const push = () =>
+      POST(
+        post({
+          url: `${URL_BASE}?periodLabel=2026-01&label=re-push`,
+          headers: { "content-type": "text/csv" },
+          body: CSV,
+        }),
+      );
+
+    const first = await (await push()).json();
+    expect(first).toMatchObject({ ok: true, superseded: 0 });
+
+    const second = await (await push()).json();
+    expect(second).toMatchObject({ ok: true, superseded: 1 });
+
+    expect((await queries.getKpiIngest(first.id))?.status).toBe("superseded");
+    expect((await queries.getKpiIngest(second.id))?.status).toBe("pending");
+  });
 });

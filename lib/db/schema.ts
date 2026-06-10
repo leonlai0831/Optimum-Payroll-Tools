@@ -122,9 +122,11 @@ export const runs = pgTable("runs", {
  * A staged KPI data delivery pushed by the external system (POST /api/ingest/kpi).
  * `rows` is already normalized to canonical InstructorRow[] at receive time, so
  * the owner can review/edit it and load it into the calculator exactly like an
- * uploaded CSV. Rows are NEVER hard-deleted: "discarded" is a status, and an
- * imported delivery keeps its rows viewable forever (with `importedRunId`
- * pointing at the saved run it became).
+ * uploaded CSV. Rows are NEVER hard-deleted: "discarded" and "superseded" are
+ * statuses, and an imported delivery keeps its rows viewable forever (with
+ * `importedRunId` pointing at the saved run it became). A re-push for a period
+ * that still has PENDING deliveries flips them to "superseded" — the sender
+ * pushing again is a correction, so only the newest delivery stays actionable.
  */
 export const kpiIngests = pgTable("kpi_ingests", {
   id: serial("id").primaryKey(),
@@ -132,8 +134,10 @@ export const kpiIngests = pgTable("kpi_ingests", {
   /** Source filename / free-form note supplied by the sender. */
   label: text("label").default("").notNull(),
   rows: jsonb("rows").$type<InstructorRow[]>().notNull(),
+  // Plain text column with NO CHECK constraint (see migration 0029), so widening
+  // this union ("superseded" was added later) is a types-only change — no migration.
   status: text("status")
-    .$type<"pending" | "imported" | "discarded">()
+    .$type<"pending" | "imported" | "discarded" | "superseded">()
     .default("pending")
     .notNull(),
   importedRunId: integer("imported_run_id"),
