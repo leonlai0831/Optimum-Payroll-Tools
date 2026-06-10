@@ -14,13 +14,15 @@ export const dynamic = "force-dynamic";
 
 export default async function GymStaffProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const [user, member] = await Promise.all([getCurrentUser(), getGymStaffMember(Number(id))]);
   if (!user) redirect("/login");
-  const member = await getGymStaffMember(Number(id));
   if (!member) notFound();
-  const caps = await getCapabilities(user);
+  const [report, noteRecords, caps] = await Promise.all([
+    getGymStaffEarnings(member),
+    listGymNotes(member.id),
+    getCapabilities(user),
+  ]);
   const canEdit = caps.has("edit_staff");
-  const [report, noteRecords] = await Promise.all([getGymStaffEarnings(member), listGymNotes(member.id)]);
   const notes: NoteView[] = noteRecords.map((n) => ({
     id: n.id,
     noteDate: n.noteDate.toISOString(),

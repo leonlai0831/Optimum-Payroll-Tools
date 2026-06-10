@@ -18,10 +18,11 @@ export default async function AllowancePage({
 }) {
   const sp = await searchParams;
   const edit = typeof sp.edit === "string" ? sp.edit : undefined;
-  const [config, coaches, existingPeriods] = await Promise.all([
+  const [config, coaches, existingPeriods, editRun] = await Promise.all([
     getAllowanceConfig(),
     listCoaches(),
     listAllowancePeriods(),
+    edit ? getAllowanceRun(Number(edit)) : Promise.resolve(undefined),
   ]);
   const roster = coaches
     .filter((c) => c.active)
@@ -36,12 +37,11 @@ export default async function AllowancePage({
   // same staff + period replaces that record (createAllowanceRun is idempotent),
   // so a second center's manager can add their hours without clobbering the first.
   let initial: AllowanceEditTarget | undefined;
-  if (edit) {
-    const run = await getAllowanceRun(Number(edit));
+  if (editRun) {
     // A locked month can't be edited — send back to history rather than open a
     // form whose save the server would reject.
-    if (run && (await isPeriodLocked(run.periodLabel))) redirect("/allowance/history");
-    if (run) initial = { runId: run.id, periodLabel: run.periodLabel, input: run.input };
+    if (await isPeriodLocked(editRun.periodLabel)) redirect("/allowance/history");
+    initial = { runId: editRun.id, periodLabel: editRun.periodLabel, input: editRun.input };
   }
 
   return (

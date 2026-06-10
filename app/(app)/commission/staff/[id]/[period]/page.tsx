@@ -26,9 +26,8 @@ function Stat({ label, value, tone = "muted" }: { label: string; value: string; 
 
 export default async function GymStaffMonthPage({ params }: { params: Promise<{ id: string; period: string }> }) {
   const { id, period } = await params;
-  const user = await getCurrentUser();
+  const [user, member] = await Promise.all([getCurrentUser(), getGymStaffMember(Number(id))]);
   if (!user) redirect("/login");
-  const member = await getGymStaffMember(Number(id));
   if (!member) notFound();
   const detail = await getGymStaffMonth(member, decodeURIComponent(period));
   if (!detail) notFound();

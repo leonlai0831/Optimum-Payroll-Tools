@@ -26,12 +26,17 @@ export default async function RunDetailPage({
   if (!run) notFound();
 
   const isDraft = run.status === "draft";
-  const canFinalize = await userCan(user, "finalize_kpi");
+  // Independent lookups in one round-trip: finalize rights, the operator center
+  // codes + aliases (passed to the table so it can normalize the stored —
+  // possibly raw — center labels onto the configured codes for display), and the
+  // latest assessment finals (only consumed in the draft-review branch below).
+  const [canFinalize, allowanceConfig, assessmentMap] = await Promise.all([
+    userCan(user, "finalize_kpi"),
+    getAllowanceConfig(),
+    getLatestAssessmentFinalByCoach(),
+  ]);
   const coaches = [...run.coachResults].sort((a, b) => b.finalScore - a.finalScore);
   const totalPayout = coaches.reduce((s, c) => s + (c.payout || 0), 0);
-  // Operator center codes + aliases, passed to the table so it can normalize the
-  // stored (possibly raw) center labels onto the configured codes for display.
-  const allowanceConfig = await getAllowanceConfig();
 
   const header = (
     <div className="flex items-start justify-between">
@@ -64,7 +69,6 @@ export default async function RunDetailPage({
   // Editable management review — admin / super_admin on a draft month.
   if (isDraft && canFinalize) {
     // Latest assessment final % per coach — auto-fills + locks each coach's Mgmt %.
-    const assessmentMap = await getLatestAssessmentFinalByCoach();
     const assessmentByCoach: Record<number, number> = Object.fromEntries(
       [...assessmentMap.entries()].map(([coachId, pct]) => [coachId, Math.round(pct)]),
     );
