@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f7fb;
+  /* Warm paper canvas (design.md "canvas-soft") — document calm, never clinical. */
+  --background: #f6f5f4;
+  /* CI Grey — the brand's warm near-black ink. */
   --foreground: #312b29;
+  --hairline: #e7e5e2;
 }
 
 @theme inline {
@@ -12,13 +15,29 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Optimum Swim School brand palette. */
+/* Optimum Swim School brand palette (CI guide 4.0) over a Notion-calm base:
+   one structural accent per brand section, warm paper canvas, warm-grey ink. */
 @theme {
   --color-brand: #0061ff;
   --color-brand-dark: #0b4fcc;
   --color-brand-light: #eaf1ff;
   --color-accent: #fcb731;
   --color-accent-bright: #ffca30;
+
+  /* Warm-grey ink ramp (Tailwind stone) replacing the default cool gray scale:
+     every existing text-gray, border-gray and bg-gray class adopts the warm
+     document tone without touching components. */
+  --color-gray-50: #fafaf9;
+  --color-gray-100: #f5f4f2;
+  --color-gray-200: #e7e5e2;
+  --color-gray-300: #d6d3d1;
+  --color-gray-400: #a39e98;
+  --color-gray-500: #78716c;
+  --color-gray-600: #57534e;
+  --color-gray-700: #44403c;
+  --color-gray-800: #312b29;
+  --color-gray-900: #211d1b;
+  --color-gray-950: #0f0d0c;
 
   /* Remap the indigo scale to Brand Blue so the app's existing indigo-* classes adopt the brand. */
   --color-indigo-50: #eaf1ff;
@@ -137,9 +156,9 @@
    Single-class shortcuts that bundle font-size + line-height + weight for each
    role. Color is intentionally NOT included — pair with `text-gray-900` for
    headings, `text-muted` for metadata, etc. */
-.text-display { font-size: 1.875rem; line-height: 1.25; font-weight: 700; }
-.text-h1 { font-size: 1.5rem; line-height: 1.25; font-weight: 700; }
-.text-h2 { font-size: 1.125rem; line-height: 1.375; font-weight: 700; }
+.text-display { font-size: 1.875rem; line-height: 1.2; font-weight: 800; letter-spacing: -0.035em; }
+.text-h1 { font-size: 1.5rem; line-height: 1.25; font-weight: 800; letter-spacing: -0.025em; }
+.text-h2 { font-size: 1.125rem; line-height: 1.375; font-weight: 700; letter-spacing: -0.015em; }
 .text-h3 { font-size: 1rem; line-height: 1.375; font-weight: 600; }
 .text-body-lg { font-size: 1rem; line-height: 1.5; font-weight: 400; }
 .text-body { font-size: 0.875rem; line-height: 1.5; font-weight: 400; }
@@ -162,11 +181,11 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c4d4ee;
+  background: #d6d3d1;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #9fb8e0;
+  background: #a39e98;
 }
 
 .fade-in {
@@ -197,12 +216,16 @@ table {
   font-variant-numeric: tabular-nums;
 }
 
-/* Soft, layered card elevation — more depth than a flat shadow. */
+/* Barely-there layered elevation (design.md): many near-transparent layers so
+   cards feel gently lifted off the paper, never dramatically dropped. */
 .shadow-card {
   box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 4px 14px -4px rgba(16, 24, 40, 0.08);
+    0 0.2px 1px rgba(33, 29, 27, 0.012),
+    0 0.8px 2.9px rgba(33, 29, 27, 0.02),
+    0 2px 7.8px rgba(33, 29, 27, 0.027),
+    0 4px 18px rgba(33, 29, 27, 0.04);
 }
+
 
 /* Clear, brand-tinted keyboard focus for interactive chrome (links, buttons,
    tabs). :where() keeps specificity 0 so component styles still win; form fields
