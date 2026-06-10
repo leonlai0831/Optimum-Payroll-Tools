@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
-import type { Role } from "./types";
+import type { Role, ToolCategory } from "./types";
 
 export interface SessionData {
   userId?: number;
@@ -35,6 +35,8 @@ export interface CurrentUser {
   role: Role;
   coachId: number | null;
   gymStaffId: number | null;
+  /** Launcher categories this account may see (super_admin ignores this). */
+  visibleCategories: ToolCategory[];
   active: boolean;
 }
 
@@ -61,6 +63,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     role: user.role,
     coachId: user.coachId,
     gymStaffId: user.gymStaffId,
+    visibleCategories: user.visibleCategories,
     active: user.active,
   };
 });

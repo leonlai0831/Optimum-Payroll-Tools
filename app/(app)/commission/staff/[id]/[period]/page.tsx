@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getCapabilities } from "@/lib/auth/permissions";
 import { getGymStaffMember, getGymStaffMonth } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
 import { cn, rm, rm2 } from "@/lib/utils";
@@ -26,8 +27,18 @@ function Stat({ label, value, tone = "muted" }: { label: string; value: string; 
 
 export default async function GymStaffMonthPage({ params }: { params: Promise<{ id: string; period: string }> }) {
   const { id, period } = await params;
-  const [user, member] = await Promise.all([getCurrentUser(), getGymStaffMember(Number(id))]);
+  const staffId = Number(id);
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  // Same access rule as the export route: anyone who can view all staff, or the
+  // staff member viewing their own earnings. Gate before fetching member data.
+  const caps = await getCapabilities(user);
+  const canViewAll = caps.has("view_all_staff");
+  const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
+  if (!canViewAll && !isOwn) redirect("/");
+
+  const member = await getGymStaffMember(staffId);
   if (!member) notFound();
   const detail = await getGymStaffMonth(member, decodeURIComponent(period));
   if (!detail) notFound();

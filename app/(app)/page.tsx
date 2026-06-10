@@ -3,6 +3,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Dumbbell,
+  LayoutGrid,
   ScrollText,
   ShieldCheck,
   Trophy,
@@ -16,7 +17,7 @@ import { Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
-import type { Capability } from "@/lib/auth/types";
+import { TOOL_CATEGORY_LABELS, type Capability } from "@/lib/auth/types";
 import type { Brand } from "@/components/brand-shell";
 import { MARKETING_TOOLS } from "@/lib/marketing/tools";
 
@@ -87,6 +88,14 @@ const TOOLS: Tool[] = [
     brand: "system",
   },
   {
+    href: "/system/categories",
+    title: "Category Visibility",
+    subtitle: "Which home-screen categories each account sees",
+    icon: LayoutGrid,
+    superAdmin: true,
+    brand: "system",
+  },
+  {
     href: "/system/audit",
     title: "Audit log",
     subtitle: "History of sensitive changes",
@@ -104,11 +113,12 @@ const TOOLS: Tool[] = [
   },
 ];
 
-/** Launcher groups, in display order. */
+/** Launcher groups, in display order. Labels for the assignable categories come
+ * from TOOL_CATEGORY_LABELS so the Category Visibility page can never drift. */
 const BRAND_GROUPS: { brand: Brand; label: string }[] = [
-  { brand: "swim", label: "Optimum Swim School" },
-  { brand: "fit", label: "Optimum Fit" },
-  { brand: "marketing", label: "Optimum Marketing" },
+  { brand: "swim", label: TOOL_CATEGORY_LABELS.swim },
+  { brand: "fit", label: TOOL_CATEGORY_LABELS.fit },
+  { brand: "marketing", label: TOOL_CATEGORY_LABELS.marketing },
   { brand: "system", label: "System Setting" },
 ];
 
@@ -165,21 +175,33 @@ export default async function HubPage() {
   const user = await getCurrentUser();
   const caps = user ? await getCapabilities(user) : new Set<Capability>();
   const isSuperAdmin = user?.role === "super_admin";
+  // Category Visibility (System Setting): non-super-admins only see the brand
+  // groups granted on their account; super_admin short-circuits the check and
+  // always sees everything (including the superAdmin-gated System group).
+  const visibleBrands = new Set<Brand>(user?.visibleCategories ?? []);
   // The Marketing group's cards are owned by the marketing sandbox
   // (lib/marketing/tools.ts), so that module can add cards without touching this
   // shared launcher. Everything else is defined in TOOLS above.
   const tools = [
     ...TOOLS,
     ...MARKETING_TOOLS.map((t): Tool => ({ ...t, brand: "marketing" })),
-  ].filter((tool) => (!tool.cap || caps.has(tool.cap)) && (!tool.superAdmin || isSuperAdmin));
-  if (user?.coachId && caps.has("view_own")) {
-    tools.push({
-      href: `/staff/${user.coachId}`,
-      title: "My Profile",
-      subtitle: "Your performance record",
-      icon: UserCircle,
-    });
-  }
+  ].filter(
+    (tool) =>
+      (!tool.cap || caps.has(tool.cap)) &&
+      (!tool.superAdmin || isSuperAdmin) &&
+      (isSuperAdmin || visibleBrands.has(tool.brand ?? "swim")),
+  );
+  // The user's own profile is not a category tool — it stays reachable in its
+  // own group even when every brand category is hidden for the account.
+  const profileTool: Tool | null =
+    user?.coachId && caps.has("view_own")
+      ? {
+          href: `/staff/${user.coachId}`,
+          title: "My Profile",
+          subtitle: "Your performance record",
+          icon: UserCircle,
+        }
+      : null;
 
   return (
     <div className="fade-in space-y-6">
@@ -188,26 +210,37 @@ export default async function HubPage() {
         <p className="mt-1 text-body text-muted">Choose a calculator to get started.</p>
       </div>
 
-      {tools.length === 0 ? (
+      {tools.length === 0 && !profileTool ? (
         <Card className="p-6 text-sm text-gray-500">
-          No tools are available for your role yet.
+          No tools are available for your account yet. An admin can adjust your
+          role&apos;s permissions or your category visibility.
         </Card>
       ) : (
-        BRAND_GROUPS.map(({ brand, label }) => {
-          const group = tools.filter((t) => (t.brand ?? "swim") === brand);
-          if (group.length === 0) return null;
-          return (
-            // data-brand re-skins this group's cards (the Fit group renders black/yellow).
-            <section key={brand} data-brand={brand} className="space-y-3">
-              <h2 className="text-overline text-gray-400">{label}</h2>
+        <>
+          {BRAND_GROUPS.map(({ brand, label }) => {
+            const group = tools.filter((t) => (t.brand ?? "swim") === brand);
+            if (group.length === 0) return null;
+            return (
+              // data-brand re-skins this group's cards (the Fit group renders black/yellow).
+              <section key={brand} data-brand={brand} className="space-y-3">
+                <h2 className="text-overline text-gray-400">{label}</h2>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {group.map((tool) => (
+                    <ToolCard key={tool.title} tool={tool} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          {profileTool && (
+            <section className="space-y-3">
+              <h2 className="text-overline text-gray-400">Personal</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.map((tool) => (
-                  <ToolCard key={tool.title} tool={tool} />
-                ))}
+                <ToolCard tool={profileTool} />
               </div>
             </section>
-          );
-        })
+          )}
+        </>
       )}
     </div>
   );

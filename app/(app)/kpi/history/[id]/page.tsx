@@ -61,7 +61,7 @@ export default async function RunDetailPage({
       </div>
       <div className="flex items-center gap-2">
         {!isDraft && canFinalize && <ReopenRunButton id={run.id} period={run.periodLabel} />}
-        <DeleteRunButton id={run.id} />
+        {canFinalize && <DeleteRunButton id={run.id} />}
       </div>
     </div>
   );

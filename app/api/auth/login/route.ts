@@ -77,6 +77,9 @@ export async function POST(req: Request) {
 
   attempts.delete(rateKey); // clear the throttle on a successful login
   const session = await getSession();
+  // Session fixation: never carry a pre-login session forward — drop any existing
+  // session data so a successful login always issues a fresh cookie.
+  session.destroy();
   session.userId = user.id;
   session.role = user.role;
   await session.save();

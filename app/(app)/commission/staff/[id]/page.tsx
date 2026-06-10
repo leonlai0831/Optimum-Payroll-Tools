@@ -14,13 +14,23 @@ export const dynamic = "force-dynamic";
 
 export default async function GymStaffProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [user, member] = await Promise.all([getCurrentUser(), getGymStaffMember(Number(id))]);
+  const staffId = Number(id);
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const caps = await getCapabilities(user);
+
+  // Same access rule as the export route: anyone who can view all staff, or the
+  // staff member viewing their own earnings. The gate runs BEFORE any member
+  // data is fetched; the remaining lookups then share one round-trip.
+  const canViewAll = caps.has("view_all_staff");
+  const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
+  if (!canViewAll && !isOwn) redirect("/");
+
+  const member = await getGymStaffMember(staffId);
   if (!member) notFound();
-  const [report, noteRecords, caps] = await Promise.all([
+  const [report, noteRecords] = await Promise.all([
     getGymStaffEarnings(member),
     listGymNotes(member.id),
-    getCapabilities(user),
   ]);
   const canEdit = caps.has("edit_staff");
   const notes: NoteView[] = noteRecords.map((n) => ({
@@ -36,12 +46,14 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
 
   return (
     <div className="space-y-4">
-      <Link
-        href="/commission/staff"
-        className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
-      >
-        <ArrowLeft className="h-4 w-4" /> Directory
-      </Link>
+      {canViewAll && (
+        <Link
+          href="/commission/staff"
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ArrowLeft className="h-4 w-4" /> Directory
+        </Link>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold text-gray-900">{member.name}</h1>

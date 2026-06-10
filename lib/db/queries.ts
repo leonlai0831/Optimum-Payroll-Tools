@@ -34,7 +34,7 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type Capability, type PermissionConfig, type Role } from "@/lib/auth/types";
+import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type Capability, type PermissionConfig, type Role, type ToolCategory } from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -1738,6 +1738,7 @@ export async function createUser(input: {
   displayName?: string;
   coachId?: number | null;
   gymStaffId?: number | null;
+  visibleCategories?: ToolCategory[];
 }): Promise<UserRecord> {
   const db = await getDb();
   const email = normalizeEmail(input.email);
@@ -1753,6 +1754,10 @@ export async function createUser(input: {
       role: input.role,
       coachId: input.coachId ?? null,
       gymStaffId: input.gymStaffId ?? null,
+      // Omitted → column default (all categories).
+      ...(input.visibleCategories !== undefined
+        ? { visibleCategories: input.visibleCategories }
+        : {}),
     })
     .returning();
   return row;
@@ -1767,6 +1772,7 @@ export async function updateUser(
     active?: boolean;
     coachId?: number | null;
     gymStaffId?: number | null;
+    visibleCategories?: ToolCategory[];
     password?: string;
   },
 ): Promise<void> {
@@ -1785,6 +1791,7 @@ export async function updateUser(
   if (patch.active !== undefined) set.active = patch.active;
   if (patch.coachId !== undefined) set.coachId = patch.coachId;
   if (patch.gymStaffId !== undefined) set.gymStaffId = patch.gymStaffId;
+  if (patch.visibleCategories !== undefined) set.visibleCategories = patch.visibleCategories;
   if (patch.password) set.passwordHash = hashPassword(patch.password);
   await db.update(users).set(set).where(eq(users.id, id));
 }
