@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "visible_categories" jsonb DEFAULT '["swim","fit","marketing"]'::jsonb NOT NULL;
