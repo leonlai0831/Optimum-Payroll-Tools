@@ -7,7 +7,14 @@ import { Button, Spinner } from "@/components/ui";
 import { ConfirmModal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 
-export function DeleteRunButton({ id }: { id: number }) {
+export function DeleteRunButton({
+  id,
+  compact = false,
+}: {
+  id: number;
+  /** Small outline chrome for the history list's period-row header. */
+  compact?: boolean;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -33,9 +40,21 @@ export function DeleteRunButton({ id }: { id: number }) {
 
   return (
     <>
-      <Button variant="danger" onClick={() => setOpen(true)} disabled={busy}>
-        {busy ? <Spinner /> : <Trash2 className="h-4 w-4" />} Delete
-      </Button>
+      {compact ? (
+        <Button
+          variant="outline"
+          className="px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 active:bg-red-100"
+          onClick={() => setOpen(true)}
+          disabled={busy}
+          title="Delete this saved month"
+        >
+          {busy ? <Spinner /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+        </Button>
+      ) : (
+        <Button variant="danger" onClick={() => setOpen(true)} disabled={busy}>
+          {busy ? <Spinner /> : <Trash2 className="h-4 w-4" />} Delete
+        </Button>
+      )}
       <ConfirmModal
         open={open}
         onClose={() => setOpen(false)}
