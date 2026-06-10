@@ -16,6 +16,7 @@ import {
   gymNotes,
   gymStaff,
   config,
+  kpiIngests,
   lessonPlans,
   notes,
   permissionConfig,
@@ -29,6 +30,7 @@ import {
   type CommissionRunRecord,
   type GymNoteRecord,
   type GymStaffRecord,
+  type KpiIngestRecord,
   type LessonPlanRecord,
   type TeachingRunRecord,
   type NoteRecord,
@@ -879,6 +881,107 @@ export async function deleteRun(id: number): Promise<void> {
   await db.delete(runs).where(eq(runs.id, id));
   invalidateSingleton("kpi-runs");
   invalidateSingleton("kpi-trend");
+}
+
+// ── KPI ingests (machine-pushed monthly data, staged for review) ─────────────
+
+export type KpiIngestStatus = KpiIngestRecord["status"];
+
+/** List-page projection: everything except the (potentially large) rows blob. */
+export interface KpiIngestSummary {
+  id: number;
+  periodLabel: string;
+  label: string;
+  status: KpiIngestStatus;
+  rowCount: number;
+  importedRunId: number | null;
+  importedAt: Date | null;
+  receivedAt: Date;
+}
+
+/** Stage a pushed delivery as pending. Rows must already be normalized InstructorRow[]. */
+export async function createKpiIngest(input: {
+  periodLabel: string;
+  label: string;
+  rows: InstructorRow[];
+}): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(kpiIngests)
+    .values({ periodLabel: input.periodLabel, label: input.label, rows: input.rows })
+    .returning({ id: kpiIngests.id });
+  return row.id;
+}
+
+/** ALL deliveries, newest first — discarded and imported ones stay listed forever. */
+export async function listKpiIngests(): Promise<KpiIngestSummary[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: kpiIngests.id,
+      periodLabel: kpiIngests.periodLabel,
+      label: kpiIngests.label,
+      status: kpiIngests.status,
+      rowCount: sql<number>`jsonb_array_length(${kpiIngests.rows})`.mapWith(Number),
+      importedRunId: kpiIngests.importedRunId,
+      importedAt: kpiIngests.importedAt,
+      receivedAt: kpiIngests.receivedAt,
+    })
+    .from(kpiIngests)
+    .orderBy(desc(kpiIngests.receivedAt), desc(kpiIngests.id));
+  return rows;
+}
+
+/** Pending deliveries only (drives the dashboard's "Pending uploads" card). */
+export async function listPendingKpiIngests(): Promise<KpiIngestSummary[]> {
+  return (await listKpiIngests()).filter((i) => i.status === "pending");
+}
+
+export async function getKpiIngest(id: number): Promise<KpiIngestRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(kpiIngests).where(eq(kpiIngests.id, id)).limit(1);
+  return rows[0];
+}
+
+/**
+ * Replace a pending delivery's rows (owner edits before import). Returns false —
+ * and writes nothing — once the delivery is no longer pending: an imported
+ * delivery is the immutable record of what was received/used.
+ */
+export async function updateKpiIngestRows(id: number, rows: InstructorRow[]): Promise<boolean> {
+  const db = await getDb();
+  const updated = await db
+    .update(kpiIngests)
+    .set({ rows, updatedAt: new Date() })
+    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .returning({ id: kpiIngests.id });
+  return updated.length > 0;
+}
+
+/** Discard a pending delivery (status flip — never a hard delete). False if not pending. */
+export async function discardKpiIngest(id: number): Promise<boolean> {
+  const db = await getDb();
+  const updated = await db
+    .update(kpiIngests)
+    .set({ status: "discarded", updatedAt: new Date() })
+    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .returning({ id: kpiIngests.id });
+  return updated.length > 0;
+}
+
+/**
+ * Mark a pending delivery imported into a saved run. Validates the ingest exists
+ * AND is still pending; anything else is a silent no-op (returns false) so a
+ * stale/duplicate `ingestId` on a run save can never break the save itself.
+ */
+export async function importKpiIngest(id: number, runId: number): Promise<boolean> {
+  const db = await getDb();
+  const updated = await db
+    .update(kpiIngests)
+    .set({ status: "imported", importedRunId: runId, importedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .returning({ id: kpiIngests.id });
+  return updated.length > 0;
 }
 
 // ── Commission (Optimum Fit) ──────────────────────────────────────────────────

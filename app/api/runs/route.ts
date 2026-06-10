@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createRun, listRuns, recordAudit, runStatusFromResults } from "@/lib/db/queries";
+import {
+  createRun,
+  importKpiIngest,
+  listRuns,
+  recordAudit,
+  runStatusFromResults,
+} from "@/lib/db/queries";
 import { validateRunPayload } from "@/lib/kpi/run-validate";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { RunCoach } from "@/lib/types";
@@ -26,6 +32,8 @@ export async function POST(req: Request) {
     csvRows?: InstructorRow[];
     configSnapshot?: AppConfig;
     coachResults?: RunCoach[];
+    /** Set when the dashboard was seeded from a staged ingest (/kpi?ingest=<id>). */
+    ingestId?: number;
   };
   if (!body.periodLabel) {
     return NextResponse.json({ error: "periodLabel is required" }, { status: 400 });
@@ -48,6 +56,13 @@ export async function POST(req: Request) {
     coachResults: body.coachResults ?? [],
     status,
   });
+  // Close the loop on a staged delivery: mark it imported + link the run. The
+  // helper validates the ingest exists and is still pending — a stale/duplicate
+  // id is silently ignored so it can never break the save.
+  const importedIngest =
+    typeof body.ingestId === "number" && Number.isInteger(body.ingestId)
+      ? await importKpiIngest(body.ingestId, id)
+      : false;
   if (actor) {
     await recordAudit({
       actorId: actor.id,
@@ -55,7 +70,7 @@ export async function POST(req: Request) {
       action: "kpi_run.save",
       entity: "run",
       entityId: id,
-      summary: `Saved KPI bonus run for ${body.periodLabel} (${body.coachResults?.length ?? 0} coaches, ${status})`,
+      summary: `Saved KPI bonus run for ${body.periodLabel} (${body.coachResults?.length ?? 0} coaches, ${status})${importedIngest ? ` — imported from upload #${body.ingestId}` : ""}`,
     });
   }
   return NextResponse.json({ ok: true, id, status });
