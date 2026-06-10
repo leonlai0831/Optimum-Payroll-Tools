@@ -19,7 +19,6 @@ export interface LinkCoach {
   aliases: string[];
   center: string;
   tier: AllowanceTier | null;
-  active: boolean;
   kpiLinkNa: boolean;
   kpiLinkNaTier: AllowanceTier | null;
 }
@@ -286,10 +285,7 @@ export function KpiLinkManager({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium text-gray-900">{c.canonicalName}</div>
-                    <div className="text-[11px] text-gray-400">
-                      {c.center || "—"}
-                      {!c.active && <span className="ml-1 text-gray-400">· inactive</span>}
-                    </div>
+                    <div className="text-[11px] text-gray-400">{c.center || "—"}</div>
                   </div>
                   <span className="shrink-0 text-xs font-medium text-gray-700">
                     {c.tier ?? "—"}
@@ -400,10 +396,7 @@ export function KpiLinkManager({
                   <tr key={c.id} className={cn(recheck && "bg-amber-50/60")}>
                     <td className="px-3 py-2">
                       <div className="font-medium text-gray-900">{c.canonicalName}</div>
-                      <div className="text-[11px] text-gray-400">
-                        {c.center || "—"}
-                        {!c.active && <span className="ml-1 text-gray-400">· inactive</span>}
-                      </div>
+                      <div className="text-[11px] text-gray-400">{c.center || "—"}</div>
                     </td>
                     <td className="px-3 py-2">
                       <span className="text-xs font-medium text-gray-700">{c.tier ?? "—"}</span>

@@ -14,16 +14,19 @@ export default async function KpiLinksPage() {
   if (!canEdit && !caps.has("swim_view_staff")) redirect("/");
 
   const [coaches, accountNames] = await Promise.all([listCoaches(), listAllCsvAccountNames()]);
-  const linkCoaches: LinkCoach[] = coaches.map((c) => ({
-    id: c.id,
-    canonicalName: c.canonicalName,
-    aliases: c.aliases ?? [],
-    center: c.center,
-    tier: c.allowanceTier ?? null,
-    active: c.active,
-    kpiLinkNa: c.kpiLinkNa,
-    kpiLinkNaTier: c.kpiLinkNaTier ?? null,
-  }));
+  // Inactive staff must not appear in pay-operation lists — links are standing
+  // rules for FUTURE uploads, so only active coaches belong here.
+  const linkCoaches: LinkCoach[] = coaches
+    .filter((c) => c.active)
+    .map((c) => ({
+      id: c.id,
+      canonicalName: c.canonicalName,
+      aliases: c.aliases ?? [],
+      center: c.center,
+      tier: c.allowanceTier ?? null,
+      kpiLinkNa: c.kpiLinkNa,
+      kpiLinkNaTier: c.kpiLinkNaTier ?? null,
+    }));
 
   return <KpiLinkManager coaches={linkCoaches} canEdit={canEdit} accountNames={accountNames} />;
 }
