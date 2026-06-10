@@ -79,6 +79,7 @@ import { previousPeriod } from "@/lib/allowance/period";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { calcAllowance } from "@/lib/allowance/calc";
 import { extractCenterHours, mergeBulkRow } from "@/lib/allowance/bulk";
+import { makeCenterNormalizer } from "@/lib/allowance/centers";
 
 /**
  * A query executor: either the pooled `DB` or a transaction handle. The tx type
@@ -417,17 +418,33 @@ export async function deleteCoach(id: number): Promise<void> {
  */
 export async function upsertCoachesFromRun(coachResults: RunCoach[]): Promise<void> {
   const db = await getDb();
+  const normalizeCtr = await centerNormalizerFromConfig();
   // One transaction so the `listCoaches` read + conditional insert is atomic:
   // two concurrent finalized runs can't both miss the same coach and each insert
   // a duplicate profile.
-  await db.transaction((tx) => upsertCoachesFromRunWith(tx, coachResults));
+  await db.transaction((tx) => upsertCoachesFromRunWith(tx, coachResults, normalizeCtr));
+}
+
+/**
+ * Normalizer mapping raw CSV center labels onto the configured center codes
+ * (Settings -> Centers aliases), e.g. "Subang USJ" -> "USJ". Fetched OUTSIDE any
+ * transaction (memoized singleton) so the carry-over writes store codes, not the
+ * raw spelling of whichever CSV happened to be uploaded.
+ */
+async function centerNormalizerFromConfig(): Promise<(raw: string) => string> {
+  const cfg = await getAllowanceConfig();
+  return makeCenterNormalizer(cfg.centers, cfg.centerAliases ?? {});
 }
 
 /**
  * Executor-threaded core of `upsertCoachesFromRun`, so a caller (e.g. `createRun`)
  * can run the run insert and the profile carry-over in ONE transaction.
  */
-async function upsertCoachesFromRunWith(tx: Tx, coachResults: RunCoach[]): Promise<void> {
+async function upsertCoachesFromRunWith(
+  tx: Tx,
+  coachResults: RunCoach[],
+  normalizeCtr: (raw: string) => string,
+): Promise<void> {
   const existing = await listCoachesWith(tx);
   for (const rc of coachResults) {
     const match =
@@ -446,7 +463,7 @@ async function upsertCoachesFromRunWith(tx: Tx, coachResults: RunCoach[]): Promi
         .update(coaches)
         .set({
           aliases: mergedAliases,
-          center: rc.center || match.center,
+          center: normalizeCtr(rc.center) || match.center,
           defaultPosition: rc.position,
           lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
           ...mgmtUpdate,
@@ -457,7 +474,7 @@ async function upsertCoachesFromRunWith(tx: Tx, coachResults: RunCoach[]): Promi
       await tx.insert(coaches).values({
         canonicalName: rc.canonicalName,
         aliases: mergedAliases,
-        center: rc.center,
+        center: normalizeCtr(rc.center),
         defaultPosition: rc.position,
         lastAllowance: rc.teachingAllowance,
         lastMgmtAssessment: rc.mgmtAssessment ?? null,
@@ -605,6 +622,7 @@ export async function createRun(input: {
   // roll back) together, so a crash/retry between the two can't leave a saved
   // month whose profiles were never carried forward — or carried-forward
   // profiles for a month that was never saved.
+  const normalizeCtr = await centerNormalizerFromConfig();
   const id = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(runs)
@@ -619,7 +637,7 @@ export async function createRun(input: {
       .returning({ id: runs.id });
     // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
     // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
-    if (status === "finalized") await upsertCoachesFromRunWith(tx, input.coachResults);
+    if (status === "finalized") await upsertCoachesFromRunWith(tx, input.coachResults, normalizeCtr);
     return row.id;
   });
   invalidateSingleton("kpi-runs");

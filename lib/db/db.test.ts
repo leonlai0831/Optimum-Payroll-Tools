@@ -151,6 +151,26 @@ describe("DB layer (PGlite in-memory)", () => {
     expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("finalized");
   });
 
+  it("normalizes raw CSV center names onto configured codes in the coach carry-over", async () => {
+    // Settings → Centers: configure USJ with a "Subang USJ" alias.
+    await queries.saveCenters(["HQ", "USJ"], { HQ: [], USJ: ["Subang USJ"] });
+
+    await queries.createRun({
+      periodLabel: "2027-04",
+      filename: "apr.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("CENTER CARL", { center: "Subang USJ" })],
+    });
+    const carl = (await queries.listCoaches()).find((c) => c.canonicalName === "CENTER CARL")!;
+    expect(carl.center).toBe("USJ"); // alias → code, not the raw CSV spelling
+
+    // An unconfigured value passes through untouched (never silently dropped).
+    await queries.upsertCoachesFromRun([makeCoach("CENTER CARA", { center: "Mystery Pool" })]);
+    const cara = (await queries.listCoaches()).find((c) => c.canonicalName === "CENTER CARA")!;
+    expect(cara.center).toBe("Mystery Pool");
+  });
+
   it("dedupes a twice-saved month in trends and the coach profile (latest save wins)", async () => {
     // The same period label saved twice (e.g. a retry, or a corrected re-upload).
     await queries.createRun({
