@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileUp, Link2, Save, Sparkles, TriangleAlert } from "lucide-react";
+import { CoachResultPdfButton } from "@/components/coach-result-pdf-button";
 import { Drawer } from "@/components/drawer";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
@@ -575,10 +576,9 @@ export function Dashboard({
     setSavedId(null);
   }
 
-  async function save() {
-    if (!config) return;
-    setSaving(true);
-    const coachResults: RunCoach[] = ranked.map((g) => ({
+  /** Flatten a merge group + its computed scores into the persisted RunCoach shape. */
+  function toRunCoach(g: (typeof groups)[number]): RunCoach {
+    return {
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
       accounts: g.includedNames,
@@ -595,7 +595,13 @@ export function Dashboard({
       payout: g.comp.payout,
       breakdown: g.comp.breakdown,
       isComplete: g.comp.isComplete,
-    }));
+    };
+  }
+
+  async function save() {
+    if (!config) return;
+    setSaving(true);
+    const coachResults: RunCoach[] = ranked.map(toRunCoach);
     try {
       const res = await fetch("/api/runs", {
         method: "POST",
@@ -1120,6 +1126,8 @@ export function Dashboard({
       {detail && config && (
         <CoachDetail
           key={detail.id}
+          runCoach={toRunCoach(detail)}
+          periodLabel={period}
           name={detail.meta.canonicalName}
           position={detail.meta.position}
           finalScore={detail.comp.finalScore}
@@ -1149,6 +1157,10 @@ function mostCommon(values: string[]): string {
 }
 
 interface DetailProps {
+  /** The coach flattened to the persisted shape — drives the PDF export. */
+  runCoach: RunCoach;
+  /** The upload's period label (e.g. "2026-04") — stamped onto the PDF. */
+  periodLabel: string;
   name: string;
   position: Position;
   finalScore: number;
@@ -1206,12 +1218,19 @@ function CoachDetail(props: DetailProps) {
       open
       onClose={props.onClose}
       header={
-        <>
-          <h3 className="text-h2 text-gray-900">{props.name}</h3>
-          <p className="text-caption text-muted">
-            {props.position} · {props.students} students
-          </p>
-        </>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-h2 text-gray-900">{props.name}</h3>
+            <p className="text-caption text-muted">
+              {props.position} · {props.students} students
+            </p>
+          </div>
+          <CoachResultPdfButton
+            className="shrink-0"
+            coach={props.runCoach}
+            periodLabel={props.periodLabel}
+          />
+        </div>
       }
     >
         <div className="grid grid-cols-3 gap-2">
