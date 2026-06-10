@@ -242,16 +242,6 @@ table {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='36' viewBox='0 0 72 36'%3E%3Cpath d='M0 27c6 0 6-9 12-9s6 9 12 9 6-9 12-9 6 9 12 9 6-9 12-9 6 9 12 9' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
   background-size: 72px 36px;
 }
-/* A short brand-yellow wave underline for the one hero headline. */
-.wave-underline::after {
-  content: "";
-  display: block;
-  margin-top: 0.4rem;
-  width: 5.5rem;
-  height: 0.55rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='9' viewBox='0 0 88 9'%3E%3Cpath d='M1 6.5C8 6.5 8 2 15 2s7 4.5 14 4.5S36 2 43 2s7 4.5 14 4.5S64 2 71 2s7 4.5 14 4.5' fill='none' stroke='%23fcb731' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-}
 
 /* Clear, brand-tinted keyboard focus for interactive chrome (links, buttons,
    tabs). :where() keeps specificity 0 so component styles still win; form fields

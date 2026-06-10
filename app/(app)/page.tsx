@@ -209,8 +209,8 @@ export default async function HubPage() {
           everything below stays quiet paper-and-hairline chrome. */}
       <section className="wave-texture overflow-hidden rounded-2xl bg-brand px-6 py-7 sm:px-8">
         <p className="text-overline text-white/70">Optimum · Staff Operations</p>
-        <h1 className="text-display wave-underline mt-1 text-white">Optimum Payroll Tools</h1>
-        <p className="mt-3 text-body text-white/85">Choose a calculator to get started.</p>
+        <h1 className="text-display mt-1 text-white">Optimum Payroll Tools</h1>
+        <p className="mt-2 text-body text-white/85">Choose a calculator to get started.</p>
       </section>
 
       {tools.length === 0 && !profileTool ? (
