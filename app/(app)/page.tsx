@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ChevronRight,
   ClipboardCheck,
+  ClipboardList,
   Dumbbell,
   LayoutGrid,
   ScrollText,
@@ -64,6 +65,14 @@ const TOOLS: Tool[] = [
     subtitle: "Observation form · scores feed the KPI bonus",
     icon: ClipboardCheck,
     cap: "edit_appraisals",
+  },
+  {
+    // Land on History first (like the calculators); "New plan" stays a tab inside.
+    href: "/lesson-plans/history",
+    title: "Lesson Plan",
+    subtitle: "Class planning · actual & replacement lessons",
+    icon: ClipboardList,
+    cap: "edit_lesson_plans",
   },
   {
     title: "Admin KPI Bonus",

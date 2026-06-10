@@ -20,6 +20,7 @@ const GROUPS: { title: string; caps: Capability[] }[] = [
   { title: "Settings", caps: ["view_settings", "edit_settings"] },
   { title: "Staff", caps: ["view_all_staff", "edit_staff", "view_own"] },
   { title: "Performance", caps: ["edit_appraisals", "edit_notes"] },
+  { title: "Lesson Plans", caps: ["edit_lesson_plans", "review_lesson_plans"] },
   { title: "Operations", caps: ["run_kpi", "run_allowance"] },
   { title: "Accounts", caps: ["manage_users"] },
 ];

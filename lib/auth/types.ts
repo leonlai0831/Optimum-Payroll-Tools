@@ -24,6 +24,8 @@ export const CAPABILITIES = [
   "run_allowance",
   "run_commission",
   "view_audit",
+  "edit_lesson_plans",
+  "review_lesson_plans",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -41,6 +43,8 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   run_allowance: "Run allowance",
   run_commission: "Run gym staff commission",
   view_audit: "View audit log",
+  edit_lesson_plans: "Create & edit lesson plans",
+  review_lesson_plans: "Review lesson plans",
 };
 
 /**
@@ -102,6 +106,8 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "run_allowance",
     "run_commission",
     "view_audit",
+    "edit_lesson_plans",
+    "review_lesson_plans",
   ],
   // A team lead / senior coach: oversee and review the team, run the monthly
   // numbers, but no profile edits, user management, settings edits, or audit log.
@@ -115,6 +121,8 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "run_kpi",
     "run_allowance",
     "run_commission",
+    "edit_lesson_plans",
+    "review_lesson_plans",
   ],
-  staff: ["view_own"],
+  staff: ["view_own", "edit_lesson_plans"],
 };

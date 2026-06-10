@@ -16,6 +16,7 @@ import {
   gymNotes,
   gymStaff,
   config,
+  lessonPlans,
   notes,
   permissionConfig,
   runs,
@@ -28,6 +29,7 @@ import {
   type CommissionRunRecord,
   type GymNoteRecord,
   type GymStaffRecord,
+  type LessonPlanRecord,
   type TeachingRunRecord,
   type NoteRecord,
   type RunRecord,
@@ -58,6 +60,12 @@ import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/c
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymStaffInput } from "@/lib/gym/types";
+import type {
+  LessonPlanData,
+  LessonPlanStatus,
+  LessonPlanType,
+  LevelType,
+} from "@/lib/lesson-plan/types";
 import {
   extractStaffMonth,
   matcherFor,
@@ -2076,7 +2084,7 @@ export async function deleteUser(id: number): Promise<void> {
  * brand-new capability can't have been intentionally revoked. Extend when adding
  * default-granted capabilities that must reach existing deployments.
  */
-const BACKFILL_CAPS: Capability[] = ["finalize_kpi"];
+const BACKFILL_CAPS: Capability[] = ["finalize_kpi", "edit_lesson_plans", "review_lesson_plans"];
 
 export function normalizePermissionConfig(data: PermissionConfig): PermissionConfig {
   const out: PermissionConfig = { ...data };
@@ -2251,6 +2259,139 @@ export async function createGymNote(input: {
 export async function deleteGymNote(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(gymNotes).where(eq(gymNotes.id, id));
+}
+
+// ── Lesson plans ──────────────────────────────────────────────────────────────
+
+/** The editable content of a lesson plan (everything except identity/workflow). */
+export interface LessonPlanContent {
+  instructorName: string;
+  actualInstructorName: string;
+  center: string;
+  lessonDate: Date;
+  timeLabel: string;
+  levelType: LevelType | null;
+  classLevel: string;
+  ageGroup: string;
+  data: LessonPlanData;
+}
+
+export async function createLessonPlan(
+  input: LessonPlanContent & {
+    type: LessonPlanType;
+    createdByUserId: number;
+    createdByName: string;
+    coachId: number | null;
+  },
+): Promise<LessonPlanRecord> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(lessonPlans)
+    .values({ ...input, status: "draft" })
+    .returning();
+  return row;
+}
+
+/**
+ * Replace a plan's content. ANY content edit resets the status to draft so the
+ * plan must be re-submitted and re-reviewed — but the last review note (and
+ * reviewer attribution) is deliberately kept, so the owner can still see what
+ * was asked of them while editing.
+ */
+export async function updateLessonPlan(id: number, content: LessonPlanContent): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(lessonPlans)
+    .set({ ...content, status: "draft", updatedAt: new Date() })
+    .where(eq(lessonPlans.id, id));
+}
+
+export async function getLessonPlan(id: number): Promise<LessonPlanRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(lessonPlans).where(eq(lessonPlans.id, id)).limit(1);
+  return rows[0];
+}
+
+/** A History list row — the promoted columns only, never the jsonb body. */
+export interface LessonPlanListRow {
+  id: number;
+  type: LessonPlanType;
+  status: LessonPlanStatus;
+  createdByUserId: number;
+  createdByName: string;
+  instructorName: string;
+  actualInstructorName: string;
+  center: string;
+  lessonDate: Date;
+  timeLabel: string;
+  levelType: LevelType | null;
+  classLevel: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * List plans, newest lesson first. Pass `forUserId` to scope to one creator
+ * (the editor's own-plans view); omit it for the reviewer's all-plans view.
+ */
+export async function listLessonPlans(
+  opts: { forUserId?: number } = {},
+): Promise<LessonPlanListRow[]> {
+  const db = await getDb();
+  const projection = {
+    id: lessonPlans.id,
+    type: lessonPlans.type,
+    status: lessonPlans.status,
+    createdByUserId: lessonPlans.createdByUserId,
+    createdByName: lessonPlans.createdByName,
+    instructorName: lessonPlans.instructorName,
+    actualInstructorName: lessonPlans.actualInstructorName,
+    center: lessonPlans.center,
+    lessonDate: lessonPlans.lessonDate,
+    timeLabel: lessonPlans.timeLabel,
+    levelType: lessonPlans.levelType,
+    classLevel: lessonPlans.classLevel,
+    createdAt: lessonPlans.createdAt,
+    updatedAt: lessonPlans.updatedAt,
+  };
+  const base = db.select(projection).from(lessonPlans);
+  const query =
+    opts.forUserId != null ? base.where(eq(lessonPlans.createdByUserId, opts.forUserId)) : base;
+  return query.orderBy(desc(lessonPlans.lessonDate), desc(lessonPlans.id));
+}
+
+/** Move a draft / changes-requested plan into the review queue. */
+export async function submitLessonPlan(id: number): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(lessonPlans)
+    .set({ status: "submitted", updatedAt: new Date() })
+    .where(eq(lessonPlans.id, id));
+}
+
+/** Record a review outcome: approve, or send back with a note. */
+export async function reviewLessonPlan(
+  id: number,
+  action: "approve" | "request_changes",
+  note: string,
+  reviewer: { email: string },
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(lessonPlans)
+    .set({
+      status: action === "approve" ? "approved" : "changes_requested",
+      reviewNote: note,
+      reviewedByEmail: reviewer.email,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPlans.id, id));
+}
+
+export async function deleteLessonPlan(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(lessonPlans).where(eq(lessonPlans.id, id));
 }
 
 /**
