@@ -131,7 +131,9 @@ An external system can push the monthly KPI rows instead of a manual CSV upload:
 `POST /api/ingest/kpi` (`Authorization: Bearer <INGEST_API_KEY>`, constant-time compare in
 `lib/ingest/auth.ts`; 503 when the env var is unset, in-process per-IP rate limit, ~2 MB cap)
 accepts `{ periodLabel: "YYYY-MM", label?, rows }` with the **same flexible headers as the CSV
-upload** (normalized via `mapCsvRows`). Pushed data is **STAGED** in `kpi_ingests`
+upload** (normalized via `mapCsvRows`). The same endpoint also accepts a **raw CSV body**
+(`Content-Type: text/csv`, parsed in `lib/ingest/csv-body.ts`; `periodLabel` required + `label`
+optional as query params) with identical staging behavior. Pushed data is **STAGED** in `kpi_ingests`
 (`pending → imported | discarded` — never hard-deleted, rows stay viewable forever), audited as
 `kpi_ingest.received`. Owners (`run_kpi`) review on `/kpi/ingests` (section tab "Uploads"):
 edit/add/delete rows while pending (PATCH `/api/kpi/ingests/[id]`, audited), discard (status
