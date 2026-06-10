@@ -69,6 +69,18 @@ export function sanitizeToolCategories(input: unknown): ToolCategory[] | null {
   return TOOL_CATEGORIES.filter((c) => (input as string[]).includes(c));
 }
 
+/**
+ * Whether an account may see a launcher category. super_admin always does.
+ * Used by both the home launcher (hide cards) and the brand-section layouts
+ * (block direct navigation) so the two can't drift.
+ */
+export function canSeeCategory(
+  user: { role: Role; visibleCategories: ToolCategory[] },
+  category: ToolCategory,
+): boolean {
+  return user.role === "super_admin" || user.visibleCategories.includes(category);
+}
+
 /** Roles whose capabilities are configurable (super_admin is always all-access). */
 export type ConfigurableRole = Exclude<Role, "super_admin">;
 export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "supervisor", "staff"];
