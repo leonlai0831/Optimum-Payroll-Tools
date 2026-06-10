@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
-import type { Role, ToolCategory } from "./types";
+import { effectiveCategories, type Role, type ToolCategory } from "./types";
 
 export interface SessionData {
   userId?: number;
@@ -35,7 +35,12 @@ export interface CurrentUser {
   role: Role;
   coachId: number | null;
   gymStaffId: number | null;
-  /** Launcher categories this account may see (super_admin ignores this). */
+  /**
+   * EFFECTIVE launcher categories this account may see, already resolved by
+   * `getCurrentUser()`: per-user override ?? the role's default from the
+   * permission matrix (super_admin → all). Consumers (launcher, brand-section
+   * layouts via `canSeeCategory`) read this list as-is.
+   */
   visibleCategories: ToolCategory[];
   active: boolean;
 }
@@ -53,9 +58,17 @@ export interface CurrentUser {
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await getSession();
   if (!session.userId) return null;
-  const { getUserById } = await import("@/lib/db/queries");
+  const { getUserById, getPermissionConfig } = await import("@/lib/db/queries");
   const user = await getUserById(session.userId);
   if (!user || !user.active) return null;
+  // Resolve the EFFECTIVE category list here, in one place: user override ??
+  // the role's default from the permission matrix (a memoized singleton, so
+  // this adds no DB round-trip in the steady state); super_admin → all.
+  const visibleCategories = effectiveCategories(
+    user.role,
+    user.visibleCategories,
+    (await getPermissionConfig()).categories,
+  );
   return {
     id: user.id,
     email: user.email,
@@ -63,7 +76,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     role: user.role,
     coachId: user.coachId,
     gymStaffId: user.gymStaffId,
-    visibleCategories: user.visibleCategories,
+    visibleCategories,
     active: user.active,
   };
 });

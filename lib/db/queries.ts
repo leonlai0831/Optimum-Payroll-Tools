@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
@@ -16,6 +16,8 @@ import {
   gymNotes,
   gymStaff,
   config,
+  kpiIngests,
+  lessonPlans,
   notes,
   permissionConfig,
   runs,
@@ -28,13 +30,28 @@ import {
   type CommissionRunRecord,
   type GymNoteRecord,
   type GymStaffRecord,
+  type KpiIngestRecord,
+  type LessonPlanRecord,
   type TeachingRunRecord,
   type NoteRecord,
   type RunRecord,
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type Capability, type PermissionConfig, type Role, type ToolCategory } from "@/lib/auth/types";
+import {
+  ALL_TOOL_CATEGORIES,
+  CAPABILITIES,
+  CONFIGURABLE_ROLES,
+  DEFAULT_PERMISSION_CONFIG,
+  LEGACY_CAPABILITY_MAP,
+  sanitizeToolCategories,
+  type Capability,
+  type ConfigurableRole,
+  type LegacyPermissionConfig,
+  type PermissionConfig,
+  type Role,
+  type ToolCategory,
+} from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -52,11 +69,19 @@ import { DEFAULT_CLASSIFY_CONFIG } from "@/lib/kpi/classify";
 import { DEFAULT_ALLOWANCE_CONFIG } from "@/lib/allowance/defaults";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
+import { findAliasConflict, type AliasConflict } from "@/lib/kpi/alias-conflicts";
 import { defaultCommissionConfig } from "@/lib/commission/defaults";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymStaffInput } from "@/lib/gym/types";
+import type {
+  LessonPlanData,
+  LessonPlanStatus,
+  LessonPlanType,
+  LevelType,
+  SelfEvalAnswer,
+} from "@/lib/lesson-plan/types";
 import {
   extractStaffMonth,
   matcherFor,
@@ -77,6 +102,9 @@ import {
 } from "@/lib/allowance/types";
 import { previousPeriod } from "@/lib/allowance/period";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
+import { calcAllowance } from "@/lib/allowance/calc";
+import { extractCenterHours, mergeBulkRow } from "@/lib/allowance/bulk";
+import { makeCenterNormalizer } from "@/lib/allowance/centers";
 
 /**
  * A query executor: either the pooled `DB` or a transaction handle. The tx type
@@ -277,16 +305,24 @@ export interface CoachProfileData {
  * merged account/alias — mirroring `upsertCoachesFromRun`'s precedence.
  */
 export async function getCoachProfile(coachId: number): Promise<CoachProfileData | null> {
-  const coach = await getCoach(coachId);
-  if (!coach) return null;
   const db = await getDb();
-  const runRows = await db
-    .select({ periodLabel: runs.periodLabel, coachResults: runs.coachResults })
-    .from(runs)
-    .orderBy(runs.createdAt);
+  // The runs scan and the allowance history don't depend on the coach row, so
+  // fetch all three in parallel and bail afterwards if the coach doesn't exist.
+  const [coach, runRows, allowanceRows] = await Promise.all([
+    getCoach(coachId),
+    db
+      .select({ periodLabel: runs.periodLabel, coachResults: runs.coachResults })
+      .from(runs)
+      .orderBy(runs.createdAt),
+    listAllowanceRuns(),
+  ]);
+  if (!coach) return null;
 
   const names = new Set([coach.canonicalName, ...(coach.aliases ?? [])]);
-  const kpi: CoachKpiPoint[] = [];
+  // Ordered asc by createdAt: when the same period label was saved twice, the
+  // LATER save overwrites the earlier point — one point per period, never
+  // duplicates (mirrors the commission/teaching trend builders).
+  const kpiByPeriod = new Map<string, CoachKpiPoint>();
   for (const r of runRows) {
     const rc = r.coachResults.find(
       (c) =>
@@ -295,7 +331,7 @@ export async function getCoachProfile(coachId: number): Promise<CoachProfileData
         c.accounts.some((a) => names.has(a)),
     );
     if (rc) {
-      kpi.push({
+      kpiByPeriod.set(r.periodLabel, {
         period: r.periodLabel,
         finalScore: rc.finalScore,
         grade: rc.grade,
@@ -304,8 +340,9 @@ export async function getCoachProfile(coachId: number): Promise<CoachProfileData
       });
     }
   }
+  const kpi = [...kpiByPeriod.values()];
 
-  const allowance = (await listAllowanceRuns()).filter(
+  const allowance = allowanceRows.filter(
     (a) => a.coachId === coachId || a.canonicalName === coach.canonicalName,
   );
   return { coach, kpi, allowance };
@@ -363,6 +400,24 @@ export async function updateCoachAliases(id: number, aliases: string[]): Promise
 }
 
 /**
+ * Duplicate-alias guard for the KPI link editor: the first submitted alias
+ * already claimed by a DIFFERENT coach (alias or canonical name), or null when
+ * all are free. Checked before `updateCoachAliases` so one account can never
+ * end up on two profiles (the "ARIF - LMY [PK]" history-fork incident).
+ */
+export async function findCoachAliasConflict(
+  coachId: number,
+  aliases: string[],
+): Promise<AliasConflict | null> {
+  const all = await listCoaches();
+  return findAliasConflict(
+    coachId,
+    aliases,
+    all.map((c) => ({ id: c.id, canonicalName: c.canonicalName, aliases: c.aliases ?? [] })),
+  );
+}
+
+/**
  * Set (or clear) a coach's "not applicable for KPI linking" override. When
  * setting it, snapshot the tier it was set at so the link panel can re-surface
  * the coach if they later move up to a teaching tier.
@@ -400,54 +455,224 @@ export async function deleteCoach(id: number): Promise<void> {
   });
 }
 
+/** Outcome of {@link mergeCoaches}, for the audit line + UI toast. */
+export interface MergeCoachesResult {
+  survivorName: string;
+  duplicateName: string;
+  movedAllowanceRuns: number;
+  /**
+   * Allowance periods where BOTH profiles already had a saved record — the
+   * (period, canonical_name) unique index forbids renaming those onto the
+   * survivor, so they keep the duplicate's name (still re-pointed by coachId,
+   * so they show on the survivor's profile). Reported for the operator to
+   * reconcile by hand.
+   */
+  conflictingPeriods: string[];
+}
+
+/**
+ * Merge a duplicate staff profile into a survivor, in one transaction.
+ * Fixes the "same person, two profiles" split that happens when a KPI upload
+ * auto-creates a coach under a cleaned CSV name (e.g. "ARIF") while the person
+ * already exists under their full name (e.g. "ARIF FARHAN"):
+ *
+ * - the duplicate's canonical name + aliases become aliases of the survivor,
+ *   so future uploads AND the KPI history matcher resolve to the survivor
+ *   (saved runs' jsonb is matched by name set — nothing to rewrite there);
+ * - assessments, notes, and login links are re-pointed;
+ * - allowance history is re-pointed and renamed onto the survivor where the
+ *   period doesn't collide (see {@link MergeCoachesResult.conflictingPeriods});
+ * - profile fields the survivor lacks (tier, allowance, center) carry over,
+ *   and the newer management assessment of the two wins;
+ * - the duplicate profile row is deleted.
+ */
+export async function mergeCoaches(
+  survivorId: number,
+  duplicateId: number,
+): Promise<MergeCoachesResult> {
+  if (survivorId === duplicateId) throw new Error("Pick two different employees.");
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(coaches)
+      .where(inArray(coaches.id, [survivorId, duplicateId]));
+    const survivor = rows.find((r) => r.id === survivorId);
+    const dup = rows.find((r) => r.id === duplicateId);
+    if (!survivor || !dup) throw new Error("Employee not found.");
+
+    // The duplicate's identity becomes part of the survivor's alias set.
+    const aliases = [
+      ...new Set([...survivor.aliases, ...dup.aliases, dup.canonicalName]),
+    ].sort();
+    // The newer management assessment of the two wins.
+    const mgmtUpdate =
+      dup.lastMgmtAssessmentAt &&
+      (!survivor.lastMgmtAssessmentAt || dup.lastMgmtAssessmentAt > survivor.lastMgmtAssessmentAt)
+        ? {
+            lastMgmtAssessment: dup.lastMgmtAssessment,
+            lastMgmtAssessmentAt: dup.lastMgmtAssessmentAt,
+          }
+        : {};
+    await tx
+      .update(coaches)
+      .set({
+        aliases,
+        center: survivor.center || dup.center,
+        allowanceTier: survivor.allowanceTier ?? dup.allowanceTier,
+        lastAllowance: survivor.lastAllowance ?? dup.lastAllowance,
+        active: survivor.active || dup.active,
+        ...mgmtUpdate,
+        updatedAt: new Date(),
+      })
+      .where(eq(coaches.id, survivorId));
+
+    // Re-point dependents (no DB-level FKs — cascade by hand, like deleteCoach).
+    await tx
+      .update(assessments)
+      .set({ coachId: survivorId })
+      .where(eq(assessments.coachId, duplicateId));
+    await tx.update(notes).set({ coachId: survivorId }).where(eq(notes.coachId, duplicateId));
+    await tx
+      .update(users)
+      .set({ coachId: survivorId, updatedAt: new Date() })
+      .where(eq(users.coachId, duplicateId));
+
+    // Allowance history: rename onto the survivor where the period is free;
+    // colliding periods only get re-pointed (the unique index forbids the rename).
+    const survivorPeriods = new Set(
+      (
+        await tx
+          .select({ periodLabel: allowanceRuns.periodLabel })
+          .from(allowanceRuns)
+          .where(
+            or(
+              eq(allowanceRuns.coachId, survivorId),
+              eq(allowanceRuns.canonicalName, survivor.canonicalName),
+            ),
+          )
+      ).map((r) => r.periodLabel),
+    );
+    const dupRuns = await tx
+      .select({ id: allowanceRuns.id, periodLabel: allowanceRuns.periodLabel })
+      .from(allowanceRuns)
+      .where(
+        or(
+          eq(allowanceRuns.coachId, duplicateId),
+          eq(allowanceRuns.canonicalName, dup.canonicalName),
+        ),
+      );
+    const movable = dupRuns.filter((r) => !survivorPeriods.has(r.periodLabel));
+    const conflicting = dupRuns.filter((r) => survivorPeriods.has(r.periodLabel));
+    if (movable.length > 0) {
+      await tx
+        .update(allowanceRuns)
+        .set({
+          coachId: survivorId,
+          canonicalName: survivor.canonicalName,
+          // Keep the snapshot input's display name in step with the rename.
+          input: sql`jsonb_set(${allowanceRuns.input}, '{name}', to_jsonb(${survivor.canonicalName}::text))`,
+        })
+        .where(
+          inArray(
+            allowanceRuns.id,
+            movable.map((r) => r.id),
+          ),
+        );
+    }
+    if (conflicting.length > 0) {
+      await tx
+        .update(allowanceRuns)
+        .set({ coachId: survivorId })
+        .where(
+          inArray(
+            allowanceRuns.id,
+            conflicting.map((r) => r.id),
+          ),
+        );
+    }
+
+    await tx.delete(coaches).where(eq(coaches.id, duplicateId));
+
+    return {
+      survivorName: survivor.canonicalName,
+      duplicateName: dup.canonicalName,
+      movedAllowanceRuns: movable.length,
+      conflictingPeriods: [...new Set(conflicting.map((r) => r.periodLabel))].sort(),
+    };
+  });
+}
+
 /**
  * Persist/refresh coach profiles from a finalized run: union aliases, remember
  * position, and carry forward the latest management assessment + allowance.
  */
 export async function upsertCoachesFromRun(coachResults: RunCoach[]): Promise<void> {
   const db = await getDb();
+  const normalizeCtr = await centerNormalizerFromConfig();
   // One transaction so the `listCoaches` read + conditional insert is atomic:
   // two concurrent finalized runs can't both miss the same coach and each insert
   // a duplicate profile.
-  await db.transaction(async (tx) => {
-    const existing = await listCoachesWith(tx);
-    for (const rc of coachResults) {
-      const match =
-        (rc.coachId && existing.find((c) => c.id === rc.coachId)) ||
-        existing.find((c) => c.canonicalName === rc.canonicalName) ||
-        existing.find((c) => c.aliases?.some((a) => rc.accounts.includes(a)));
+  await db.transaction((tx) => upsertCoachesFromRunWith(tx, coachResults, normalizeCtr));
+}
 
-      const mergedAliases = [...new Set([...(match?.aliases ?? []), ...rc.accounts])].sort();
-      const mgmtUpdate =
-        rc.mgmtAssessment != null
-          ? { lastMgmtAssessment: rc.mgmtAssessment, lastMgmtAssessmentAt: new Date() }
-          : {};
+/**
+ * Normalizer mapping raw CSV center labels onto the configured center codes
+ * (Settings -> Centers aliases), e.g. "Subang USJ" -> "USJ". Fetched OUTSIDE any
+ * transaction (memoized singleton) so the carry-over writes store codes, not the
+ * raw spelling of whichever CSV happened to be uploaded.
+ */
+async function centerNormalizerFromConfig(): Promise<(raw: string) => string> {
+  const cfg = await getAllowanceConfig();
+  return makeCenterNormalizer(cfg.centers, cfg.centerAliases ?? {});
+}
 
-      if (match) {
-        await tx
-          .update(coaches)
-          .set({
-            aliases: mergedAliases,
-            center: rc.center || match.center,
-            defaultPosition: rc.position,
-            lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
-            ...mgmtUpdate,
-            updatedAt: new Date(),
-          })
-          .where(eq(coaches.id, match.id));
-      } else {
-        await tx.insert(coaches).values({
-          canonicalName: rc.canonicalName,
+/**
+ * Executor-threaded core of `upsertCoachesFromRun`, so a caller (e.g. `createRun`)
+ * can run the run insert and the profile carry-over in ONE transaction.
+ */
+async function upsertCoachesFromRunWith(
+  tx: Tx,
+  coachResults: RunCoach[],
+  normalizeCtr: (raw: string) => string,
+): Promise<void> {
+  const existing = await listCoachesWith(tx);
+  for (const rc of coachResults) {
+    const match =
+      (rc.coachId && existing.find((c) => c.id === rc.coachId)) ||
+      existing.find((c) => c.canonicalName === rc.canonicalName) ||
+      existing.find((c) => c.aliases?.some((a) => rc.accounts.includes(a)));
+
+    const mergedAliases = [...new Set([...(match?.aliases ?? []), ...rc.accounts])].sort();
+    const mgmtUpdate =
+      rc.mgmtAssessment != null
+        ? { lastMgmtAssessment: rc.mgmtAssessment, lastMgmtAssessmentAt: new Date() }
+        : {};
+
+    if (match) {
+      await tx
+        .update(coaches)
+        .set({
           aliases: mergedAliases,
-          center: rc.center,
+          center: normalizeCtr(rc.center) || match.center,
           defaultPosition: rc.position,
-          lastAllowance: rc.teachingAllowance,
-          lastMgmtAssessment: rc.mgmtAssessment ?? null,
-          lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
-        });
-      }
+          lastAllowance: rc.teachingAllowance ?? match.lastAllowance,
+          ...mgmtUpdate,
+          updatedAt: new Date(),
+        })
+        .where(eq(coaches.id, match.id));
+    } else {
+      await tx.insert(coaches).values({
+        canonicalName: rc.canonicalName,
+        aliases: mergedAliases,
+        center: normalizeCtr(rc.center),
+        defaultPosition: rc.position,
+        lastAllowance: rc.teachingAllowance,
+        lastMgmtAssessment: rc.mgmtAssessment ?? null,
+        lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
+      });
     }
-  });
+  }
 }
 
 /** One coach's headline result within a saved month (for the History accordion). */
@@ -535,18 +760,26 @@ async function _getTrendData(): Promise<TrendData> {
     .orderBy(runs.createdAt);
 
   const periods: string[] = [];
-  const byCoach = new Map<string, TrendData["coaches"][number]>();
+  const byCoach = new Map<string, Map<string, { score: number; payout: number }>>();
+  // Ordered asc by createdAt, so when the same period label was saved twice the
+  // LATER save wins per (period, coach) — one point each, never duplicates
+  // (mirrors the commission/teaching trend builders).
   for (const r of rows) {
     if (!periods.includes(r.periodLabel)) periods.push(r.periodLabel);
     for (const c of r.coachResults) {
-      const entry = byCoach.get(c.canonicalName) ?? { name: c.canonicalName, points: [] };
-      entry.points.push({ period: r.periodLabel, score: c.finalScore, payout: c.payout });
-      byCoach.set(c.canonicalName, entry);
+      const m = byCoach.get(c.canonicalName) ?? new Map<string, { score: number; payout: number }>();
+      m.set(r.periodLabel, { score: c.finalScore, payout: c.payout });
+      byCoach.set(c.canonicalName, m);
     }
   }
   return {
     periods,
-    coaches: [...byCoach.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    coaches: [...byCoach.entries()]
+      .map(([name, m]) => ({
+        name,
+        points: [...m.entries()].map(([period, p]) => ({ period, ...p })),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
@@ -576,23 +809,31 @@ export async function createRun(input: {
 }): Promise<number> {
   const db = await getDb();
   const status = input.status ?? "finalized";
-  const [row] = await db
-    .insert(runs)
-    .values({
-      periodLabel: input.periodLabel,
-      filename: input.filename,
-      csvRows: input.csvRows,
-      configSnapshot: input.configSnapshot,
-      coachResults: input.coachResults,
-      status,
-    })
-    .returning({ id: runs.id });
-  // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
-  // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
-  if (status === "finalized") await upsertCoachesFromRun(input.coachResults);
+  // One transaction: the run insert and the coach-profile carry-over commit (or
+  // roll back) together, so a crash/retry between the two can't leave a saved
+  // month whose profiles were never carried forward — or carried-forward
+  // profiles for a month that was never saved.
+  const normalizeCtr = await centerNormalizerFromConfig();
+  const id = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(runs)
+      .values({
+        periodLabel: input.periodLabel,
+        filename: input.filename,
+        csvRows: input.csvRows,
+        configSnapshot: input.configSnapshot,
+        coachResults: input.coachResults,
+        status,
+      })
+      .returning({ id: runs.id });
+    // Carry coach profiles forward (allowance, mgmt, aliases) only once the month is
+    // finalized, so a draft's pending/empty inputs never pollute next month's carry-over.
+    if (status === "finalized") await upsertCoachesFromRunWith(tx, input.coachResults, normalizeCtr);
+    return row.id;
+  });
   invalidateSingleton("kpi-runs");
   invalidateSingleton("kpi-trend");
-  return row.id;
+  return id;
 }
 
 /**
@@ -640,6 +881,163 @@ export async function deleteRun(id: number): Promise<void> {
   await db.delete(runs).where(eq(runs.id, id));
   invalidateSingleton("kpi-runs");
   invalidateSingleton("kpi-trend");
+}
+
+// ── KPI ingests (machine-pushed monthly data, staged for review) ─────────────
+
+export type KpiIngestStatus = KpiIngestRecord["status"];
+
+/** List-page projection: everything except the (potentially large) rows blob. */
+export interface KpiIngestSummary {
+  id: number;
+  periodLabel: string;
+  label: string;
+  status: KpiIngestStatus;
+  rowCount: number;
+  importedRunId: number | null;
+  importedAt: Date | null;
+  receivedAt: Date;
+}
+
+/**
+ * A period is CLOSED to machine pushes once payroll has acted on it: a
+ * FINALIZED run exists for the periodLabel (draft runs do NOT block — the
+ * month is still being worked), or any staged delivery for it was already
+ * imported into a run. POST /api/ingest/kpi rejects a push for a closed
+ * period with 409 before staging, superseding, or auditing anything; the
+ * payroll admin reopens the month first if a correction is needed.
+ */
+export async function isKpiPeriodClosed(periodLabel: string): Promise<boolean> {
+  const db = await getDb();
+  const finalized = await db
+    .select({ id: runs.id })
+    .from(runs)
+    .where(and(eq(runs.periodLabel, periodLabel), eq(runs.status, "finalized")))
+    .limit(1);
+  if (finalized.length > 0) return true;
+  const imported = await db
+    .select({ id: kpiIngests.id })
+    .from(kpiIngests)
+    .where(and(eq(kpiIngests.periodLabel, periodLabel), eq(kpiIngests.status, "imported")))
+    .limit(1);
+  return imported.length > 0;
+}
+
+/**
+ * Stage a pushed delivery as pending. Rows must already be normalized
+ * InstructorRow[]. A re-push for the same period is a correction: any still-
+ * PENDING deliveries for that periodLabel are flipped to "superseded" (status
+ * only — rows stay viewable forever, like discarded) in the SAME transaction as
+ * the insert, each with its own `kpi_ingest.superseded` audit entry. Imported
+ * and discarded deliveries are never touched.
+ */
+export async function createKpiIngest(input: {
+  periodLabel: string;
+  label: string;
+  rows: InstructorRow[];
+}): Promise<{ id: number; supersededIds: number[] }> {
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    // Flip BEFORE the insert so the new (pending) row can't match its own filter.
+    const superseded = await tx
+      .update(kpiIngests)
+      .set({ status: "superseded", updatedAt: new Date() })
+      .where(and(eq(kpiIngests.periodLabel, input.periodLabel), eq(kpiIngests.status, "pending")))
+      .returning({ id: kpiIngests.id });
+    const supersededIds = superseded.map((s) => s.id).sort((a, b) => a - b);
+
+    const [row] = await tx
+      .insert(kpiIngests)
+      .values({ periodLabel: input.periodLabel, label: input.label, rows: input.rows })
+      .returning({ id: kpiIngests.id });
+
+    // Audit inside the transaction: a supersede and its trail commit (or roll
+    // back) together — unlike recordAudit, which is fire-and-forget by design.
+    if (supersededIds.length > 0) {
+      await tx.insert(auditLog).values(
+        supersededIds.map((oldId) => ({
+          actorId: null,
+          actorEmail: "ingest-api",
+          action: "kpi_ingest.superseded",
+          entity: "kpi_ingest",
+          entityId: String(oldId),
+          summary: `Superseded staged KPI delivery #${oldId} for ${input.periodLabel} by newer push #${row.id}`,
+        })),
+      );
+    }
+    return { id: row.id, supersededIds };
+  });
+}
+
+/** ALL deliveries, newest first — discarded and imported ones stay listed forever. */
+export async function listKpiIngests(): Promise<KpiIngestSummary[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: kpiIngests.id,
+      periodLabel: kpiIngests.periodLabel,
+      label: kpiIngests.label,
+      status: kpiIngests.status,
+      rowCount: sql<number>`jsonb_array_length(${kpiIngests.rows})`.mapWith(Number),
+      importedRunId: kpiIngests.importedRunId,
+      importedAt: kpiIngests.importedAt,
+      receivedAt: kpiIngests.receivedAt,
+    })
+    .from(kpiIngests)
+    .orderBy(desc(kpiIngests.receivedAt), desc(kpiIngests.id));
+  return rows;
+}
+
+/** Pending deliveries only (drives the dashboard's "Pending uploads" card). */
+export async function listPendingKpiIngests(): Promise<KpiIngestSummary[]> {
+  return (await listKpiIngests()).filter((i) => i.status === "pending");
+}
+
+export async function getKpiIngest(id: number): Promise<KpiIngestRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(kpiIngests).where(eq(kpiIngests.id, id)).limit(1);
+  return rows[0];
+}
+
+/**
+ * Replace a pending delivery's rows (owner edits before import). Returns false —
+ * and writes nothing — once the delivery is no longer pending: an imported
+ * delivery is the immutable record of what was received/used.
+ */
+export async function updateKpiIngestRows(id: number, rows: InstructorRow[]): Promise<boolean> {
+  const db = await getDb();
+  const updated = await db
+    .update(kpiIngests)
+    .set({ rows, updatedAt: new Date() })
+    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .returning({ id: kpiIngests.id });
+  return updated.length > 0;
+}
+
+/** Discard a pending delivery (status flip — never a hard delete). False if not pending. */
+export async function discardKpiIngest(id: number): Promise<boolean> {
+  const db = await getDb();
+  const updated = await db
+    .update(kpiIngests)
+    .set({ status: "discarded", updatedAt: new Date() })
+    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .returning({ id: kpiIngests.id });
+  return updated.length > 0;
+}
+
+/**
+ * Mark a pending delivery imported into a saved run. Validates the ingest exists
+ * AND is still pending; anything else is a silent no-op (returns false) so a
+ * stale/duplicate `ingestId` on a run save can never break the save itself.
+ */
+export async function importKpiIngest(id: number, runId: number): Promise<boolean> {
+  const db = await getDb();
+  const updated = await db
+    .update(kpiIngests)
+    .set({ status: "imported", importedRunId: runId, importedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .returning({ id: kpiIngests.id });
+  return updated.length > 0;
 }
 
 // ── Commission (Optimum Fit) ──────────────────────────────────────────────────
@@ -1237,6 +1635,57 @@ interface AllowanceRunData {
   input: AllowanceInput;
   result: AllowanceResult;
   configSnapshot: AllowanceConfig;
+  /**
+   * Set by the bulk-by-center entry screen: this save edits ONLY this center's
+   * teaching hours (plus the staff-level attendance fields/tier). When set and a
+   * record already exists for (periodLabel, name), the stored record is re-read
+   * inside the save transaction and only this center's slice is replaced — so a
+   * bulk save merged client-side against a stale snapshot can't wipe hours
+   * another manager saved for a different center in the meantime. Whole-record
+   * saves (the single-coach calculator) leave it unset and replace as before.
+   */
+  mergeCenter?: string;
+}
+
+/**
+ * Re-merge a bulk-by-center save against the STORED record (see
+ * `AllowanceRunData.mergeCenter`): stored input is the base; only the merge
+ * center's teaching row and the staff-level fields come from the incoming
+ * input; `otherItems` stay as stored. The result is recomputed from the merged
+ * input so the persisted breakdown always matches it. Callers serialize saves
+ * per period via the advisory lock in `createAllowanceRunIfUnlocked`, so the
+ * read here sees the latest committed record.
+ */
+async function withMergedCenterSlice(
+  exec: DbOrTx,
+  data: AllowanceRunData,
+): Promise<AllowanceRunData> {
+  const target = data.mergeCenter?.trim();
+  if (!target) return data;
+  const stored = await exec
+    .select({ input: allowanceRuns.input })
+    .from(allowanceRuns)
+    .where(
+      and(
+        eq(allowanceRuns.periodLabel, data.periodLabel),
+        eq(allowanceRuns.canonicalName, data.input.name),
+      ),
+    )
+    .limit(1);
+  if (!stored[0]) return data; // nothing saved yet — the incoming record stands
+  const merged = mergeBulkRow(
+    {
+      coachId: data.input.coachId,
+      name: data.input.name,
+      tier: data.input.tier,
+      center: target,
+      opHours: data.input.opHours,
+      leaveHours: data.input.leaveHours,
+      ...extractCenterHours(data.input, target),
+    },
+    stored[0].input,
+  );
+  return { ...data, input: merged, result: calcAllowance(merged, data.configSnapshot) };
 }
 
 /**
@@ -1249,7 +1698,8 @@ interface AllowanceRunData {
  * atomic statement replaces the old delete-then-insert, so re-saving the same
  * coach+month is idempotent and two concurrent saves can't leave a duplicate row.
  */
-async function insertAllowanceRunWith(exec: DbOrTx, data: AllowanceRunData): Promise<number> {
+async function insertAllowanceRunWith(exec: DbOrTx, rawData: AllowanceRunData): Promise<number> {
+  const data = await withMergedCenterSlice(exec, rawData);
   const coachId = await ensureCoachForAllowanceWith(exec, {
     coachId: data.input.coachId,
     canonicalName: data.input.name,
@@ -1512,11 +1962,11 @@ export async function deleteAllowanceRun(id: number): Promise<void> {
 /** How many allowance rows are filed under `period`. */
 export async function countAllowanceRunsForPeriod(period: string): Promise<number> {
   const db = await getDb();
-  const rows = await db
-    .select({ id: allowanceRuns.id })
+  const [row] = await db
+    .select({ n: count() })
     .from(allowanceRuns)
     .where(eq(allowanceRuns.periodLabel, period));
-  return rows.length;
+  return row.n;
 }
 
 /** True when any allowance row exists at all (used to exempt the very first month). */
@@ -1529,8 +1979,10 @@ export async function hasAnyAllowanceRuns(): Promise<boolean> {
 /** Distinct months that already have at least one allowance entry. */
 export async function listAllowancePeriods(): Promise<string[]> {
   const db = await getDb();
-  const rows = await db.select({ periodLabel: allowanceRuns.periodLabel }).from(allowanceRuns);
-  return [...new Set(rows.map((r) => r.periodLabel))];
+  const rows = await db
+    .selectDistinct({ periodLabel: allowanceRuns.periodLabel })
+    .from(allowanceRuns);
+  return rows.map((r) => r.periodLabel);
 }
 
 /**
@@ -1655,37 +2107,30 @@ export async function unlockPeriod(period: string): Promise<void> {
   await db.delete(allowancePeriodLocks).where(eq(allowancePeriodLocks.periodLabel, period));
 }
 
-/** Live map of user id → display name (falling back to email when unset). */
-async function displayNamesByUserId(): Promise<Map<number, string>> {
-  const db = await getDb();
-  const rows = await db.select({ id: users.id, displayName: users.displayName, email: users.email }).from(users);
-  const map = new Map<number, string>();
-  for (const r of rows) map.set(r.id, r.displayName.trim() || r.email);
-  return map;
-}
-
 /**
  * Map of audit entityId → the name of whoever last did `action` on it, resolving
  * the actor to their current display name (falling back to the snapshotted
  * email). Powers the saved-by / edited-by attribution shown to admins. Only
  * covers actions recorded since the audit log existed; older rows map to nothing.
+ *
+ * One round-trip: `DISTINCT ON (entity_id)` keeps only the latest *named* audit
+ * row per entity (matching the old "ascending ⇒ latest wins" fold), left-joined
+ * to `users` for the actor's current display name → email → snapshot email.
  */
 async function saversFromAudit(entity: string, action: string): Promise<Record<number, string>> {
   const db = await getDb();
-  const [rows, names] = await Promise.all([
-    db
-      .select({ entityId: auditLog.entityId, actorId: auditLog.actorId, actorEmail: auditLog.actorEmail })
-      .from(auditLog)
-      .where(and(eq(auditLog.entity, entity), eq(auditLog.action, action)))
-      .orderBy(auditLog.createdAt, auditLog.id),
-    displayNamesByUserId(),
-  ]);
+  const name = sql<string>`coalesce(nullif(trim(${users.displayName}), ''), nullif(${users.email}, ''), nullif(${auditLog.actorEmail}, ''))`;
+  const rows = await db
+    .selectDistinctOn([auditLog.entityId], { entityId: auditLog.entityId, name })
+    .from(auditLog)
+    .leftJoin(users, eq(users.id, auditLog.actorId))
+    .where(and(eq(auditLog.entity, entity), eq(auditLog.action, action), sql`${name} is not null`))
+    .orderBy(auditLog.entityId, desc(auditLog.createdAt), desc(auditLog.id));
   const byEntity: Record<number, string> = {};
   for (const r of rows) {
     const id = Number(r.entityId);
     if (!Number.isFinite(id)) continue;
-    const name = (r.actorId != null ? names.get(r.actorId) : undefined) || r.actorEmail;
-    if (name) byEntity[id] = name; // ascending ⇒ latest wins
+    byEntity[id] = r.name;
   }
   return byEntity;
 }
@@ -1727,8 +2172,8 @@ export async function getUserByEmail(email: string): Promise<UserRecord | undefi
 
 export async function countUsers(): Promise<number> {
   const db = await getDb();
-  const rows = await db.select({ id: users.id }).from(users);
-  return rows.length;
+  const [row] = await db.select({ n: count() }).from(users);
+  return row.n;
 }
 
 export async function createUser(input: {
@@ -1738,7 +2183,8 @@ export async function createUser(input: {
   displayName?: string;
   coachId?: number | null;
   gymStaffId?: number | null;
-  visibleCategories?: ToolCategory[];
+  /** Explicit launcher-category override; omitted/null = inherit role default. */
+  visibleCategories?: ToolCategory[] | null;
 }): Promise<UserRecord> {
   const db = await getDb();
   const email = normalizeEmail(input.email);
@@ -1754,7 +2200,7 @@ export async function createUser(input: {
       role: input.role,
       coachId: input.coachId ?? null,
       gymStaffId: input.gymStaffId ?? null,
-      // Omitted → column default (all categories).
+      // Omitted → NULL (inherit the role's default categories).
       ...(input.visibleCategories !== undefined
         ? { visibleCategories: input.visibleCategories }
         : {}),
@@ -1772,7 +2218,8 @@ export async function updateUser(
     active?: boolean;
     coachId?: number | null;
     gymStaffId?: number | null;
-    visibleCategories?: ToolCategory[];
+    /** Array = pin an override; null = reset to inherit the role default. */
+    visibleCategories?: ToolCategory[] | null;
     password?: string;
   },
 ): Promise<void> {
@@ -1802,27 +2249,69 @@ export async function deleteUser(id: number): Promise<void> {
 }
 
 /**
- * Backfill any configurable role missing from a stored matrix with its
- * defaults — lets a newly added role (e.g. supervisor) work on deployments
- * whose matrix was saved before the role existed, with no migration.
- */
-/**
  * Capabilities introduced after a permission_config row may already have been
  * written are backfilled to the roles that hold them by default. Safe because a
  * brand-new capability can't have been intentionally revoked. Extend when adding
  * default-granted capabilities that must reach existing deployments.
  */
-const BACKFILL_CAPS: Capability[] = ["finalize_kpi"];
+const BACKFILL_CAPS: Capability[] = ["finalize_kpi", "edit_lesson_plans", "review_lesson_plans"];
 
-export function normalizePermissionConfig(data: PermissionConfig): PermissionConfig {
-  const out: PermissionConfig = { ...data };
+/**
+ * Migrate-on-read for the stored permission matrix (the same trick as the
+ * capability backfill — no SQL migration needed):
+ *
+ * - Accepts BOTH stored shapes: the current `{ capabilities, categories }` and
+ *   the legacy flat `Record<role, Capability[]>` written before launcher
+ *   categories joined the matrix.
+ * - Migrates the retired cross-brand capability keys to their brand-scoped
+ *   pairs via {@link LEGACY_CAPABILITY_MAP} (a role that held `view_all_staff`
+ *   comes out holding `swim_view_staff` + `fit_view_staff`, etc.) and drops the
+ *   legacy keys.
+ * - Backfills any configurable role missing from `capabilities` with its
+ *   defaults (lets a newly added role work with no migration), plus the
+ *   {@link BACKFILL_CAPS}.
+ * - Backfills `categories` to ALL THREE launcher categories per role — the
+ *   pre-unification behavior — until the owner tightens them in Settings.
+ */
+export function normalizePermissionConfig(
+  data: PermissionConfig | LegacyPermissionConfig,
+): PermissionConfig {
+  // New shape carries `capabilities`; the legacy flat shape keyed roles directly.
+  const rawCaps = (
+    "capabilities" in data && isPlainObject(data.capabilities)
+      ? data.capabilities
+      : data
+  ) as Partial<Record<ConfigurableRole, string[]>>;
+  const rawCats =
+    "categories" in data && isPlainObject(data.categories)
+      ? (data.categories as Partial<Record<ConfigurableRole, ToolCategory[]>>)
+      : {};
+
+  const validCaps = new Set<string>(CAPABILITIES);
+  const out: PermissionConfig = {
+    capabilities: {} as PermissionConfig["capabilities"],
+    categories: {} as PermissionConfig["categories"],
+  };
   for (const role of CONFIGURABLE_ROLES) {
-    if (!Array.isArray(out[role])) out[role] = [...DEFAULT_PERMISSION_CONFIG[role]];
-    for (const cap of BACKFILL_CAPS) {
-      if (DEFAULT_PERMISSION_CONFIG[role].includes(cap) && !out[role].includes(cap)) {
-        out[role] = [...out[role], cap];
-      }
+    const stored = Array.isArray(rawCaps[role])
+      ? rawCaps[role]
+      : DEFAULT_PERMISSION_CONFIG.capabilities[role];
+    // Legacy cross-brand keys expand to both brand-scoped keys (exact same
+    // effective access as before the split); anything unknown is dropped.
+    const caps: Capability[] = [];
+    const add = (cap: Capability) => {
+      if (!caps.includes(cap)) caps.push(cap);
+    };
+    for (const cap of stored) {
+      for (const mapped of LEGACY_CAPABILITY_MAP[cap] ?? []) add(mapped);
+      if (validCaps.has(cap)) add(cap as Capability);
     }
+    for (const cap of BACKFILL_CAPS) {
+      if (DEFAULT_PERMISSION_CONFIG.capabilities[role].includes(cap)) add(cap);
+    }
+    out.capabilities[role] = caps;
+    // Unknown/invalid stored values fall back to all (sanitize self-heals order/dupes).
+    out.categories[role] = sanitizeToolCategories(rawCats[role]) ?? [...ALL_TOOL_CATEGORIES];
   }
   return out;
 }
@@ -1880,10 +2369,41 @@ export async function createAssessment(input: {
   totalPercent: number;
   finalGrade: GradeKey;
   comments: string;
+  /** Optional link to the lesson plan of the observed class (validated by the API). */
+  lessonPlanId?: number | null;
 }): Promise<AssessmentRecord> {
   const db = await getDb();
   const [row] = await db.insert(assessments).values(input).returning();
   return row;
+}
+
+/**
+ * Validate an assessment → lesson-plan link before storing it: the plan must
+ * exist AND belong to the assessed coach (`plan.coachId === coachId`). There is
+ * no DB-level FK (repo convention), so this helper is the only integrity gate.
+ */
+export async function validateAssessmentLessonPlanLink(
+  lessonPlanId: number,
+  coachId: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const plan = await getLessonPlan(lessonPlanId);
+  if (!plan) return { ok: false, error: "lesson plan not found" };
+  if (plan.coachId !== coachId) {
+    return { ok: false, error: "lesson plan belongs to a different coach" };
+  }
+  return { ok: true };
+}
+
+/** Assessments that link to one lesson plan (the plan page's back-links), newest first. */
+export async function listAssessmentsForLessonPlan(
+  lessonPlanId: number,
+): Promise<AssessmentRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(assessments)
+    .where(eq(assessments.lessonPlanId, lessonPlanId))
+    .orderBy(desc(assessments.observedOn));
 }
 
 export async function deleteAssessment(id: number): Promise<void> {
@@ -1915,6 +2435,7 @@ export interface RecentAssessment {
   poolType: string;
   totalPercent: number;
   finalGrade: GradeKey;
+  lessonPlanId: number | null;
 }
 
 /** The most recent assessments across all instructors, with the coach name joined. */
@@ -1931,6 +2452,7 @@ export async function listRecentAssessments(limit = 20): Promise<RecentAssessmen
       poolType: assessments.poolType,
       totalPercent: assessments.totalPercent,
       finalGrade: assessments.finalGrade,
+      lessonPlanId: assessments.lessonPlanId,
     })
     .from(assessments)
     .leftJoin(coaches, eq(assessments.coachId, coaches.id))
@@ -1987,6 +2509,178 @@ export async function createGymNote(input: {
 export async function deleteGymNote(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(gymNotes).where(eq(gymNotes.id, id));
+}
+
+// ── Lesson plans ──────────────────────────────────────────────────────────────
+
+/** The editable content of a lesson plan (everything except identity/workflow). */
+export interface LessonPlanContent {
+  instructorName: string;
+  actualInstructorName: string;
+  center: string;
+  lessonDate: Date;
+  timeLabel: string;
+  levelType: LevelType | null;
+  classLevel: string;
+  ageGroup: string;
+  data: LessonPlanData;
+}
+
+export async function createLessonPlan(
+  input: LessonPlanContent & {
+    type: LessonPlanType;
+    createdByUserId: number;
+    createdByName: string;
+    coachId: number | null;
+  },
+): Promise<LessonPlanRecord> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(lessonPlans)
+    .values({ ...input, status: "draft" })
+    .returning();
+  return row;
+}
+
+/**
+ * Replace a plan's content. ANY content edit resets the status to draft so the
+ * plan must be re-submitted and re-reviewed — but the last review note (and
+ * reviewer attribution) is deliberately kept, so the owner can still see what
+ * was asked of them while editing. The post-lesson self-evaluation
+ * (`data.selfEval` + `data.remarks`, stamped by `selfEvalAt`) is NOT part of
+ * the pre-class content: a content edit always preserves whatever is stored.
+ */
+export async function updateLessonPlan(id: number, content: LessonPlanContent): Promise<void> {
+  const db = await getDb();
+  const existing = await getLessonPlan(id);
+  if (!existing) return;
+  const data: LessonPlanData = {
+    ...content.data,
+    remarks: existing.data.remarks,
+    selfEval: existing.data.selfEval,
+  };
+  await db
+    .update(lessonPlans)
+    .set({ ...content, data, status: "draft", updatedAt: new Date() })
+    .where(eq(lessonPlans.id, id));
+}
+
+/**
+ * Fill (or re-fill) the post-lesson self-evaluation. Unlike a content edit
+ * this never touches the review status — an approved plan stays approved.
+ * `selfEvalAt` records the latest fill.
+ */
+export async function setLessonPlanSelfEval(
+  id: number,
+  selfEval: Record<string, SelfEvalAnswer>,
+  remarks: string,
+): Promise<void> {
+  const db = await getDb();
+  const existing = await getLessonPlan(id);
+  if (!existing) return;
+  await db
+    .update(lessonPlans)
+    .set({
+      data: { ...existing.data, selfEval, remarks },
+      selfEvalAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPlans.id, id));
+}
+
+export async function getLessonPlan(id: number): Promise<LessonPlanRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(lessonPlans).where(eq(lessonPlans.id, id)).limit(1);
+  return rows[0];
+}
+
+/** A History list row — the promoted columns only, never the jsonb body. */
+export interface LessonPlanListRow {
+  id: number;
+  type: LessonPlanType;
+  status: LessonPlanStatus;
+  createdByUserId: number;
+  createdByName: string;
+  instructorName: string;
+  actualInstructorName: string;
+  center: string;
+  lessonDate: Date;
+  timeLabel: string;
+  levelType: LevelType | null;
+  classLevel: string;
+  selfEvalAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * List plans, newest lesson first. Pass `forUserId` to scope to one creator
+ * (the editor's own-plans view); omit it for the reviewer's all-plans view.
+ * Pass `coachId` to scope to one coach profile (the assessment form's
+ * lesson-plan picker for the assessed coach).
+ */
+export async function listLessonPlans(
+  opts: { forUserId?: number; coachId?: number } = {},
+): Promise<LessonPlanListRow[]> {
+  const db = await getDb();
+  const projection = {
+    id: lessonPlans.id,
+    type: lessonPlans.type,
+    status: lessonPlans.status,
+    createdByUserId: lessonPlans.createdByUserId,
+    createdByName: lessonPlans.createdByName,
+    instructorName: lessonPlans.instructorName,
+    actualInstructorName: lessonPlans.actualInstructorName,
+    center: lessonPlans.center,
+    lessonDate: lessonPlans.lessonDate,
+    timeLabel: lessonPlans.timeLabel,
+    levelType: lessonPlans.levelType,
+    classLevel: lessonPlans.classLevel,
+    selfEvalAt: lessonPlans.selfEvalAt,
+    createdAt: lessonPlans.createdAt,
+    updatedAt: lessonPlans.updatedAt,
+  };
+  const conditions = [
+    ...(opts.forUserId != null ? [eq(lessonPlans.createdByUserId, opts.forUserId)] : []),
+    ...(opts.coachId != null ? [eq(lessonPlans.coachId, opts.coachId)] : []),
+  ];
+  const base = db.select(projection).from(lessonPlans);
+  const query = conditions.length > 0 ? base.where(and(...conditions)) : base;
+  return query.orderBy(desc(lessonPlans.lessonDate), desc(lessonPlans.id));
+}
+
+/** Move a draft / changes-requested plan into the review queue. */
+export async function submitLessonPlan(id: number): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(lessonPlans)
+    .set({ status: "submitted", updatedAt: new Date() })
+    .where(eq(lessonPlans.id, id));
+}
+
+/** Record a review outcome: approve, or send back with a note. */
+export async function reviewLessonPlan(
+  id: number,
+  action: "approve" | "request_changes",
+  note: string,
+  reviewer: { email: string },
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(lessonPlans)
+    .set({
+      status: action === "approve" ? "approved" : "changes_requested",
+      reviewNote: note,
+      reviewedByEmail: reviewer.email,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPlans.id, id));
+}
+
+export async function deleteLessonPlan(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(lessonPlans).where(eq(lessonPlans.id, id));
 }
 
 /**

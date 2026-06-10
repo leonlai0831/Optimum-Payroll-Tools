@@ -28,12 +28,12 @@ function sanitizeBand(b: unknown): RateBand {
 }
 
 export async function PUT(req: Request) {
-  const denied = await requireCapability("edit_settings");
+  const denied = await requireCapability("fit_edit_settings");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const raw = (await req.json().catch(() => null)) as CommissionConfig | null;
 
-  // Hardening (route already requires edit_settings): reject malformed bodies and
+  // Hardening (route already requires fit_edit_settings): reject malformed bodies and
   // clamp band counts/rates to sane ranges before persisting.
   if (!isObject(raw) || !Array.isArray(raw.bands)) {
     return NextResponse.json({ error: "invalid config body" }, { status: 400 });

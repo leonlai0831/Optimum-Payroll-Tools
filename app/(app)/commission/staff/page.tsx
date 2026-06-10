@@ -12,8 +12,8 @@ export default async function GymStaffPage() {
   const caps = await getCapabilities(user);
 
   // The directory lists every gym staff member's profile — same gate as /staff.
-  if (!caps.has("view_all_staff")) redirect("/");
+  if (!caps.has("fit_view_staff")) redirect("/");
 
   const [staff, unmatched] = await Promise.all([listGymStaff(), getUnmatchedEarners()]);
-  return <GymStaffView staff={staff} canEdit={caps.has("edit_staff")} unmatched={unmatched} />;
+  return <GymStaffView staff={staff} canEdit={caps.has("fit_edit_staff")} unmatched={unmatched} />;
 }

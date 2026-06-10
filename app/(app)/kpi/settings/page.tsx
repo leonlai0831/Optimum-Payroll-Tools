@@ -11,8 +11,8 @@ export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
-  const canEdit = caps.has("edit_settings");
-  if (!canEdit && !caps.has("view_settings")) redirect("/");
+  const canEdit = caps.has("swim_edit_settings");
+  if (!canEdit && !caps.has("swim_view_settings")) redirect("/");
 
   const config = await getConfig();
   return (

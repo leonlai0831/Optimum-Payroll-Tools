@@ -8,15 +8,15 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   // Returns the full gym-staff roster (with earnings linkage) — gate on
-  // `view_all_staff`, the all-staff data gate every role reaching the Staff
+  // `fit_view_staff`, the all-staff data gate every role reaching the Staff
   // Earnings module (admin/supervisor) also holds.
-  const denied = await requireCapability("view_all_staff");
+  const denied = await requireCapability("fit_view_staff");
   if (denied) return denied;
   return NextResponse.json(await listGymStaff());
 }
 
 export async function POST(req: Request) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("fit_edit_staff");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const body = (await req.json().catch(() => ({}))) as GymStaffInput;

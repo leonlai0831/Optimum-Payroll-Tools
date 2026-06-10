@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { createRun, listRuns, recordAudit, runStatusFromResults } from "@/lib/db/queries";
+import {
+  createRun,
+  importKpiIngest,
+  listRuns,
+  recordAudit,
+  runStatusFromResults,
+} from "@/lib/db/queries";
+import { validateRunPayload } from "@/lib/kpi/run-validate";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { RunCoach } from "@/lib/types";
 
@@ -25,9 +32,18 @@ export async function POST(req: Request) {
     csvRows?: InstructorRow[];
     configSnapshot?: AppConfig;
     coachResults?: RunCoach[];
+    /** Set when the dashboard was seeded from a staged ingest (/kpi?ingest=<id>). */
+    ingestId?: number;
   };
   if (!body.periodLabel) {
     return NextResponse.json({ error: "periodLabel is required" }, { status: 400 });
+  }
+  // The KPI engine runs client-side, so never trust client-computed money
+  // blindly: require a config snapshot + coach array, and re-check the
+  // payout = finalScore × teachingAllowance invariant before persisting.
+  const invalid = validateRunPayload(body);
+  if (invalid) {
+    return NextResponse.json({ error: invalid }, { status: 400 });
   }
   // A month with any incomplete coach (e.g. management review pending) is saved as
   // a draft; it becomes finalized only once every coach is complete.
@@ -40,6 +56,13 @@ export async function POST(req: Request) {
     coachResults: body.coachResults ?? [],
     status,
   });
+  // Close the loop on a staged delivery: mark it imported + link the run. The
+  // helper validates the ingest exists and is still pending — a stale/duplicate
+  // id is silently ignored so it can never break the save.
+  const importedIngest =
+    typeof body.ingestId === "number" && Number.isInteger(body.ingestId)
+      ? await importKpiIngest(body.ingestId, id)
+      : false;
   if (actor) {
     await recordAudit({
       actorId: actor.id,
@@ -47,7 +70,7 @@ export async function POST(req: Request) {
       action: "kpi_run.save",
       entity: "run",
       entityId: id,
-      summary: `Saved KPI bonus run for ${body.periodLabel} (${body.coachResults?.length ?? 0} coaches, ${status})`,
+      summary: `Saved KPI bonus run for ${body.periodLabel} (${body.coachResults?.length ?? 0} coaches, ${status})${importedIngest ? ` — imported from upload #${body.ingestId}` : ""}`,
     });
   }
   return NextResponse.json({ ok: true, id, status });

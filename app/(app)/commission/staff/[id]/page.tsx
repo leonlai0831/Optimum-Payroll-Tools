@@ -6,6 +6,7 @@ import { getCapabilities } from "@/lib/auth/permissions";
 import { getGymStaffEarnings, getGymStaffMember, listGymNotes } from "@/lib/db/queries";
 import { gymEmploymentLabel, gymPositionLabel } from "@/lib/gym/types";
 import { Button, Card } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { GymStaffDetailsCard } from "@/components/gym-staff-details-card";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm } from "@/lib/utils";
@@ -20,15 +21,19 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
   const caps = await getCapabilities(user);
 
   // Same access rule as the export route: anyone who can view all staff, or the
-  // staff member viewing their own earnings.
-  const canViewAll = caps.has("view_all_staff");
+  // staff member viewing their own earnings. The gate runs BEFORE any member
+  // data is fetched; the remaining lookups then share one round-trip.
+  const canViewAll = caps.has("fit_view_staff");
   const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
   if (!canViewAll && !isOwn) redirect("/");
 
   const member = await getGymStaffMember(staffId);
   if (!member) notFound();
-  const canEdit = caps.has("edit_staff");
-  const [report, noteRecords] = await Promise.all([getGymStaffEarnings(member), listGymNotes(member.id)]);
+  const [report, noteRecords] = await Promise.all([
+    getGymStaffEarnings(member),
+    listGymNotes(member.id),
+  ]);
+  const canEdit = caps.has("fit_edit_staff");
   const notes: NoteView[] = noteRecords.map((n) => ({
     id: n.id,
     noteDate: n.noteDate.toISOString(),
@@ -97,7 +102,56 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
             be matched here by staff code{member.aliases.length > 0 ? " / name aliases" : " and name"}.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <MobileCards>
+              {report.months.map((m) => (
+                <div key={m.period} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      href={`/commission/staff/${member.id}/${encodeURIComponent(m.period)}`}
+                      className="font-semibold text-gray-900 hover:text-brand"
+                    >
+                      {m.period}
+                    </Link>
+                    <div className="shrink-0 text-right">
+                      <div className="nums text-base font-bold text-green-700">{rm(m.total)}</div>
+                      <div className="text-[11px] text-gray-400">total income</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-overline text-muted">Commission</div>
+                      <div className="nums mt-0.5 text-sm text-gray-700">{rm(m.commission)}</div>
+                    </div>
+                    <div>
+                      <div className="text-overline text-muted">Coaching</div>
+                      <div className="nums mt-0.5 text-sm text-gray-700">{rm(m.coachingIncome)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {/* Totals card: mirrors the desktop tfoot. */}
+              <div className="bg-gray-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="font-bold text-gray-900">TOTAL</div>
+                  <div className="nums shrink-0 text-base font-bold text-green-700">
+                    {rm(report.totals.total)}
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-overline text-muted">Commission</div>
+                    <div className="nums mt-0.5 text-sm text-gray-700">{rm(report.totals.commission)}</div>
+                  </div>
+                  <div>
+                    <div className="text-overline text-muted">Coaching</div>
+                    <div className="nums mt-0.5 text-sm text-gray-700">{rm(report.totals.coachingIncome)}</div>
+                  </div>
+                </div>
+              </div>
+            </MobileCards>
+
+            <DesktopTable>
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                 <tr>
@@ -133,7 +187,8 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
                 </tr>
               </tfoot>
             </table>
-          </div>
+            </DesktopTable>
+          </>
         )}
       </Card>
     </div>

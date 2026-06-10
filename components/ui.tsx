@@ -4,18 +4,20 @@ import { cn } from "@/lib/utils";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 type ButtonSize = "sm" | "md" | "lg";
 
+/* Pill CTAs for actions, 8px utility chrome for outline/ghost (design.md: the
+   radius contrast is intentional — marketing-pill actions vs tight tools). */
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-sm",
-  secondary: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:bg-indigo-200",
-  ghost: "text-gray-600 hover:bg-gray-100 active:bg-gray-200",
-  danger: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
-  outline: "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100",
+  primary: "rounded-full bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 active:scale-[0.98] shadow-sm",
+  secondary: "rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:bg-indigo-200 active:scale-[0.98]",
+  ghost: "rounded-lg text-gray-600 hover:bg-gray-100 active:bg-gray-200",
+  danger: "rounded-full bg-red-600 text-white hover:bg-red-700 active:bg-red-800 active:scale-[0.98]",
+  outline: "rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100",
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
-  sm: "gap-1.5 rounded-md px-3 py-1.5 text-xs",
-  md: "gap-2 rounded-md px-4 py-2 text-sm",
-  lg: "gap-2 rounded-md px-5 py-2.5 text-base",
+  sm: "gap-1.5 px-3 py-1.5 text-xs",
+  md: "gap-2 px-4 py-2 text-sm",
+  lg: "gap-2 px-5 py-2.5 text-base",
 };
 
 export function Button({
@@ -45,51 +47,33 @@ export function Button({
 }
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  // Hairline-defined surface on the warm canvas; elevation is barely-there.
   return (
     <div
-      className={cn("rounded-xl border border-gray-200/70 bg-white shadow-card", className)}
+      className={cn("rounded-xl border border-gray-200 bg-white shadow-card", className)}
       {...props}
     />
   );
 }
 
+/* Form fields stay tight (rounded-md, never pill) per design.md. `text-base`
+   at phone widths keeps iOS Safari from auto-zooming focused fields. */
+const fieldClasses =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-base sm:text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30";
+
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={cn(
-        "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <input className={cn(fieldClasses, className)} {...props} />;
 }
 
 export function Textarea({
   className,
   ...props
 }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className={cn(
-        "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <textarea className={cn(fieldClasses, className)} {...props} />;
 }
 
 export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={cn(
-        "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <select className={cn(fieldClasses, "bg-white", className)} {...props} />;
 }
 
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {

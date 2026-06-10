@@ -10,8 +10,8 @@ export default async function CommissionSettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
-  const canEdit = caps.has("edit_settings");
-  if (!canEdit && !caps.has("view_settings")) redirect("/");
+  const canEdit = caps.has("fit_edit_settings");
+  if (!canEdit && !caps.has("fit_view_settings")) redirect("/");
 
   const config = await getCommissionConfig();
   return <CommissionSettingsForm initial={config} canEdit={canEdit} />;

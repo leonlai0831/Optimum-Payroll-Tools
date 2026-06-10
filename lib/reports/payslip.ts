@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type Color, type PDFFont } from "pdf-lib";
+import { safe } from "@/lib/reports/pdf-text";
 import { rm } from "@/lib/utils";
 
 /** A free-form additional allowance line, flattened for the payslip. */
@@ -13,6 +14,8 @@ export interface PayslipData {
   companyName: string;
   /** Period label as saved on the run, e.g. "2026-04". */
   period: string;
+  /** The KPI bonus month shown on the statement (one month before `period`). */
+  kpiPeriod?: string;
   generatedAt: Date;
   coach: {
     name: string;
@@ -46,35 +49,40 @@ export interface PayslipData {
 /** At most this many "other allowance" lines are itemized; the rest collapse. */
 const MAX_OTHER_LINES = 8;
 
-const PUNCT: Record<string, string> = {
-  "—": "-",
-  "–": "-",
-  "‒": "-",
-  "−": "-",
-  "’": "'",
-  "‘": "'",
-  "“": '"',
-  "”": '"',
-  "•": "-",
-  "→": "->",
-  "…": "...",
-};
+/** Whole-RM amounts as printed on the payslip (see `payslipAmounts`). */
+export interface PayslipAmounts {
+  /** KPI bonus line, or null when the section is absent. */
+  bonus: number | null;
+  attendance: number | null;
+  teaching: number | null;
+  other: number | null;
+  /** Allowance total = attendance + teaching + other (already-rounded lines). */
+  allowanceTotal: number | null;
+  /** Grand total = bonus + allowanceTotal, absent sections counting as 0. */
+  total: number;
+}
 
 /**
- * Make text safe for the standard (WinAnsi) fonts: map common typographic
- * punctuation to ASCII, strip diacritics, then replace anything still outside
- * the encodable range with "?". Without this, pdf-lib throws on names or notes
- * that contain CJK / emoji / smart quotes.
+ * Compute the whole-RM amounts the payslip prints. Each money line is rounded
+ * ONCE (the `rm()` whole-ringgit convention), and every total is the SUM of the
+ * already-rounded lines — never a rounding of the raw sum — so the printed
+ * lines always add up to the printed totals (10.5 + 10.5 → 11 + 11 = 22, not 21).
  */
-function safe(input: string): string {
-  const mapped = (input ?? "").replace(/[—–‒−’‘“”•→…]/g, (c) => PUNCT[c] ?? c);
-  const stripped = mapped.normalize("NFKD").replace(/[̀-ͯ]/g, "");
-  let out = "";
-  for (const ch of stripped) {
-    const c = ch.charCodeAt(0);
-    out += (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) ? ch : "?";
-  }
-  return out;
+export function payslipAmounts(data: Pick<PayslipData, "kpi" | "allowance">): PayslipAmounts {
+  const bonus = data.kpi ? Math.round(data.kpi.bonus) : null;
+  const a = data.allowance;
+  const attendance = a ? Math.round(a.attendance) : null;
+  const teaching = a ? Math.round(a.teaching) : null;
+  const other = a ? Math.round(a.other) : null;
+  const allowanceTotal = a ? (attendance ?? 0) + (teaching ?? 0) + (other ?? 0) : null;
+  return {
+    bonus,
+    attendance,
+    teaching,
+    other,
+    allowanceTotal,
+    total: (bonus ?? 0) + (allowanceTotal ?? 0),
+  };
 }
 
 /** Render one coach's monthly payslip as a single-page A4 PDF. */
@@ -98,6 +106,9 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   const bandFill = rgb(0.95, 0.96, 0.99);
 
   let y = height - margin;
+
+  // Single source for every printed money line/total so the document reconciles.
+  const amounts = payslipAmounts(data);
 
   interface TextOpts {
     size?: number;
@@ -139,7 +150,7 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
 
   // ── Header ────────────────────────────────────────────────────────────────
   draw(data.companyName, margin, { font: bold, size: 20 });
-  drawRight("PAYSLIP", { font: bold, size: 16, color: brand });
+  drawRight("INCOME STATEMENT", { font: bold, size: 16, color: brand });
   y -= 22;
   draw(`Period: ${data.period}`, margin, { color: muted });
   y -= 14;
@@ -157,14 +168,20 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   row("Pay tier", data.coach.tier ?? "-");
 
   // ── KPI bonus ────────────────────────────────────────────────────────────────
-  section("KPI Bonus");
+  section(data.kpiPeriod ? `KPI Bonus (${data.kpiPeriod})` : "KPI Bonus");
   if (data.kpi) {
     row("Final score", data.kpi.finalScore.toFixed(3));
     row("Grade", data.kpi.grade);
     row("Students", String(data.kpi.students));
-    row("Bonus payout", rm(data.kpi.bonus), true);
+    row("Bonus payout", rm(amounts.bonus ?? 0), true);
   } else {
-    draw("No KPI bonus recorded for this period.", margin, { color: muted });
+    draw(
+      data.kpiPeriod
+        ? `No KPI bonus recorded for ${data.kpiPeriod}.`
+        : "No KPI bonus recorded for this period.",
+      margin,
+      { color: muted },
+    );
     y -= 18;
   }
 
@@ -174,9 +191,9 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
     const a = data.allowance;
     row("Pay tier", a.tier);
     row("Attendance", `${Math.round(a.attendancePct * 100)}%`);
-    row("Attendance allowance", rm(a.attendance));
-    row("Teaching", rm(a.teaching));
-    row("Other", rm(a.other));
+    row("Attendance allowance", rm(amounts.attendance ?? 0));
+    row("Teaching", rm(amounts.teaching ?? 0));
+    row("Other", rm(amounts.other ?? 0));
     const shown = a.otherItems.slice(0, MAX_OTHER_LINES);
     for (const it of shown) {
       const where = it.center ? ` (${it.center})` : "";
@@ -190,7 +207,9 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
       draw(`   - (+${extra} more)`, margin, { size: 9, color: muted });
       y -= 15;
     }
-    row("Allowance total", rm(a.grandTotal), true);
+    // Sum of the three printed lines above (not the stored grandTotal), so the
+    // section always adds up on paper.
+    row("Allowance total", rm(amounts.allowanceTotal ?? 0), true);
   } else {
     draw("No allowance recorded for this period.", margin, { color: muted });
     y -= 18;
@@ -200,9 +219,8 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   y -= 6;
   rule();
   y -= 24;
-  const total = (data.kpi?.bonus ?? 0) + (data.allowance?.grandTotal ?? 0);
   draw(`TOTAL FOR ${data.period}`, margin, { font: bold, size: 12 });
-  drawRight(rm(total), { font: bold, size: 14, color: brand });
+  drawRight(rm(amounts.total), { font: bold, size: 14, color: brand });
 
   // ── Footer ────────────────────────────────────────────────────────────────────
   const stamp = data.generatedAt.toISOString().slice(0, 10);

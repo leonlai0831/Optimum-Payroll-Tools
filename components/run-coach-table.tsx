@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Badge, Card } from "@/components/ui";
+import { CoachResultPdfButton } from "@/components/coach-result-pdf-button";
 import { Drawer } from "@/components/drawer";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { makeCenterNormalizer } from "@/lib/allowance/centers";
 import type { RunCoach } from "@/lib/types";
 import type { BreakdownItem } from "@/lib/kpi/types";
@@ -30,18 +32,23 @@ function fmtTarget(v: number, type: BreakdownItem["type"]): string {
 }
 
 /**
- * Read-only per-coach table for a saved KPI run. Each row is clickable and opens a
- * detail drawer with the full score breakdown (per-metric actual / target / weight /
+ * Read-only per-coach list for a saved KPI run (cards on mobile, table on desktop).
+ * Each desktop row is clickable — and each mobile card has an explicit "View
+ * breakdown" button — opening a detail drawer with the full score breakdown
+ * (per-metric actual / target / weight /
  * score + radar) and the coach's underlying data (merged accounts, inputs), so a
  * finalized month can be inspected the same way the live dashboard's coach drawer
  * shows it — without re-computing anything (everything is read from the snapshot).
  */
 export function RunCoachTable({
   coaches,
+  periodLabel,
   centers = [],
   centerAliases = {},
 }: {
   coaches: RunCoach[];
+  /** The run's period label (e.g. "2026-04") — stamped onto the PDF export. */
+  periodLabel: string;
   centers?: string[];
   centerAliases?: Record<string, string[]>;
 }) {
@@ -53,7 +60,58 @@ export function RunCoachTable({
 
   return (
     <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
+      {/* Mobile (< lg): card stack with an explicit "View breakdown" tap target. */}
+      <MobileCards>
+        {coaches.map((c) => (
+          <div key={c.canonicalName} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-gray-900">
+                  {c.canonicalName}
+                  {!c.isComplete && (
+                    <span className="ml-2 text-[10px] font-medium text-amber-600">incomplete</span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-[11px] text-gray-400">
+                  {normCenter(c.center) || "—"} · {c.position} · {c.students} students
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="nums text-lg font-bold text-indigo-600">
+                  {c.finalScore.toFixed(2)}
+                </span>
+                <Badge className={GRADE_CLASS[c.grade] ?? "border-gray-300 bg-gray-100 text-gray-700"}>
+                  {c.grade}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-overline text-muted">Allowance</span>
+                <div className="nums mt-0.5 text-sm font-medium text-gray-700">
+                  {c.teachingAllowance ? rm(c.teachingAllowance) : "—"}
+                </div>
+              </div>
+              <div>
+                <span className="text-overline text-muted">Payout</span>
+                <div className="nums mt-0.5 text-base font-bold text-green-700">{rm(c.payout)}</div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="mt-3 min-h-11 w-full rounded-md border border-gray-200 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+              onClick={() => setActive(c)}
+            >
+              View breakdown
+            </button>
+          </div>
+        ))}
+      </MobileCards>
+
+      {/* Desktop (lg+): the full table; rows stay clickable. */}
+      <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -108,10 +166,15 @@ export function RunCoachTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
 
       {active && (
-        <CoachDetailDrawer coach={active} normCenter={normCenter} onClose={() => setActive(null)} />
+        <CoachDetailDrawer
+          coach={active}
+          periodLabel={periodLabel}
+          normCenter={normCenter}
+          onClose={() => setActive(null)}
+        />
       )}
     </Card>
   );
@@ -119,10 +182,12 @@ export function RunCoachTable({
 
 function CoachDetailDrawer({
   coach,
+  periodLabel,
   normCenter,
   onClose,
 }: {
   coach: RunCoach;
+  periodLabel: string;
   normCenter: (raw: string) => string;
   onClose: () => void;
 }) {
@@ -134,13 +199,20 @@ function CoachDetailDrawer({
       open
       onClose={onClose}
       header={
-        <>
-          <h3 className="text-h2 text-gray-900">{coach.canonicalName}</h3>
-          <p className="text-caption text-muted">
-            {coach.position} · {normCenter(coach.center) || "—"} · {coach.students} students
-            {!coach.isComplete && <span className="ml-1.5 text-amber-600">· incomplete</span>}
-          </p>
-        </>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-h2 text-gray-900">{coach.canonicalName}</h3>
+            <p className="text-caption text-muted">
+              {coach.position} · {normCenter(coach.center) || "—"} · {coach.students} students
+              {!coach.isComplete && <span className="ml-1.5 text-amber-600">· incomplete</span>}
+            </p>
+          </div>
+          <CoachResultPdfButton
+            className="shrink-0"
+            coach={{ ...coach, center: normCenter(coach.center) }}
+            periodLabel={periodLabel}
+          />
+        </div>
       }
     >
       <div className="grid grid-cols-3 gap-2">
@@ -175,7 +247,34 @@ function CoachDetailDrawer({
 
       <div className="mt-4">
         <h4 className="mb-2 text-sm font-bold text-gray-700">Score Breakdown</h4>
-        <div className="overflow-x-auto">
+        {/* Mobile (< lg): one hairline-divided row per metric. */}
+        <MobileCards className="rounded-lg border border-gray-100">
+          {coach.breakdown.map((b) => (
+            <div key={b.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-gray-800">{b.name}</div>
+                <div className="nums mt-0.5 text-[11px] text-gray-500">
+                  {b.displayValue} · target {fmtTarget(b.min, b.type)}–{fmtTarget(b.max, b.type)} ·
+                  weight {(b.w * 100).toFixed(0)}%
+                </div>
+              </div>
+              <span
+                className={cn(
+                  "nums shrink-0 text-sm font-semibold",
+                  b.score >= 1.2
+                    ? "text-green-600"
+                    : b.score < 0.8
+                      ? "text-red-500"
+                      : "text-indigo-600",
+                )}
+              >
+                {b.score.toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </MobileCards>
+        {/* Desktop (lg+): compact table (the drawer is wide enough there). */}
+        <DesktopTable>
           <table className="min-w-full text-sm">
             <thead className="text-xs uppercase text-gray-500">
               <tr>
@@ -211,7 +310,7 @@ function CoachDetailDrawer({
               ))}
             </tbody>
           </table>
-        </div>
+        </DesktopTable>
       </div>
 
       <div className="mt-4">

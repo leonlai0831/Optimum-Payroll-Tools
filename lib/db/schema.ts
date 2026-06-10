@@ -10,7 +10,12 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { ALL_TOOL_CATEGORIES, type PermissionConfig, type Role, type ToolCategory } from "@/lib/auth/types";
+import type {
+  LegacyPermissionConfig,
+  PermissionConfig,
+  Role,
+  ToolCategory,
+} from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -22,6 +27,7 @@ import type { GradeKey, RatingMap } from "@/lib/assessment/types";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymEmploymentType, GymPosition } from "@/lib/gym/types";
+import type { LessonPlanData, LessonPlanStatus, LessonPlanType, LevelType } from "@/lib/lesson-plan/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
   AllowanceConfig,
@@ -64,10 +70,15 @@ export const coaches = pgTable("coaches", {
   // history. UNIQUE makes that a hard guarantee (dedup runs first in the migration).
 }, (t) => [uniqueIndex("coaches_name_idx").on(t.canonicalName)]);
 
-/** Singleton role→capability matrix (one row, id = 1). super_admin is not stored. */
+/**
+ * Singleton role permission matrix (one row, id = 1). super_admin is not stored.
+ * `data` = { capabilities, categories } (PermissionConfig); rows written before
+ * `categories` existed hold the flat capability map and are migrated on read by
+ * `normalizePermissionConfig`, so the stored type is the union of both shapes.
+ */
 export const permissionConfig = pgTable("permission_config", {
   id: integer("id").primaryKey().default(1),
-  data: jsonb("data").$type<PermissionConfig>().notNull(),
+  data: jsonb("data").$type<PermissionConfig | LegacyPermissionConfig>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -85,13 +96,11 @@ export const users = pgTable("users", {
   // gym-staff member (`gymStaffId`) — the two are mutually exclusive, enforced at the API.
   coachId: integer("coach_id"),
   gymStaffId: integer("gym_staff_id"),
-  // Which home-launcher categories this account sees (System Setting →
-  // Category Visibility). Defaults to all so existing accounts lose nothing;
+  // Per-user launcher-category OVERRIDE (System Setting → Permissions → User
+  // overrides). NULL = inherit the role's default categories from the
+  // permission matrix; a non-null array pins this account to exactly that list.
   // super_admin ignores this and always sees everything.
-  visibleCategories: jsonb("visible_categories")
-    .$type<ToolCategory[]>()
-    .notNull()
-    .default(ALL_TOOL_CATEGORIES),
+  visibleCategories: jsonb("visible_categories").$type<ToolCategory[] | null>(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -108,6 +117,38 @@ export const runs = pgTable("runs", {
   coachResults: jsonb("coach_results").$type<RunCoach[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("runs_created_idx").on(t.createdAt)]);
+
+/**
+ * A staged KPI data delivery pushed by the external system (POST /api/ingest/kpi).
+ * `rows` is already normalized to canonical InstructorRow[] at receive time, so
+ * the owner can review/edit it and load it into the calculator exactly like an
+ * uploaded CSV. Rows are NEVER hard-deleted: "discarded" and "superseded" are
+ * statuses, and an imported delivery keeps its rows viewable forever (with
+ * `importedRunId` pointing at the saved run it became). A re-push for a period
+ * that still has PENDING deliveries flips them to "superseded" — the sender
+ * pushing again is a correction, so only the newest delivery stays actionable.
+ */
+export const kpiIngests = pgTable("kpi_ingests", {
+  id: serial("id").primaryKey(),
+  periodLabel: text("period_label").notNull(),
+  /** Source filename / free-form note supplied by the sender. */
+  label: text("label").default("").notNull(),
+  rows: jsonb("rows").$type<InstructorRow[]>().notNull(),
+  // Plain text column with NO CHECK constraint (see migration 0029), so widening
+  // this union ("superseded" was added later) is a types-only change — no migration.
+  status: text("status")
+    .$type<"pending" | "imported" | "discarded" | "superseded">()
+    .default("pending")
+    .notNull(),
+  importedRunId: integer("imported_run_id"),
+  importedAt: timestamp("imported_at", { withTimezone: true }),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // The dashboard's "Pending uploads" card filters by status; the list orders by receivedAt.
+  index("kpi_ingests_status_idx").on(t.status),
+  index("kpi_ingests_received_idx").on(t.receivedAt),
+]);
 
 /** Singleton allowance rate tables (one row, id = 1). */
 export const allowanceConfig = pgTable("allowance_config", {
@@ -236,11 +277,60 @@ export const assessments = pgTable("assessments", {
   totalPercent: real("total_percent").notNull(),
   finalGrade: text("final_grade").$type<GradeKey>().notNull(),
   comments: text("comments").default("").notNull(),
+  // Optional link to the lesson plan of the class being observed. No DB-level
+  // FK (repo convention) — the API validates plan.coachId === coachId on save.
+  lessonPlanId: integer("lesson_plan_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
   index("assessments_coach_idx").on(t.coachId),
   // Supports the "latest assessment per coach" lookup (filter coach_id, order observed_on).
   index("assessments_coach_observed_idx").on(t.coachId, t.observedOn),
+]);
+
+/**
+ * A digital lesson plan (actual or replacement class) with a lightweight review
+ * workflow: draft → submitted → approved / changes_requested. Any content edit
+ * resets the status to draft (the last `reviewNote` is kept visible). The full
+ * form body lives in `data` (jsonb); the promoted columns power the History
+ * list without loading the body.
+ */
+export const lessonPlans = pgTable("lesson_plans", {
+  id: serial("id").primaryKey(),
+  type: text("type").$type<LessonPlanType>().notNull(),
+  status: text("status").$type<LessonPlanStatus>().default("draft").notNull(),
+  // The login that created the plan (visibility + edit rights are creator-scoped).
+  createdByUserId: integer("created_by_user_id").notNull(),
+  createdByName: text("created_by_name").default("").notNull(),
+  // Optional link to the creator's coach profile (when their login has one).
+  coachId: integer("coach_id"),
+  // For a replacement plan this is the REPLACEMENT instructor (the person filling).
+  instructorName: text("instructor_name").notNull(),
+  // Replacement plans only: the actual class instructor being covered.
+  actualInstructorName: text("actual_instructor_name").default("").notNull(),
+  center: text("center").default("").notNull(),
+  lessonDate: timestamp("lesson_date", { withTimezone: true }).notNull(),
+  timeLabel: text("time_label").default("").notNull(),
+  // Replacement plans only: which skill-checklist set applies (low/medium/high).
+  levelType: text("level_type").$type<LevelType>(),
+  classLevel: text("class_level").default("").notNull(),
+  // Actual plans only.
+  ageGroup: text("age_group").default("").notNull(),
+  data: jsonb("data").$type<LessonPlanData>().notNull(),
+  // When the post-lesson self-evaluation (data.selfEval + data.remarks) was
+  // last filled in; null = not filled yet. Set by the self_eval action only —
+  // content edits never touch it.
+  selfEvalAt: timestamp("self_eval_at", { withTimezone: true }),
+  reviewNote: text("review_note").default("").notNull(),
+  reviewedByEmail: text("reviewed_by_email").default("").notNull(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // Editors see only their own plans — the list filters by creator.
+  index("lesson_plans_creator_idx").on(t.createdByUserId),
+  index("lesson_plans_status_idx").on(t.status),
+  // The History list orders by lesson date.
+  index("lesson_plans_date_idx").on(t.lessonDate),
 ]);
 
 /** A free-form HR note (recognition / disciplinary / coaching / general) on an employee. */
@@ -300,6 +390,7 @@ export type AssessmentRecord = typeof assessments.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
 export type CoachRecord = typeof coaches.$inferSelect;
 export type RunRecord = typeof runs.$inferSelect;
+export type KpiIngestRecord = typeof kpiIngests.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;
 export type AllowanceConfigRecord = typeof allowanceConfig.$inferSelect;
 export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
@@ -309,3 +400,4 @@ export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;
 export type TeachingRunRecord = typeof teachingRuns.$inferSelect;
 export type GymStaffRecord = typeof gymStaff.$inferSelect;
 export type GymNoteRecord = typeof gymNotes.$inferSelect;
+export type LessonPlanRecord = typeof lessonPlans.$inferSelect;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileUp, Link2, Save, Sparkles, TriangleAlert } from "lucide-react";
+import { CoachResultPdfButton } from "@/components/coach-result-pdf-button";
 import { Drawer } from "@/components/drawer";
 import { useToast } from "@/components/toast";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
@@ -107,11 +108,24 @@ function monthsAgo(iso: string | null): string {
   return `${Math.floor(days / 30)} mo ago`;
 }
 
+/** A staged machine-pushed delivery to seed the dashboard with (/kpi?ingest=<id>). */
+export interface IngestSeed {
+  ingestId: number;
+  /** Sender's filename/note — shown where the uploaded filename would be. */
+  label: string;
+  periodLabel: string;
+  /** Already-normalized rows (the ingest API ran the CSV header mapping). */
+  rows: InstructorRow[];
+}
+
 export function Dashboard({
   assessmentFinal = {},
+  seed = null,
 }: {
   /** Latest assessment final % (0–100) keyed by coachId, to prefill the mgmt assessment. */
   assessmentFinal?: Record<string, number>;
+  /** When set, skip the file upload and process these staged rows instead. */
+  seed?: IngestSeed | null;
 }) {
   const [phase, setPhase] = useState<"upload" | "working">("upload");
   const [fileName, setFileName] = useState("");
@@ -145,132 +159,7 @@ export function Dashboard({
       skipEmptyLines: true,
       complete: async (res) => {
         try {
-          const rawParsed = mapCsvRows(res.data);
-          setFileName(file.name);
-          const derivedPeriod = derivePeriod(file.name);
-          setPeriod(derivedPeriod);
-
-          const [cfg, coachList, allowanceCfg] = await Promise.all([
-            fetchJson<AppConfig>("/api/config"),
-            fetchJson<CoachProfile[]>("/api/coaches"),
-            fetchJson<AllowanceConfig>("/api/allowance/config"),
-          ]);
-          // Normalize raw CSV center labels (a mix of codes + full names) onto the
-          // operator's configured center codes via the alias map from Staff settings.
-          const normCenter = makeCenterNormalizer(
-            allowanceCfg.centers ?? [],
-            allowanceCfg.centerAliases ?? {},
-          );
-          const parsed = rawParsed.map((r) => ({ ...r, Center: normCenter(r.Center) }));
-          setRows(parsed);
-          setConfig(cfg);
-          setCoachList(coachList);
-          // Seed the session NA set from persisted "not applicable" overrides.
-          setNaRecs(new Set(coachList.filter((c) => c.kpiLinkNa).map((c) => c.id)));
-
-          const names = uniqueInstructorNames(parsed);
-          const accountsForMatch = names.map((n) => {
-            const rs = parsed.filter((r) => r.Instructor === n);
-            return {
-              name: n,
-              center: rs[0]?.Center ?? "",
-              students: rs.reduce((s, r) => s + r.TotalStudent, 0),
-            };
-          });
-
-          // Fire the AI data-quality check in the background — advisory only, so
-          // it must never block or delay the merge/scoring path below.
-          setAnomalies([]);
-          setAnomaliesDismissed(false);
-          void fetch("/api/validate-csv", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              current: accountsForMatch.map((a) => ({
-                instructor: a.name,
-                center: a.center,
-                students: a.students,
-              })),
-            }),
-          })
-            .then((r) => r.json() as Promise<{ anomalies?: CsvAnomaly[] }>)
-            .then((d) => setAnomalies(d.anomalies ?? []))
-            .catch(() => {
-              /* advisory only — ignore failures */
-            });
-
-          setAiStatus("matching");
-          let clusters: string[][] = [];
-          try {
-            const r = await fetch("/api/match-names", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ accounts: accountsForMatch }),
-            });
-            clusters = ((await r.json()) as { clusters: string[][] }).clusters ?? [];
-          } catch {
-            /* deterministic merge still applies */
-          }
-          setAiStatus("done");
-
-          const known = coachList.map((c) => ({
-            canonicalName: c.canonicalName,
-            aliases: c.aliases ?? [],
-          }));
-          const groups = buildGroups({
-            names,
-            aiClusters: clusters,
-            knownCoaches: known,
-            classifyConfig: cfg.classify,
-          });
-
-          const nextAccts: Acct[] = [];
-          const nextMeta: Record<string, GroupInputs> = {};
-          groups.forEach((g, i) => {
-            const id = `g${i}`;
-            g.accounts.forEach((a) => {
-              const rs = parsed.filter((r) => r.Instructor === a);
-              const cl = classifyAccount(a, cfg.classify);
-              nextAccts.push({
-                name: a,
-                center: rs[0]?.Center ?? "",
-                students: rs.reduce((s, r) => s + r.TotalStudent, 0),
-                groupId: id,
-                kind: cl.kind,
-                include: cl.defaultInclude,
-              });
-            });
-            const profile = coachList.find(
-              (c) =>
-                c.canonicalName === g.canonicalName ||
-                (c.aliases ?? []).some((al) => g.accounts.includes(al)),
-            );
-            const assessmentMgmt =
-              profile?.id != null ? assessmentFinal[String(profile.id)] : undefined;
-            nextMeta[id] = {
-              canonicalName: g.canonicalName,
-              position: profile?.defaultPosition ?? "Instructor",
-              allowance: profile?.lastAllowance ?? null,
-              allowanceSource: profile?.lastAllowance != null ? "carryover" : null,
-              carryAllowance: profile?.lastAllowance ?? null,
-              mgmt: assessmentMgmt ?? profile?.lastMgmtAssessment ?? null,
-              mgmtSource:
-                assessmentMgmt != null
-                  ? "assessment"
-                  : profile?.lastMgmtAssessment != null
-                    ? "carryover"
-                    : null,
-              lastMgmtAt: profile?.lastMgmtAssessmentAt ?? null,
-              coachId: profile?.id ?? null,
-              groupConfig: null,
-            };
-          });
-          setAccts(nextAccts);
-          setMeta(nextMeta);
-          setPhase("working");
-          // Pass the freshly-fetched coach list + accounts explicitly so alias
-          // enrichment doesn't depend on state having flushed yet.
-          await applyAllowanceForPeriod(derivedPeriod, { profiles: coachList, accts: nextAccts });
+          await processRows(mapCsvRows(res.data), file.name);
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Failed to process file");
         } finally {
@@ -282,6 +171,158 @@ export function Dashboard({
         setParsing(false);
       },
     });
+  }
+
+  // Seed from a staged ingest exactly once on mount — from there on the month
+  // behaves as if its rows had been file-uploaded. A ref (not state) guards the
+  // one-shot so the effect body stays free of synchronous setState. The phase
+  // stays "upload" (showing the seed loading card) until processRows flips it.
+  const seedStarted = useRef(false);
+  useEffect(() => {
+    if (!seed || seedStarted.current) return;
+    seedStarted.current = true;
+    processRows(seed.rows, seed.label, seed.periodLabel).catch((e) =>
+      toast.error(e instanceof Error ? e.message : "Failed to load staged upload"),
+    );
+    // processRows/toast are stable for the lifetime of the component; this only fires for the seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed]);
+
+  /**
+   * Shared post-parse pipeline — the CSV upload and a staged-ingest seed both
+   * land here, so an API-pushed month goes through the exact same merge editor →
+   * compute → review flow as a hand-uploaded file.
+   */
+  async function processRows(
+    rawParsed: InstructorRow[],
+    sourceName: string,
+    periodOverride?: string,
+  ) {
+    setFileName(sourceName);
+    const derivedPeriod = periodOverride ?? derivePeriod(sourceName);
+    setPeriod(derivedPeriod);
+
+    const [cfg, coachList, allowanceCfg] = await Promise.all([
+      fetchJson<AppConfig>("/api/config"),
+      fetchJson<CoachProfile[]>("/api/coaches"),
+      fetchJson<AllowanceConfig>("/api/allowance/config"),
+    ]);
+    // Normalize raw CSV center labels (a mix of codes + full names) onto the
+    // operator's configured center codes via the alias map from Staff settings.
+    const normCenter = makeCenterNormalizer(
+      allowanceCfg.centers ?? [],
+      allowanceCfg.centerAliases ?? {},
+    );
+    const parsed = rawParsed.map((r) => ({ ...r, Center: normCenter(r.Center) }));
+    setRows(parsed);
+    setConfig(cfg);
+    setCoachList(coachList);
+    // Seed the session NA set from persisted "not applicable" overrides.
+    setNaRecs(new Set(coachList.filter((c) => c.kpiLinkNa).map((c) => c.id)));
+
+    const names = uniqueInstructorNames(parsed);
+    const accountsForMatch = names.map((n) => {
+      const rs = parsed.filter((r) => r.Instructor === n);
+      return {
+        name: n,
+        center: rs[0]?.Center ?? "",
+        students: rs.reduce((s, r) => s + r.TotalStudent, 0),
+      };
+    });
+
+    // Fire the AI data-quality check in the background — advisory only, so
+    // it must never block or delay the merge/scoring path below.
+    setAnomalies([]);
+    setAnomaliesDismissed(false);
+    void fetch("/api/validate-csv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current: accountsForMatch.map((a) => ({
+          instructor: a.name,
+          center: a.center,
+          students: a.students,
+        })),
+      }),
+    })
+      .then((r) => r.json() as Promise<{ anomalies?: CsvAnomaly[] }>)
+      .then((d) => setAnomalies(d.anomalies ?? []))
+      .catch(() => {
+        /* advisory only — ignore failures */
+      });
+
+    setAiStatus("matching");
+    let clusters: string[][] = [];
+    try {
+      const r = await fetch("/api/match-names", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accounts: accountsForMatch }),
+      });
+      clusters = ((await r.json()) as { clusters: string[][] }).clusters ?? [];
+    } catch {
+      /* deterministic merge still applies */
+    }
+    setAiStatus("done");
+
+    const known = coachList.map((c) => ({
+      canonicalName: c.canonicalName,
+      aliases: c.aliases ?? [],
+    }));
+    const groups = buildGroups({
+      names,
+      aiClusters: clusters,
+      knownCoaches: known,
+      classifyConfig: cfg.classify,
+    });
+
+    const nextAccts: Acct[] = [];
+    const nextMeta: Record<string, GroupInputs> = {};
+    groups.forEach((g, i) => {
+      const id = `g${i}`;
+      g.accounts.forEach((a) => {
+        const rs = parsed.filter((r) => r.Instructor === a);
+        const cl = classifyAccount(a, cfg.classify);
+        nextAccts.push({
+          name: a,
+          center: rs[0]?.Center ?? "",
+          students: rs.reduce((s, r) => s + r.TotalStudent, 0),
+          groupId: id,
+          kind: cl.kind,
+          include: cl.defaultInclude,
+        });
+      });
+      const profile = coachList.find(
+        (c) =>
+          c.canonicalName === g.canonicalName ||
+          (c.aliases ?? []).some((al) => g.accounts.includes(al)),
+      );
+      const assessmentMgmt =
+        profile?.id != null ? assessmentFinal[String(profile.id)] : undefined;
+      nextMeta[id] = {
+        canonicalName: g.canonicalName,
+        position: profile?.defaultPosition ?? "Instructor",
+        allowance: profile?.lastAllowance ?? null,
+        allowanceSource: profile?.lastAllowance != null ? "carryover" : null,
+        carryAllowance: profile?.lastAllowance ?? null,
+        mgmt: assessmentMgmt ?? profile?.lastMgmtAssessment ?? null,
+        mgmtSource:
+          assessmentMgmt != null
+            ? "assessment"
+            : profile?.lastMgmtAssessment != null
+              ? "carryover"
+              : null,
+        lastMgmtAt: profile?.lastMgmtAssessmentAt ?? null,
+        coachId: profile?.id ?? null,
+        groupConfig: null,
+      };
+    });
+    setAccts(nextAccts);
+    setMeta(nextMeta);
+    setPhase("working");
+    // Pass the freshly-fetched coach list + accounts explicitly so alias
+    // enrichment doesn't depend on state having flushed yet.
+    await applyAllowanceForPeriod(derivedPeriod, { profiles: coachList, accts: nextAccts });
   }
 
   /** Fetch the period's saved allowances and overlay them onto each coach's teaching allowance. */
@@ -535,10 +576,9 @@ export function Dashboard({
     setSavedId(null);
   }
 
-  async function save() {
-    if (!config) return;
-    setSaving(true);
-    const coachResults: RunCoach[] = ranked.map((g) => ({
+  /** Flatten a merge group + its computed scores into the persisted RunCoach shape. */
+  function toRunCoach(g: (typeof groups)[number]): RunCoach {
+    return {
       coachId: g.meta.coachId,
       canonicalName: g.meta.canonicalName,
       accounts: g.includedNames,
@@ -555,7 +595,13 @@ export function Dashboard({
       payout: g.comp.payout,
       breakdown: g.comp.breakdown,
       isComplete: g.comp.isComplete,
-    }));
+    };
+  }
+
+  async function save() {
+    if (!config) return;
+    setSaving(true);
+    const coachResults: RunCoach[] = ranked.map(toRunCoach);
     try {
       const res = await fetch("/api/runs", {
         method: "POST",
@@ -566,6 +612,9 @@ export function Dashboard({
           csvRows: rows,
           configSnapshot: config,
           coachResults,
+          // When this month came from a staged API delivery, link it so the
+          // ingest flips to "imported" with a pointer at the saved run.
+          ...(seed ? { ingestId: seed.ingestId } : {}),
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "Save failed");
@@ -613,6 +662,22 @@ export function Dashboard({
     link.href = URL.createObjectURL(blob);
     link.download = `KPI_${period}_payroll.csv`;
     link.click();
+  }
+
+  // Seeded from a staged ingest: show a loading card instead of the file picker
+  // while the shared pipeline (config fetch + name matching) runs.
+  if (phase === "upload" && seed) {
+    return (
+      <div className="fade-in">
+        <Card className="mx-auto max-w-xl p-8 text-center">
+          <Spinner className="mx-auto mb-3 h-8 w-8 text-indigo-500" />
+          <h2 className="text-lg font-bold text-gray-900">Loading staged upload…</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            {seed.label} · {seed.periodLabel} · {seed.rows.length} rows
+          </p>
+        </Card>
+      </div>
+    );
   }
 
   if (phase === "upload") {
@@ -1061,6 +1126,8 @@ export function Dashboard({
       {detail && config && (
         <CoachDetail
           key={detail.id}
+          runCoach={toRunCoach(detail)}
+          periodLabel={period}
           name={detail.meta.canonicalName}
           position={detail.meta.position}
           finalScore={detail.comp.finalScore}
@@ -1090,6 +1157,10 @@ function mostCommon(values: string[]): string {
 }
 
 interface DetailProps {
+  /** The coach flattened to the persisted shape — drives the PDF export. */
+  runCoach: RunCoach;
+  /** The upload's period label (e.g. "2026-04") — stamped onto the PDF. */
+  periodLabel: string;
   name: string;
   position: Position;
   finalScore: number;
@@ -1147,12 +1218,19 @@ function CoachDetail(props: DetailProps) {
       open
       onClose={props.onClose}
       header={
-        <>
-          <h3 className="text-h2 text-gray-900">{props.name}</h3>
-          <p className="text-caption text-muted">
-            {props.position} · {props.students} students
-          </p>
-        </>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-h2 text-gray-900">{props.name}</h3>
+            <p className="text-caption text-muted">
+              {props.position} · {props.students} students
+            </p>
+          </div>
+          <CoachResultPdfButton
+            className="shrink-0"
+            coach={props.runCoach}
+            periodLabel={props.periodLabel}
+          />
+        </div>
       }
     >
         <div className="grid grid-cols-3 gap-2">

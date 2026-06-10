@@ -95,4 +95,50 @@ describe("buildMonthlySummaryCsv", () => {
     );
     expect(buildMonthlySummaryCsv(summary)).toContain('"QSM, BK"');
   });
+
+  it("reconciles: printed lines sum to the printed totals (half-ringgit case)", () => {
+    // Two coaches with RM10.50 amounts: each line prints as 11, so the printed
+    // TOTAL must be 11 + 11 = 22 — NOT round(10.5 + 10.5) = 21. Sum-of-rounded,
+    // never rounded-sum.
+    const summary = assembleMonthlySummary(
+      "2026-04",
+      [
+        kpi({ canonicalName: "A", payout: 10.5 }),
+        kpi({ canonicalName: "B", payout: 10.5 }),
+      ],
+      [
+        allow({ canonicalName: "A", grandTotal: 10.5 }),
+        allow({ canonicalName: "B", grandTotal: 10.5 }),
+      ],
+    );
+    const lines = buildMonthlySummaryCsv(summary).trim().split(/\r?\n/);
+    const cols = (line: string) => line.split(",");
+    const BONUS = 8;
+    const ALLOW = 9;
+    const TOTAL = 10;
+
+    const rowLines = lines.slice(1, -1);
+    const totalLine = cols(lines[lines.length - 1]);
+    expect(totalLine[1]).toBe("TOTAL");
+
+    let sumBonus = 0;
+    let sumAllow = 0;
+    let sumTotal = 0;
+    for (const line of rowLines) {
+      const c = cols(line);
+      const bonus = Number(c[BONUS]);
+      const allowance = Number(c[ALLOW]);
+      const total = Number(c[TOTAL]);
+      expect(bonus).toBe(11); // 10.5 rounds up, once, per line
+      expect(allowance).toBe(11);
+      expect(total).toBe(bonus + allowance); // each row reconciles
+      sumBonus += bonus;
+      sumAllow += allowance;
+      sumTotal += total;
+    }
+    // The TOTAL row equals the sum of the printed lines in every money column.
+    expect(Number(totalLine[BONUS])).toBe(sumBonus); // 22, not 21
+    expect(Number(totalLine[ALLOW])).toBe(sumAllow);
+    expect(Number(totalLine[TOTAL])).toBe(sumTotal);
+  });
 });

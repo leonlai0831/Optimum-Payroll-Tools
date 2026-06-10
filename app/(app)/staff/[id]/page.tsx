@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
+import { canSeeCategory } from "@/lib/auth/types";
 import {
   CoachProfileView,
   type AllowancePoint,
@@ -24,9 +25,13 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
 
-  const canViewAll = caps.has("view_all_staff");
+  const canViewAll = caps.has("swim_view_staff");
   const isOwn = caps.has("view_own") && user.coachId === coachId;
   if (!canViewAll && !isOwn) redirect("/");
+  // The launcher's My Profile card is category-independent: a user's OWN coach
+  // profile stays reachable even without the "swim" category. Anyone else's
+  // profile is a swim brand surface and needs the category too.
+  if (!isOwn && !canSeeCategory(user, "swim")) redirect("/");
 
   const [profile, config, noteRecords, assessmentRecords] = await Promise.all([
     getCoachProfile(coachId),
@@ -64,6 +69,7 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
     poolType: a.poolType,
     totalPercent: a.totalPercent,
     finalGrade: a.finalGrade,
+    lessonPlanId: a.lessonPlanId,
   }));
   const allowancePoints: AllowancePoint[] = allowance.map((a) => ({
     id: a.id,
@@ -78,7 +84,7 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
     <CoachProfileView
       coach={coachProfile}
       centers={config.centers}
-      canEdit={caps.has("edit_staff")}
+      canEdit={caps.has("swim_edit_staff")}
       backHref={canViewAll ? "/staff" : undefined}
       kpi={kpi}
       allowance={allowancePoints}

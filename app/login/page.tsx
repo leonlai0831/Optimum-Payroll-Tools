@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Spinner } from "@/components/ui";
+import { CiWave } from "@/components/ci-wave";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,8 +33,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-sm overflow-hidden border-t-4 border-t-brand">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      {/* The CI guide's own wave artwork anchors the page bottom (decoration only). */}
+      <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
+      <Card className="relative w-full max-w-sm overflow-hidden border-t-4 border-t-brand">
         <div className="bg-white px-6 pb-4 pt-7 text-center">
           <div className="flex items-center justify-center gap-2.5">
             <Image

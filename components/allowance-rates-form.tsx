@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, SlidersHorizontal } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
 import { ALLOWANCE_TIERS } from "@/lib/allowance/types";
 import type { AllowanceConfig, AllowanceTier } from "@/lib/allowance/types";
@@ -79,10 +80,38 @@ export function AllowanceRatesForm({
       )}
 
       <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-4 border-0 p-0">
-      <Card className="overflow-x-auto p-4">
+      <Card className="p-4">
         <h3 className="mb-3 text-h3 text-gray-900">
           Attendance allowance (RM)
         </h3>
+        <MobileCards>
+          {ALLOWANCE_TIERS.map((t) => (
+            <div key={t} className="py-3 first:pt-0 last:pb-0">
+              <div className="text-sm font-semibold text-gray-700">{t}</div>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-overline text-muted">Met (95%–99%)</span>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={cfg.attendance[t].met}
+                    onChange={(e) => patchAttendance(t, "met", Number(e.target.value) || 0)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-overline text-muted">Perfect (100%)</span>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={cfg.attendance[t].perfect}
+                    onChange={(e) => patchAttendance(t, "perfect", Number(e.target.value) || 0)}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </MobileCards>
+        <DesktopTable>
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
@@ -115,12 +144,52 @@ export function AllowanceRatesForm({
             ))}
           </tbody>
         </table>
+        </DesktopTable>
       </Card>
 
-      <Card className="overflow-x-auto p-4">
+      <Card className="p-4">
         <h3 className="mb-3 text-h3 text-gray-900">
           Teaching rates (RM / hour)
         </h3>
+        <MobileCards>
+          {ALLOWANCE_TIERS.map((t) => (
+            <div key={t} className="py-3 first:pt-0 last:pb-0">
+              <div className="text-sm font-semibold text-gray-700">{t}</div>
+              <div className="mt-2 grid grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="text-overline text-muted">LTS</span>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={cfg.teaching[t].normal}
+                    onChange={(e) => patchTeaching(t, "normal", Number(e.target.value) || 0)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-overline text-muted">YS</span>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={cfg.teaching[t].youngSwimmer}
+                    onChange={(e) => patchTeaching(t, "youngSwimmer", Number(e.target.value) || 0)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-overline text-muted">PC &amp; LS</span>
+                  <Input
+                    type="number"
+                    className="mt-1"
+                    value={cfg.teaching[t].precompLifesaving}
+                    onChange={(e) =>
+                      patchTeaching(t, "precompLifesaving", Number(e.target.value) || 0)
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </MobileCards>
+        <DesktopTable>
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
@@ -164,6 +233,7 @@ export function AllowanceRatesForm({
             ))}
           </tbody>
         </table>
+        </DesktopTable>
         <p className="mt-2 text-[11px] text-gray-400">
           Admin tiers (A1–A3) and PA carry no teaching rate by default. Changes apply to future
           calculations; saved months keep their own rate snapshot.

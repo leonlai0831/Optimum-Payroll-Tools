@@ -56,10 +56,11 @@ export async function POST(req: Request) {
   const link = resolveEmployeeLink(body);
   if ("error" in link) return link.error;
 
-  // Optional creation-time category grant (defaults to all when omitted).
+  // Optional creation-time category override. Omitted (or explicit null) →
+  // stored NULL → the account inherits its role's default categories.
   // Same rules as PATCH: super_admin only, and never stored on a super_admin.
   let visibleCategories: ToolCategory[] | undefined;
-  if (body.visibleCategories !== undefined) {
+  if (body.visibleCategories !== undefined && body.visibleCategories !== null) {
     if (actor.role !== "super_admin") {
       return NextResponse.json(
         { error: "Only a super admin can set category visibility." },

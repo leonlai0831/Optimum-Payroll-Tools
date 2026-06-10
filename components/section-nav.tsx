@@ -6,12 +6,13 @@ import {
   BarChart3,
   Calculator,
   ClipboardCheck,
+  ClipboardList,
   Dumbbell,
   History,
   Home,
+  Inbox,
   Layers,
   LayoutDashboard,
-  LayoutGrid,
   Link2,
   ScrollText,
   Settings,
@@ -36,7 +37,7 @@ type SectionItem = {
 type SectionConfig = { title: string; items: SectionItem[] };
 
 const NAVS: Record<
-  "allowance" | "kpi" | "staff" | "commission" | "assessment" | "system",
+  "allowance" | "kpi" | "staff" | "commission" | "assessment" | "lesson" | "system",
   SectionConfig
 > = {
   assessment: {
@@ -47,10 +48,17 @@ const NAVS: Record<
       { href: "/assessment/ai", label: "AI analysis", icon: Sparkles },
     ],
   },
+  lesson: {
+    title: "Lesson Plan",
+    items: [
+      { href: "/lesson-plans", label: "New plan", icon: ClipboardList, exact: true },
+      { href: "/lesson-plans/history", label: "History", icon: History },
+    ],
+  },
   allowance: {
     title: "Staff Allowance",
     items: [
-      { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
+      { href: "/allowance", label: "Single entry", icon: Calculator, exact: true },
       { href: "/allowance/bulk", label: "Bulk entry", icon: Layers },
       { href: "/allowance/history", label: "History", icon: History },
       { href: "/allowance/trends", label: "Trends", icon: BarChart3 },
@@ -61,7 +69,8 @@ const NAVS: Record<
     title: "Instructor KPI Bonus",
     items: [
       { href: "/kpi", label: "Calculator", icon: LayoutDashboard, exact: true },
-      { href: "/kpi/links", label: "Links", icon: Link2, requires: { cap: "view_all_staff" } },
+      { href: "/kpi/ingests", label: "Uploads", icon: Inbox, requires: { cap: "run_kpi" } },
+      { href: "/kpi/links", label: "Links", icon: Link2, requires: { cap: "swim_view_staff" } },
       { href: "/kpi/history", label: "History", icon: History },
       { href: "/kpi/trends", label: "Trends", icon: BarChart3 },
       { href: "/kpi/settings", label: "Settings", icon: Settings },
@@ -75,13 +84,13 @@ const NAVS: Record<
         label: "Directory",
         icon: Users,
         exact: true,
-        requires: { cap: "view_all_staff" },
+        requires: { cap: "swim_view_staff" },
       },
       {
         href: "/staff/settings",
         label: "Settings",
         icon: SlidersHorizontal,
-        requires: { cap: "view_all_staff" },
+        requires: { cap: "swim_view_staff" },
       },
     ],
   },
@@ -100,12 +109,6 @@ const NAVS: Record<
     title: "System Setting",
     items: [
       { href: "/system/users", label: "Users", icon: UserCog, requires: { superAdmin: true } },
-      {
-        href: "/system/categories",
-        label: "Category Visibility",
-        icon: LayoutGrid,
-        requires: { superAdmin: true },
-      },
       { href: "/system/audit", label: "Audit log", icon: ScrollText, requires: { superAdmin: true } },
       {
         href: "/system/permissions",

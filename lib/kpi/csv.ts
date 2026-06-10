@@ -28,6 +28,17 @@ const toNum = (v: unknown): number => {
 };
 
 /**
+ * True when at least one key of the first row resolves to the Instructor field.
+ * Used by the ingest API to reject a payload whose rows can't be attributed to
+ * anyone (mapCsvRows would silently map them all to "Unknown").
+ */
+export function hasInstructorHeader(rows: RawRow[]): boolean {
+  if (!rows.length) return false;
+  const variants = new Set(HEADER_MAP.Instructor.map(normalize));
+  return Object.keys(rows[0]).some((h) => variants.has(normalize(h)));
+}
+
+/**
  * Map arbitrary CSV rows (already parsed to objects) to canonical InstructorRow.
  * Ported from KPI_Calculator_v11.1 `mapCsvHeaders`, extended with Downgrade/Switch.
  */

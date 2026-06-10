@@ -9,15 +9,15 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   // Returns the full staff roster with pay-related fields — same data the Staff
-  // directory page gates behind `view_all_staff`. (The KPI dashboard, gated on
-  // `run_kpi`, also calls this; both admin + supervisor hold view_all_staff.)
-  const denied = await requireCapability("view_all_staff");
+  // directory page gates behind `swim_view_staff`. (The KPI dashboard, gated on
+  // `run_kpi`, also calls this; both admin + supervisor hold swim_view_staff.)
+  const denied = await requireCapability("swim_view_staff");
   if (denied) return denied;
   return NextResponse.json(await listCoaches());
 }
 
 export async function POST(req: Request) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("swim_edit_staff");
   if (denied) return denied;
   const body = (await req.json().catch(() => ({}))) as {
     canonicalName?: string;

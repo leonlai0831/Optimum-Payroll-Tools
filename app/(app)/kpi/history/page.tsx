@@ -23,12 +23,13 @@ export default async function HistoryPage() {
   return (
     <>
       <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-        <History className="h-5 w-5 text-indigo-500" /> Saved Months
+        <History className="h-5 w-5 text-indigo-500" /> Saved Bonus
       </h1>
       {runs.length > 0 && <AskData />}
       <KpiHistoryView
         runs={runs}
-        canExport={caps.has("view_all_staff")}
+        canExport={caps.has("swim_view_staff")}
+        canFinalize={caps.has("finalize_kpi")}
         savers={savers}
         centers={allowanceConfig.centers}
         centerAliases={allowanceConfig.centerAliases}

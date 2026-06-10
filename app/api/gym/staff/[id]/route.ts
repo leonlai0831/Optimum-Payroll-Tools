@@ -7,7 +7,7 @@ import type { GymStaffInput } from "@/lib/gym/types";
 export const dynamic = "force-dynamic";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("fit_edit_staff");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const { id } = await params;
@@ -38,7 +38,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireCapability("edit_staff");
+  const denied = await requireCapability("fit_edit_staff");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const { id } = await params;

@@ -3,14 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardCheck, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
+import { ArrowLeft, BookOpen, ClipboardCheck, Download, FileText, Save, Trash2, TrendingUp, Wallet } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { ConfirmModal } from "@/components/modal";
 import dynamic from "next/dynamic";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
+import { nextPeriod } from "@/lib/allowance/period";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { GRADE_LABEL, type GradeKey } from "@/lib/assessment/types";
@@ -24,6 +26,8 @@ export interface AssessmentView {
   poolType: string;
   totalPercent: number;
   finalGrade: GradeKey;
+  /** Lesson plan of the observed class, when one was linked. */
+  lessonPlanId: number | null;
 }
 import {
   EMPLOYEE_ROLE_LABELS,
@@ -117,7 +121,7 @@ export function CoachProfileView({
       <AssessmentsCard assessments={assessments} />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
-      <PayslipsCard coachId={coach.id} kpi={kpi} allowance={allowance} />
+      <IncomeCard coachId={coach.id} kpi={kpi} allowance={allowance} />
     </div>
   );
 }
@@ -131,7 +135,43 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
         <span className="text-sm font-bold text-gray-900">Assessments</span>
         <span className="text-xs text-gray-500">{assessments.length}</span>
       </div>
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {assessments.map((a, i) => (
+          <div key={a.id} className="flex items-start justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900">
+                {new Date(a.observedOn).toLocaleDateString()}
+                {i === 0 && (
+                  <span className="ml-2 text-[10px] font-semibold uppercase text-indigo-500">
+                    latest → KPI
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                {a.assessor || "—"}
+                <span> · {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}</span>
+              </div>
+              {a.lessonPlanId != null && (
+                <Link
+                  href={`/lesson-plans/${a.lessonPlanId}`}
+                  className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:underline"
+                >
+                  <BookOpen className="h-3 w-3" /> Lesson plan
+                </Link>
+              )}
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-base font-bold tabular-nums text-gray-900">
+                {a.totalPercent.toFixed(1)}%
+              </div>
+              <div className="mt-1">
+                <Badge>{GRADE_LABEL[a.finalGrade]}</Badge>
+              </div>
+            </div>
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -156,6 +196,14 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
                 <td className="px-4 py-2 text-gray-500">{a.assessor || "—"}</td>
                 <td className="px-4 py-2 text-gray-500">
                   {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}
+                  {a.lessonPlanId != null && (
+                    <Link
+                      href={`/lesson-plans/${a.lessonPlanId}`}
+                      className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
+                    >
+                      <BookOpen className="h-3 w-3" /> Lesson plan
+                    </Link>
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
                   {a.totalPercent.toFixed(1)}%
@@ -167,7 +215,7 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }
@@ -191,7 +239,25 @@ function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
           <ProfileScoreChart data={chart} />
         </div>
       )}
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {kpi.map((k) => (
+          <div key={k.period} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900">{k.period}</div>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                Grade <span className="font-semibold text-gray-600">{k.grade}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-base font-bold tabular-nums text-gray-900">
+                {k.finalScore.toFixed(3)}
+              </div>
+              <div className="text-[11px] tabular-nums text-gray-400">{rm(k.payout)}</div>
+            </div>
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
@@ -212,7 +278,7 @@ function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }
@@ -224,7 +290,28 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
       <h3 className="mb-3 flex items-center gap-2 text-h3 text-gray-900">
         <Wallet className="h-4 w-4" /> Allowance history
       </h3>
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {allowance.map((a) => (
+          <div key={a.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900">{a.period}</div>
+              <div className="mt-0.5 truncate text-[11px] text-gray-400">
+                {a.tier}
+                <span> · {a.center || "—"}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-base font-bold tabular-nums text-green-700">
+                {rm(a.grandTotal)}
+              </div>
+              <div className="text-[11px] tabular-nums text-gray-400">
+                teaching {rm(a.teaching)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
@@ -247,12 +334,12 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }
 
-function PayslipsCard({
+function IncomeCard({
   coachId,
   kpi,
   allowance,
@@ -261,28 +348,35 @@ function PayslipsCard({
   kpi: KpiPoint[];
   allowance: AllowancePoint[];
 }) {
+  // Month M's income = M's teaching allowance + the KPI bonus earned in M-1
+  // (the bonus is computed after month close, so it pays out a cycle later).
+  // Offer every month that has either component.
   const periods = [
-    ...new Set([...kpi.map((k) => k.period), ...allowance.map((a) => a.period)]),
+    ...new Set([
+      ...allowance.map((a) => a.period),
+      ...kpi.map((k) => nextPeriod(k.period)),
+    ]),
   ].sort((a, b) => b.localeCompare(a));
   if (periods.length === 0) return null;
 
   return (
     <Card className="p-4">
       <h3 className="mb-1 flex items-center gap-2 text-h3 text-gray-900">
-        <FileText className="h-4 w-4" /> Payslips
+        <FileText className="h-4 w-4" /> Monthly income
       </h3>
       <p className="mb-3 text-sm text-gray-500">
-        A one-page PDF combining the KPI bonus and teaching allowance for the month.
+        A one-page PDF per payout month: that month&rsquo;s teaching allowance plus the
+        previous month&rsquo;s KPI bonus, which pay out together.
       </p>
       <ul className="divide-y divide-gray-100">
         {periods.map((period) => (
           <li key={period} className="flex items-center justify-between py-2">
             <span className="text-sm font-medium text-gray-700">{period}</span>
             <a
-              href={`/api/coaches/${coachId}/payslip?period=${encodeURIComponent(period)}`}
+              href={`/api/coaches/${coachId}/income?period=${encodeURIComponent(period)}`}
               className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
             >
-              <Download className="h-4 w-4" /> Payslip
+              <Download className="h-4 w-4" /> Income
             </a>
           </li>
         ))}

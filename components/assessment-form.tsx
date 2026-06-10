@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, RotateCcw, Save } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
+import { cn } from "@/lib/utils";
 import {
   ASSESSMENT_FORM,
   CLASS_TYPES,
@@ -19,11 +21,38 @@ import {
   type RatingMap,
 } from "@/lib/assessment/types";
 import { computeAssessment } from "@/lib/assessment/calc";
+import {
+  LESSON_PLAN_STATUS_LABELS,
+  LESSON_PLAN_TYPE_LABELS,
+} from "@/components/lesson-plan-badges";
+import { LEVEL_TYPE_LABELS } from "@/lib/lesson-plan/templates";
+import type { LessonPlanStatus, LessonPlanType, LevelType } from "@/lib/lesson-plan/types";
 
 /** An instructor the form can be filed against. */
 export interface InstructorOption {
   id: number;
   name: string;
+}
+
+/** The slice of a lesson-plan list row the picker needs (JSON-serialized). */
+interface PlanOption {
+  id: number;
+  type: LessonPlanType;
+  status: LessonPlanStatus;
+  center: string;
+  lessonDate: string;
+  levelType: LevelType | null;
+}
+
+/** "6/10/2026 · Replacement · Medium · QSM (Approved)" */
+function planOptionLabel(p: PlanOption): string {
+  const parts = [
+    new Date(p.lessonDate).toLocaleDateString("en-US"),
+    LESSON_PLAN_TYPE_LABELS[p.type],
+    ...(p.levelType ? [LEVEL_TYPE_LABELS[p.levelType]] : []),
+    ...(p.center ? [p.center] : []),
+  ];
+  return `${parts.join(" · ")} (${LESSON_PLAN_STATUS_LABELS[p.status]})`;
 }
 
 /**
@@ -45,6 +74,31 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
   const [ratings, setRatings] = useState<RatingMap>({});
   const [comments, setComments] = useState("");
   const [busy, setBusy] = useState(false);
+  // Optional link to the observed class's lesson plan — the picker lists the
+  // selected coach's plans, fetched when the coach changes.
+  const [lessonPlanId, setLessonPlanId] = useState<number | null>(null);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
+
+  useEffect(() => {
+    if (coachId == null) return;
+    let cancelled = false;
+    fetch(`/api/lesson-plans?coachId=${coachId}`)
+      .then((res) => (res.ok ? res.json() : { plans: [] }))
+      .then((data: { plans?: PlanOption[] }) => {
+        if (!cancelled) setPlans(data.plans ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [coachId]);
+
+  // Closest lesson to the observed date first — the likely class on top.
+  const sortedPlans = useMemo(() => {
+    const observed = new Date(observedOn).getTime();
+    const distance = (p: PlanOption) => Math.abs(new Date(p.lessonDate).getTime() - observed);
+    return [...plans].sort((a, b) => distance(a) - distance(b));
+  }, [plans, observedOn]);
 
   function toggleLevel(lvl: string) {
     setLevels((prev) => (prev.includes(lvl) ? prev.filter((l) => l !== lvl) : [...prev, lvl]));
@@ -69,6 +123,8 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
     setObservedOn(new Date().toISOString().slice(0, 10));
     setRatings({});
     setComments("");
+    setLessonPlanId(null);
+    setPlans([]);
   }
 
   async function save() {
@@ -91,6 +147,7 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
           hasHelper,
           ratings,
           comments: comments.trim(),
+          lessonPlanId,
         }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Save failed");
@@ -119,7 +176,12 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
             placeholder={selectedName ?? "Select instructor…"}
             searchPlaceholder="Search instructor…"
             options={instructors.map((i) => ({ value: String(i.id), label: i.name }))}
-            onSelect={(v) => setCoachId(Number(v))}
+            onSelect={(v) => {
+              setCoachId(Number(v));
+              // The plan link is per-coach: clear it (and the stale list) on change.
+              setLessonPlanId(null);
+              setPlans([]);
+            }}
           />
         </div>
         <div>
@@ -158,6 +220,26 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
         <div>
           <Label htmlFor="a-date">Date</Label>
           <Input id="a-date" type="date" className="mt-1" value={observedOn} onChange={(e) => setObservedOn(e.target.value)} />
+        </div>
+        <div>
+          <Label htmlFor="a-plan">Lesson plan</Label>
+          <Select
+            id="a-plan"
+            className="mt-1"
+            value={lessonPlanId == null ? "" : String(lessonPlanId)}
+            onChange={(e) => setLessonPlanId(e.target.value ? Number(e.target.value) : null)}
+            disabled={coachId == null || plans.length === 0}
+          >
+            <option value="">— none —</option>
+            {sortedPlans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {planOptionLabel(p)}
+              </option>
+            ))}
+          </Select>
+          {coachId != null && plans.length === 0 && (
+            <p className="mt-1 text-[11px] text-gray-400">No lesson plans for this instructor.</p>
+          )}
         </div>
         <div className="flex items-end">
           <label className="flex cursor-pointer items-center gap-2 pb-1.5 text-sm text-gray-700">
@@ -207,7 +289,50 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
                 {p.percent.toFixed(0)}% · {GRADE_LABEL[p.grade]}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: stacked criterion rows with tappable rating buttons (a
+                5-column radio table only side-scrolls on a phone). */}
+            <MobileCards>
+              {part.subCategories.map((sub) => (
+                <div key={sub.key} className="py-3">
+                  <div className="text-xs font-semibold text-gray-700">
+                    {sub.label} ({sub.weight}%){" "}
+                    <span className="text-gray-400">· {subScore(sub.key).toFixed(1)}%</span>
+                  </div>
+                  <div className="mt-2 space-y-3">
+                    {sub.criteria.map((c) => (
+                      <div key={c.key}>
+                        <div className="text-sm text-gray-700">{c.label}</div>
+                        <div
+                          className="mt-1.5 grid grid-cols-2 gap-2"
+                          role="radiogroup"
+                          aria-label={c.label}
+                        >
+                          {RATINGS.map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              role="radio"
+                              aria-checked={ratings[c.key] === r}
+                              onClick={() => setRating(c.key, r)}
+                              className={cn(
+                                "min-h-11 rounded-lg border px-2 py-1.5 text-sm font-medium transition",
+                                ratings[c.key] === r
+                                  ? "border-indigo-600 bg-indigo-600 text-white"
+                                  : "border-gray-200 bg-white text-gray-600 active:bg-gray-100",
+                              )}
+                            >
+                              {RATING_LABELS[r]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </MobileCards>
+            {/* Desktop: the original criterion × rating radio matrix. */}
+            <DesktopTable>
               <table className="min-w-full text-sm">
                 <thead className="text-[11px] uppercase tracking-wide text-gray-400">
                   <tr>
@@ -232,7 +357,7 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
                   ))}
                 </tbody>
               </table>
-            </div>
+            </DesktopTable>
           </div>
         );
       })}

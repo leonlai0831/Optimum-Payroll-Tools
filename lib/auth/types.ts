@@ -9,13 +9,21 @@ export const ROLE_LABELS: Record<Role, string> = {
   staff: "Staff",
 };
 
-/** Granular capabilities checked across the app. */
+/**
+ * Granular capabilities checked across the app. Staff and settings access is
+ * brand-scoped (`swim_*` / `fit_*`) so e.g. a gym manager can hold the Optimum
+ * Fit staff directory without also seeing the whole swim directory.
+ */
 export const CAPABILITIES = [
   "manage_users",
-  "edit_settings",
-  "view_settings",
-  "edit_staff",
-  "view_all_staff",
+  "swim_view_settings",
+  "swim_edit_settings",
+  "fit_view_settings",
+  "fit_edit_settings",
+  "swim_view_staff",
+  "swim_edit_staff",
+  "fit_view_staff",
+  "fit_edit_staff",
   "view_own",
   "edit_appraisals",
   "edit_notes",
@@ -24,15 +32,21 @@ export const CAPABILITIES = [
   "run_allowance",
   "run_commission",
   "view_audit",
+  "edit_lesson_plans",
+  "review_lesson_plans",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
 export const CAPABILITY_LABELS: Record<Capability, string> = {
   manage_users: "Manage user accounts",
-  edit_settings: "Edit settings",
-  view_settings: "View settings",
-  edit_staff: "Edit staff profiles",
-  view_all_staff: "View all staff",
+  swim_view_settings: "View swim settings",
+  swim_edit_settings: "Edit swim settings",
+  fit_view_settings: "View fit settings",
+  fit_edit_settings: "Edit fit settings",
+  swim_view_staff: "View all swim staff",
+  swim_edit_staff: "Edit swim staff profiles",
+  fit_view_staff: "View all gym staff",
+  fit_edit_staff: "Edit gym staff profiles",
   view_own: "View own profile",
   edit_appraisals: "Create instructor assessments",
   edit_notes: "Create/edit notes",
@@ -41,6 +55,22 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   run_allowance: "Run allowance",
   run_commission: "Run gym staff commission",
   view_audit: "View audit log",
+  edit_lesson_plans: "Create & edit lesson plans",
+  review_lesson_plans: "Review lesson plans",
+};
+
+/**
+ * Retired cross-brand capabilities → their brand-scoped replacements. A stored
+ * matrix that granted a legacy key grants BOTH new keys, so the split changes
+ * nothing about a deployment's effective access until the owner edits the
+ * matrix. Applied on read by `normalizePermissionConfig` (lib/db/queries.ts),
+ * which also drops the legacy keys.
+ */
+export const LEGACY_CAPABILITY_MAP: Record<string, Capability[]> = {
+  view_all_staff: ["swim_view_staff", "fit_view_staff"],
+  edit_staff: ["swim_edit_staff", "fit_edit_staff"],
+  view_settings: ["swim_view_settings", "fit_view_settings"],
+  edit_settings: ["swim_edit_settings", "fit_edit_settings"],
 };
 
 /**
@@ -57,7 +87,7 @@ export const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   marketing: "Optimum Marketing",
 };
 
-/** Default for new (and pre-existing) accounts: everything visible. */
+/** Every assignable category (super_admin's effective list; legacy backfills). */
 export const ALL_TOOL_CATEGORIES: ToolCategory[] = [...TOOL_CATEGORIES];
 
 /** Validate + dedupe an untrusted category list, preserving canonical order. */
@@ -85,14 +115,52 @@ export function canSeeCategory(
 export type ConfigurableRole = Exclude<Role, "super_admin">;
 export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "supervisor", "staff"];
 
-/** The editable permission matrix (super_admin omitted — it can never be locked out). */
-export type PermissionConfig = Record<ConfigurableRole, Capability[]>;
+/**
+ * The editable permission matrix (super_admin omitted — it can never be locked
+ * out): per-role capabilities + per-role default launcher categories. A user's
+ * effective visibility = their `visibleCategories` override when set, else
+ * `categories[role]` (see {@link effectiveCategories}). Rows stored before
+ * `categories` existed were the flat `Record<ConfigurableRole, Capability[]>`
+ * shape — `normalizePermissionConfig` (lib/db/queries.ts) migrates on read.
+ */
+export interface PermissionConfig {
+  capabilities: Record<ConfigurableRole, Capability[]>;
+  categories: Record<ConfigurableRole, ToolCategory[]>;
+}
 
-export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
+/**
+ * The pre-`categories` stored shape, still accepted on read. `string[]` (not
+ * `Capability[]`) because stored rows of either shape may also carry the retired
+ * cross-brand keys (see {@link LEGACY_CAPABILITY_MAP}).
+ */
+export type LegacyPermissionConfig = Record<ConfigurableRole, string[]>;
+
+/**
+ * Resolve the launcher categories an account effectively sees:
+ * per-user override (when set) ?? the role's default; super_admin always all.
+ * Pure so the rule is unit-testable — `getCurrentUser()` is the ONE place that
+ * applies it (into `CurrentUser.visibleCategories`); everything downstream
+ * (launcher, `canSeeCategory`, brand layouts) consumes the resolved list.
+ */
+export function effectiveCategories(
+  role: Role,
+  override: ToolCategory[] | null | undefined,
+  roleDefaults: PermissionConfig["categories"],
+): ToolCategory[] {
+  if (role === "super_admin") return [...TOOL_CATEGORIES];
+  return [...(override ?? roleDefaults[role] ?? [])];
+}
+
+const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
+  // The brand-scoped pairs mirror the pre-split defaults: a role that held the
+  // legacy cross-brand key holds BOTH scoped keys.
   admin: [
-    "view_settings",
-    "edit_staff",
-    "view_all_staff",
+    "swim_view_settings",
+    "fit_view_settings",
+    "swim_edit_staff",
+    "fit_edit_staff",
+    "swim_view_staff",
+    "fit_view_staff",
     "view_own",
     "edit_appraisals",
     "edit_notes",
@@ -102,19 +170,37 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "run_allowance",
     "run_commission",
     "view_audit",
+    "edit_lesson_plans",
+    "review_lesson_plans",
   ],
   // A team lead / senior coach: oversee and review the team, run the monthly
   // numbers, but no profile edits, user management, settings edits, or audit log.
   // Deliberately NOT granted `finalize_kpi` (closing a month is admin-only).
   supervisor: [
-    "view_settings",
-    "view_all_staff",
+    "swim_view_settings",
+    "fit_view_settings",
+    "swim_view_staff",
+    "fit_view_staff",
     "view_own",
     "edit_appraisals",
     "edit_notes",
     "run_kpi",
     "run_allowance",
     "run_commission",
+    "edit_lesson_plans",
+    "review_lesson_plans",
   ],
-  staff: ["view_own"],
+  staff: ["view_own", "edit_lesson_plans"],
+};
+
+export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
+  capabilities: DEFAULT_CAPABILITIES,
+  // Role defaults for launcher visibility. All three per role preserves the
+  // pre-unification behavior (every account saw everything unless a per-user
+  // override narrowed it) until the owner tightens these in /system/permissions.
+  categories: {
+    admin: [...TOOL_CATEGORIES],
+    supervisor: [...TOOL_CATEGORIES],
+    staff: [...TOOL_CATEGORIES],
+  },
 };

@@ -19,7 +19,7 @@ Re-develop the legacy HTML tool — which had no real persistence (some `localSt
 hardcoded "AI analysis" template — into a maintainable app that:
 
 - **Deploys to Vercel** and **saves past monthly records in a cloud database** (shared across devices).
-- Is protected by a **single shared password** (env var) gating the whole app.
+- Is protected by per-user accounts with roles + a capability matrix (originally one shared password).
 - Works on **mobile/tablet**, adds **month-over-month comparison/trends**, and replaces the fake
   analysis with **real Claude AI analysis**.
 - Ships a **configurable scoring formula** (metrics enable/disable, weights, min/max, grade
@@ -125,6 +125,56 @@ management assessment (when that metric is enabled), or group/center hours (for 
 
 Groupings are editable in the UI (split / move accounts) before saving.
 
+## KPI ingestion (`/api/ingest/kpi`, `/kpi/ingests`)
+
+An external system can push the monthly KPI rows instead of a manual CSV upload:
+`POST /api/ingest/kpi` (`Authorization: Bearer <INGEST_API_KEY>`, constant-time compare in
+`lib/ingest/auth.ts`; 503 when the env var is unset, in-process per-IP rate limit, ~2 MB cap)
+accepts `{ periodLabel: "YYYY-MM", label?, rows }` with the **same flexible headers as the CSV
+upload** (normalized via `mapCsvRows`). The same endpoint also accepts a **raw CSV body**
+(`Content-Type: text/csv`, parsed in `lib/ingest/csv-body.ts`; `periodLabel` required + `label`
+optional as query params) with identical staging behavior. Pushed data is **STAGED** in `kpi_ingests`
+(`pending → imported | discarded | superseded` — never hard-deleted, rows stay viewable forever),
+audited as `kpi_ingest.received`; a **re-push for the same `periodLabel` atomically supersedes any
+still-pending earlier deliveries** (imported/discarded ones are never touched, each flip is audited
+as `kpi_ingest.superseded`, and the response reports `superseded: <count>`); a push for a period
+that is already **closed** — a finalized run exists for it, or a delivery for it was already
+imported — gets a `409 Conflict` before anything is staged, superseded, or audited (draft runs
+don't block; reopen the run to push a correction). Owners (`run_kpi`)
+review on `/kpi/ingests` (section tab "Uploads"):
+edit/add/delete rows while pending (PATCH `/api/kpi/ingests/[id]`, audited), discard (status
+flip), or "Load into calculator" → `/kpi?ingest=<id>` seeds the dashboard with the staged rows
+(same merge → compute → save flow; filename shows the ingest label). Saving threads `ingestId`
+through `POST /api/runs`, which marks the ingest `imported` + links `importedRunId`. The proxy
+exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route).
+
+## Lesson Plan (`lib/lesson-plan`, `/lesson-plans`)
+
+Digital version of the two paper lesson-plan templates (swim group). Two types:
+**actual** (free-form procedure rows) and **replacement** (Low/Medium/High level
+types whose skill checklists are **hardcoded verbatim from the paper forms** in
+`lib/lesson-plan/templates.ts` — Low = N/B/1, Medium = 2/3/4, High = 4/5/6/7 —
+plus a 16-question yes/no self-evaluation). Review workflow:
+`draft → submitted → approved / changes_requested`; **any content edit resets the
+plan to draft** (last review note stays visible) and it can be resubmitted.
+Capabilities: `edit_lesson_plans` (staff+supervisor+admin; creators see only
+their own) and `review_lesson_plans` (supervisor+admin; see all, approve/request
+changes). PDF export per type via `lib/reports/lesson-plan.ts` (pdf-lib, mirrors
+the payslip builder). Table `lesson_plans`: promoted list columns + jsonb body;
+access rules live in `lib/lesson-plan/access.ts`.
+
+## Design language (since the 2026-06 redesign)
+
+Notion-calm base × Optimum CI: warm paper canvas `#f6f5f4`, warm-grey ink ramp
+(the Tailwind `gray-*` tokens are remapped — don't re-introduce cool greys),
+hairline borders + the layered `.shadow-card` micro-shadow, Nunito 800 headings
+with negative tracking, **pill** primary/secondary/danger buttons vs 8px
+outline/ghost utility chrome, form fields `text-base` at phone widths (iOS
+anti-zoom). The CI guide's footer wave is traced 1:1 into
+`components/ci-wave.tsx` (launcher hero + login). Brand skins still come from
+`data-brand` CSS variables. Every legacy side-scroll table has been converted to
+`MobileCards`/`DesktopTable` — new data views must ship both layouts.
+
 ## Data model (Drizzle / Postgres)
 
 - **`config`** — singleton row (`id = 1`), `data` jsonb = `{ personalKpi, centerKpi, centerTargets,
@@ -138,14 +188,37 @@ Groupings are editable in the UI (split / move accounts) before saving.
 
 ## Auth
 
-Single shared password, no password stored in DB or client bundle.
+Per-user accounts (email + password, bcrypt-style hash in the `users` table) with roles
+`super_admin / admin / supervisor / staff`; a role → capability matrix (`/system/permissions`)
+gates everything else. Launcher **category visibility** (swim / fit / marketing) lives in the
+same permissions matrix: each role has **default categories**, and the page's "User overrides"
+tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
+`getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
+all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in the brand-section
+layouts. The old `/system/categories` page 301-redirects to `/system/permissions`.
+
+Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
+`swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,
+`swim_edit_settings` / `fit_edit_settings` — so e.g. a gym manager can hold the Optimum Fit
+roster without seeing the swim directory. The retired cross-brand keys (`view_all_staff`,
+`edit_staff`, `view_settings`, `edit_settings`) are migrated on read by
+`normalizePermissionConfig` (`LEGACY_CAPABILITY_MAP`): a role that held a legacy key holds
+BOTH scoped keys, so stored matrices keep their exact behavior. **Effective access to a brand
+surface = launcher category visible AND capability granted** — the swim sections
+(`/allowance`, `/kpi`, `/assessment`, `/lesson-plans`, `/staff` directory + settings) gate the
+"swim" category just like `/commission` gates "fit" and `/marketing` gates "marketing"; the
+one exception is `/staff/[id]` for the user's OWN coach profile, which stays reachable
+regardless of category (the launcher's My Profile card is category-independent).
 
 - **`proxy.ts`** is an *optimistic* gate: redirects to `/login` when the `kpi_session` cookie is
   **absent**. Public paths: `/login`, `/api/auth/*`. (Matcher excludes `_next/static`, images, favicon.)
-- **Authoritative** checks: the `(app)` layout and `isAuthed()` in every API route validate the
-  iron-session via decryption — so a present-but-invalid cookie still gets a JSON `401`.
-- `/api/auth/login` compares to `APP_PASSWORD` (dev fallback `swim123` when not production);
-  `SESSION_SECRET` (≥ 32 chars) encrypts the cookie. `/api/auth/logout` destroys the session.
+- **Authoritative** checks: the `(app)` layout and `getCurrentUser()`/`requireCapability()` in API
+  routes re-validate the iron-session against the DB — a present-but-invalid cookie or a
+  deactivated account still gets a JSON `401`/`403`.
+- `/api/auth/login` checks the `users` table (in-process rate-limit per IP+email; session is
+  destroyed and re-issued on login). `SESSION_SECRET` (≥ 32 chars) encrypts the cookie.
+- First boot seeds a super admin from `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`
+  (dev fallback `admin@local` / `swim123`).
 
 ## AI (`lib/ai/anthropic.ts`)
 
@@ -157,10 +230,11 @@ without `ANTHROPIC_API_KEY`: `matchInstructorNames` → `[]` (deterministic merg
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `APP_PASSWORD` | yes (prod) | Single shared login password (dev falls back to `swim123`). |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | yes (prod, first boot) | Seeds the first super-admin account (dev falls back to `admin@local` / `swim123`). |
 | `SESSION_SECRET` | yes | ≥ 32 random chars; encrypts the session cookie. |
 | `POSTGRES_URL` (or `DATABASE_URL`) | yes (prod) | Postgres connection string. Unset → PGlite at `./.pglite`. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
+| `INGEST_API_KEY` | optional | Bearer key for the machine KPI push endpoint (`POST /api/ingest/kpi`). Unset → the endpoint answers 503. |
 
 `.env.local` is loaded automatically in dev. `.npmrc` sets `legacy-peer-deps=true` for the
 Next 16 / React 19 peer ranges — keep it for Vercel installs.
@@ -207,9 +281,11 @@ rule below rather than relocating UI:
 - **Staff entities live under Staff; system administration lives under System Setting.**
   The staff directory and Centers (`/staff/settings`) stay under Staff. **Users / accounts
   (`/system/users`), Audit log (`/system/audit`), and the Permissions matrix
-  (`/system/permissions`) live under the System Setting section** (`/system/*`) — which,
-  together with its launcher group, is gated to `role === "super_admin"`. The old
-  `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`).
+  (`/system/permissions` — role capabilities, role-default launcher categories, AND per-user
+  category overrides, all on one page) live under the System Setting section** (`/system/*`) —
+  which, together with its launcher group, is gated to `role === "super_admin"`. The old
+  `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`),
+  and `/system/categories` (the retired Category Visibility page) 301s to `/system/permissions`.
 - **Calculator math lives under its calculator.** Allowance tiers + rate tables
   (`/allowance/settings`), KPI metrics + weights + min/max (`/kpi/settings`).
 - **All three section tabs are labeled "Settings"** — Allowance, KPI, and Staff — never
@@ -230,7 +306,8 @@ rule below rather than relocating UI:
 
 ## Deploy
 
-Import to Vercel → add Postgres (Neon) → set `APP_PASSWORD` / `SESSION_SECRET` /
+Import to Vercel → add Postgres (Neon, **ap-southeast-1**; functions pinned to `sin1`
+via `vercel.json`) → set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` / `SESSION_SECRET` /
 `ANTHROPIC_API_KEY` → deploy. **Migrations auto-apply on first DB connect** (`lib/db/index.ts`), so
 a fresh prod database needs no manual SQL; you can still run `npm run db:migrate` against the prod
 DB to apply them explicitly ahead of traffic. See `README.md` for step-by-step details.

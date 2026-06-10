@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { getGymStaffMember, getGymStaffMonth } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { cn, rm, rm2 } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +33,9 @@ export default async function GymStaffMonthPage({ params }: { params: Promise<{ 
   if (!user) redirect("/login");
 
   // Same access rule as the export route: anyone who can view all staff, or the
-  // staff member viewing their own earnings.
+  // staff member viewing their own earnings. Gate before fetching member data.
   const caps = await getCapabilities(user);
-  const canViewAll = caps.has("view_all_staff");
+  const canViewAll = caps.has("fit_view_staff");
   const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
   if (!canViewAll && !isOwn) redirect("/");
 
@@ -68,7 +69,8 @@ export default async function GymStaffMonthPage({ params }: { params: Promise<{ 
       {commission && (
         <Card className="p-4">
           <h2 className="text-sm font-bold text-gray-900">Commission</h2>
-          <div className="mt-2 overflow-x-auto">
+          {/* Two-column key/value rows — fits a phone as-is, no card variant needed. */}
+          <div className="mt-2">
             <table className="min-w-full text-sm">
               <tbody className="divide-y divide-gray-100 tabular-nums">
                 <tr>
@@ -102,7 +104,7 @@ export default async function GymStaffMonthPage({ params }: { params: Promise<{ 
       )}
 
       {coaching && (
-        <Card className="overflow-x-auto p-0">
+        <Card className="overflow-hidden p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 p-4 pb-2">
             <h2 className="text-sm font-bold text-gray-900">Coaching income</h2>
             <p className="text-xs text-gray-500 tabular-nums">
@@ -110,6 +112,42 @@ export default async function GymStaffMonthPage({ params }: { params: Promise<{ 
               Group {coaching.groupSessions} sessions · {rm(coaching.groupIncome)}
             </p>
           </div>
+          <MobileCards className="border-t border-gray-100">
+            {coaching.classes.map((c) => (
+              <div key={c.className + c.kind} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-gray-900">{c.className}</div>
+                    <div className="mt-0.5 text-[11px] text-gray-400">
+                      {c.kind === "pt" ? "PT" : "Group"}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="nums text-base font-bold text-gray-900">{rm(c.income)}</div>
+                    <div className="text-[11px] text-gray-400">income</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-overline text-muted">Sessions</div>
+                    <div className="nums mt-0.5 text-sm text-gray-700">{c.sessions}</div>
+                  </div>
+                  <div>
+                    <div className="text-overline text-muted">Attendees</div>
+                    <div className="nums mt-0.5 text-sm text-gray-700">{c.attendees}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* Totals card: mirrors the desktop tfoot. */}
+            <div className="flex items-start justify-between gap-3 bg-gray-50 p-4">
+              <div className="font-bold text-gray-900">TOTAL</div>
+              <div className="nums shrink-0 text-base font-bold text-green-700">
+                {rm(coaching.totalIncome)}
+              </div>
+            </div>
+          </MobileCards>
+          <DesktopTable className="border-t border-gray-100">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr className="text-left text-overline text-muted">
@@ -140,6 +178,7 @@ export default async function GymStaffMonthPage({ params }: { params: Promise<{ 
               </tr>
             </tfoot>
           </table>
+          </DesktopTable>
         </Card>
       )}
     </div>

@@ -1,0 +1,1 @@
+ALTER TABLE "assessments" ADD COLUMN "lesson_plan_id" integer;

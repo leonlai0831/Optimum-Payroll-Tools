@@ -8,7 +8,7 @@ import { recordAudit, saveCenters } from "@/lib/db/queries";
  * rate tables. When `centerAliases` is omitted the stored aliases are kept.
  */
 export async function PUT(req: Request) {
-  const denied = await requireCapability("edit_settings");
+  const denied = await requireCapability("swim_edit_settings");
   if (denied) return denied;
   const actor = await getCurrentUser();
   const body = (await req.json().catch(() => ({}))) as {

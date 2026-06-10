@@ -151,15 +151,253 @@ describe("DB layer (PGlite in-memory)", () => {
     expect((await queries.listRuns()).find((r) => r.id === finalId)?.status).toBe("finalized");
   });
 
+  it("normalizes raw CSV center names onto configured codes in the coach carry-over", async () => {
+    // Settings → Centers: configure USJ with a "Subang USJ" alias.
+    await queries.saveCenters(["HQ", "USJ"], { HQ: [], USJ: ["Subang USJ"] });
+
+    await queries.createRun({
+      periodLabel: "2027-04",
+      filename: "apr.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("CENTER CARL", { center: "Subang USJ" })],
+    });
+    const carl = (await queries.listCoaches()).find((c) => c.canonicalName === "CENTER CARL")!;
+    expect(carl.center).toBe("USJ"); // alias → code, not the raw CSV spelling
+
+    // An unconfigured value passes through untouched (never silently dropped).
+    await queries.upsertCoachesFromRun([makeCoach("CENTER CARA", { center: "Mystery Pool" })]);
+    const cara = (await queries.listCoaches()).find((c) => c.canonicalName === "CENTER CARA")!;
+    expect(cara.center).toBe("Mystery Pool");
+  });
+
+  it("dedupes a twice-saved month in trends and the coach profile (latest save wins)", async () => {
+    // The same period label saved twice (e.g. a retry, or a corrected re-upload).
+    await queries.createRun({
+      periodLabel: "2027-03",
+      filename: "mar-v1.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("TWICE TINA", { finalScore: 1, payout: 1000 })],
+    });
+    await queries.createRun({
+      periodLabel: "2027-03",
+      filename: "mar-v2.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [makeCoach("TWICE TINA", { finalScore: 1.2, payout: 1200 })],
+    });
+
+    // Trends: exactly ONE point for the period, from the latest save.
+    const trend = await queries.getTrendData();
+    expect(trend.periods.filter((p) => p === "2027-03")).toHaveLength(1);
+    const tina = trend.coaches.find((c) => c.name === "TWICE TINA")!;
+    const points = tina.points.filter((p) => p.period === "2027-03");
+    expect(points).toHaveLength(1);
+    expect(points[0].payout).toBe(1200);
+
+    // Coach profile: same dedup, latest save wins.
+    const coach = (await queries.listCoaches()).find((c) => c.canonicalName === "TWICE TINA")!;
+    const profile = await queries.getCoachProfile(coach.id);
+    const kpiPoints = profile!.kpi.filter((p) => p.period === "2027-03");
+    expect(kpiPoints).toHaveLength(1);
+    expect(kpiPoints[0].payout).toBe(1200);
+    expect(kpiPoints[0].finalScore).toBe(1.2);
+  });
+
+  it("mergeCoaches: folds a CSV-created duplicate into the real profile (the ARIF case)", async () => {
+    // The real person, created from the staff side with the full name.
+    const farhan = await queries.createCoach({ canonicalName: "ARIF FARHAN", center: "PK" });
+    // A KPI upload auto-created a duplicate under the cleaned CSV name, with a month of history.
+    await queries.createRun({
+      periodLabel: "2027-05",
+      filename: "may.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [
+        makeCoach("ARIF", {
+          accounts: ["ARIF - LMY [PK]"],
+          center: "PK",
+          teachingAllowance: 900,
+          payout: 900,
+        }),
+      ],
+    });
+    const dup = (await queries.listCoaches()).find((c) => c.canonicalName === "ARIF")!;
+
+    // Dependents on the duplicate: an allowance month, an assessment, and a login.
+    const cfg = await queries.getAllowanceConfig();
+    const { calcAllowance } = await import("../allowance/calc");
+    const input = {
+      coachId: dup.id,
+      name: "ARIF",
+      tier: "T3" as const,
+      center: "PK",
+      opHours: 160,
+      leaveHours: 0,
+      teachingRows: [{ center: "PK", normalH: 8, ysH: 0, precompH: 0 }],
+      otherItems: [],
+    };
+    await queries.createAllowanceRunIfUnlocked({
+      periodLabel: "2027-05",
+      input,
+      result: calcAllowance(input, cfg),
+      configSnapshot: cfg,
+    });
+    await queries.createAssessment({
+      coachId: dup.id,
+      observedOn: new Date(),
+      assessor: "QA",
+      classType: "LTS",
+      poolType: "Indoor",
+      pax: 4,
+      levels: [],
+      hasHelper: false,
+      ratings: {},
+      totalPercent: 80,
+      finalGrade: "B" as Parameters<typeof queries.createAssessment>[0]["finalGrade"],
+      comments: "",
+    });
+    const login = await queries.createUser({
+      email: "arif@opt.page",
+      password: "pw",
+      role: "staff",
+      coachId: dup.id,
+    });
+
+    const result = await queries.mergeCoaches(farhan.id, dup.id);
+    expect(result.duplicateName).toBe("ARIF");
+    expect(result.movedAllowanceRuns).toBe(1);
+    expect(result.conflictingPeriods).toEqual([]);
+
+    // The duplicate is gone; its identity is now an alias of the survivor.
+    const all = await queries.listCoaches();
+    expect(all.some((c) => c.canonicalName === "ARIF")).toBe(false);
+    const survivor = all.find((c) => c.canonicalName === "ARIF FARHAN")!;
+    expect(survivor.aliases).toContain("ARIF");
+    expect(survivor.aliases).toContain("ARIF - LMY [PK]");
+    expect(survivor.allowanceTier).toBe("T3"); // carried over from the duplicate
+
+    // Allowance history renamed + re-pointed, including the snapshot input's name.
+    const runsFor = await queries.listAllowanceRuns("2027-05");
+    const moved = runsFor.find((r) => r.coachId === farhan.id)!;
+    expect(moved.canonicalName).toBe("ARIF FARHAN");
+    const inputs = await queries.getAllowanceInputsForPeriod("2027-05");
+    expect(inputs.get("ARIF FARHAN")?.name).toBe("ARIF FARHAN");
+    expect(inputs.has("ARIF")).toBe(false);
+
+    // Assessment + login follow the survivor.
+    expect((await queries.listAssessmentsForCoach(farhan.id)).length).toBe(1);
+    expect((await queries.getUserById(login.id))!.coachId).toBe(farhan.id);
+
+    // KPI history follows via the alias set — the saved month shows on the survivor.
+    const profile = await queries.getCoachProfile(farhan.id);
+    expect(profile!.kpi.some((p) => p.period === "2027-05" && p.payout === 900)).toBe(true);
+  });
+
   it("backfills finalize_kpi for admin but not supervisor/staff", () => {
+    // Old flat stored shape (pre-categories) — must still normalize.
     const normalized = queries.normalizePermissionConfig({
       admin: ["run_kpi"],
       supervisor: ["run_kpi"],
       staff: ["view_own"],
     });
-    expect(normalized.admin).toContain("finalize_kpi");
-    expect(normalized.supervisor).not.toContain("finalize_kpi");
-    expect(normalized.staff).not.toContain("finalize_kpi");
+    expect(normalized.capabilities.admin).toContain("finalize_kpi");
+    expect(normalized.capabilities.supervisor).not.toContain("finalize_kpi");
+    expect(normalized.capabilities.staff).not.toContain("finalize_kpi");
+  });
+
+  it("migrates an old flat permission config to { capabilities, categories } on read", () => {
+    const normalized = queries.normalizePermissionConfig({
+      admin: ["run_kpi"],
+      supervisor: ["run_kpi"],
+      staff: ["view_own"],
+    });
+    // Stored capability choices survive the shape change…
+    expect(normalized.capabilities.admin).toContain("run_kpi");
+    expect(normalized.capabilities.staff).toEqual(
+      expect.arrayContaining(["view_own"]),
+    );
+    // …and categories backfill to ALL THREE per role (the pre-unification
+    // behavior) until the owner tightens them.
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      expect(normalized.categories[role]).toEqual(["swim", "fit", "marketing"]);
+    }
+  });
+
+  it("keeps stored categories and backfills only invalid/missing role entries", () => {
+    const normalized = queries.normalizePermissionConfig({
+      capabilities: { admin: ["run_kpi"], supervisor: [], staff: ["view_own"] },
+      // staff narrowed; supervisor invalid (unknown value); admin missing.
+      categories: { staff: ["fit"], supervisor: ["nope"] },
+    } as never);
+    expect(normalized.categories.staff).toEqual(["fit"]);
+    expect(normalized.categories.supervisor).toEqual(["swim", "fit", "marketing"]);
+    expect(normalized.categories.admin).toEqual(["swim", "fit", "marketing"]);
+  });
+
+  it("migrates retired cross-brand capability keys to both brand-scoped keys", () => {
+    // A stored matrix that granted the legacy keys must come out granting BOTH
+    // new keys per legacy key — exact same effective access — with the legacy
+    // keys dropped.
+    const normalized = queries.normalizePermissionConfig({
+      capabilities: {
+        admin: ["view_all_staff", "edit_settings", "run_kpi"],
+        supervisor: ["view_settings"],
+        staff: ["view_own"],
+      },
+      categories: { admin: ["swim"], supervisor: ["swim"], staff: ["swim"] },
+    } as never);
+
+    expect(normalized.capabilities.admin).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_edit_settings", "fit_edit_settings", "run_kpi"]),
+    );
+    expect(normalized.capabilities.supervisor).toEqual(
+      expect.arrayContaining(["swim_view_settings", "fit_view_settings"]),
+    );
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      for (const legacy of ["view_all_staff", "edit_staff", "view_settings", "edit_settings"]) {
+        expect(normalized.capabilities[role]).not.toContain(legacy);
+      }
+    }
+    // A role that never held a legacy key gains none of its replacements.
+    expect(normalized.capabilities.staff.filter((c) => c.includes("staff") || c.includes("settings"))).toEqual([]);
+    expect(normalized.capabilities.admin).not.toContain("swim_edit_staff");
+    expect(normalized.capabilities.supervisor).not.toContain("swim_edit_settings");
+  });
+
+  it("migrates legacy keys in the old flat shape too, and dedupes", () => {
+    const normalized = queries.normalizePermissionConfig({
+      // Legacy key + one of its replacements already present → no duplicates.
+      admin: ["edit_staff", "swim_edit_staff"],
+      supervisor: ["view_all_staff"],
+      staff: ["view_own"],
+    });
+    expect(normalized.capabilities.admin.filter((c) => c === "swim_edit_staff")).toHaveLength(1);
+    expect(normalized.capabilities.admin).toContain("fit_edit_staff");
+    expect(normalized.capabilities.supervisor).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff"]),
+    );
+    expect(normalized.capabilities.supervisor).not.toContain("view_all_staff");
+  });
+
+  it("default permission config holds only valid, brand-scoped capabilities", async () => {
+    const { DEFAULT_PERMISSION_CONFIG, CAPABILITIES } = await import("../auth/types");
+    const valid = new Set<string>(CAPABILITIES);
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      for (const cap of DEFAULT_PERMISSION_CONFIG.capabilities[role]) {
+        expect(valid.has(cap)).toBe(true);
+      }
+    }
+    // Defaults mirror the pre-split grants: both brands per legacy grant.
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.admin).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_edit_staff", "fit_edit_staff", "swim_view_settings", "fit_view_settings"]),
+    );
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.supervisor).toEqual(
+      expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_view_settings", "fit_view_settings"]),
+    );
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.supervisor).not.toContain("swim_edit_staff");
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.staff).toEqual(["view_own", "edit_lesson_plans"]);
   });
 
   it("lists distinct CSV account names across runs, sorted and trimmed", async () => {

@@ -1,14 +1,24 @@
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import type { CurrentUser } from "./session";
 import { CAPABILITIES, type Capability } from "./types";
 import { getPermissionConfig } from "@/lib/db/queries";
 
-/** The full set of capabilities a user has. super_admin always has all of them. */
-export async function getCapabilities(user: CurrentUser): Promise<Set<Capability>> {
-  if (user.role === "super_admin") return new Set(CAPABILITIES);
-  const config = await getPermissionConfig();
-  return new Set(config[user.role] ?? []);
-}
+/**
+ * The full set of capabilities a user has. super_admin always has all of them.
+ *
+ * Wrapped in React `cache()`: layouts, pages, and `sectionNavProps` all call this
+ * for the same `CurrentUser` (itself memoized by `getCurrentUser`) within one
+ * request, so this dedupes the permission-config lookup per request. Outside a
+ * React request scope (unit tests, route handlers) `cache()` is a pass-through.
+ */
+export const getCapabilities = cache(
+  async (user: CurrentUser): Promise<Set<Capability>> => {
+    if (user.role === "super_admin") return new Set(CAPABILITIES);
+    const config = await getPermissionConfig();
+    return new Set(config.capabilities[user.role] ?? []);
+  },
+);
 
 export async function userCan(user: CurrentUser, capability: Capability): Promise<boolean> {
   if (user.role === "super_admin") return true;
@@ -18,7 +28,7 @@ export async function userCan(user: CurrentUser, capability: Capability): Promis
 /**
  * Route-handler guard: returns a 401/403 response to short-circuit with, or null
  * when the current user holds `capability`. Usage:
- *   const denied = await requireCapability("edit_settings");
+ *   const denied = await requireCapability("swim_edit_settings");
  *   if (denied) return denied;
  *
  * The session helper is imported lazily so this module stays import-safe outside
