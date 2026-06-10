@@ -85,10 +85,28 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/runs/[id]">) {
   return NextResponse.json({ ok: true, status });
 }
 
+/**
+ * Delete a saved month. Gated on `finalize_kpi` (admin + super_admin), the same
+ * gate as closing/reopening a month: runs default to "finalized", so deletion is
+ * as destructive as reopening and must not be open to everyone with `run_kpi`.
+ */
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
-  const denied = await requireCapability("run_kpi");
+  const denied = await requireCapability("finalize_kpi");
   if (denied) return denied;
+  const actor = await getCurrentUser();
   const { id } = await ctx.params;
-  await deleteRun(Number(id));
+  const runId = Number(id);
+  const run = await getRun(runId);
+  await deleteRun(runId);
+  if (actor) {
+    await recordAudit({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: "kpi_run.delete",
+      entity: "run",
+      entityId: runId,
+      summary: `Deleted KPI run ${run ? `for ${run.periodLabel}` : id}`,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

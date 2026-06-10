@@ -135,6 +135,8 @@ describe("capability matrix (default permission config)", () => {
     const admin = asRole("admin");
     expect(await userCan(admin, "edit_staff")).toBe(true);
     expect(await userCan(admin, "run_kpi")).toBe(true);
+    // Deleting a saved KPI month (DELETE /api/runs/[id]) is gated on finalize_kpi.
+    expect(await userCan(admin, "finalize_kpi")).toBe(true);
     expect(await userCan(admin, "view_settings")).toBe(true);
     expect(await userCan(admin, "edit_settings")).toBe(false);
     expect(await userCan(admin, "manage_users")).toBe(false);
@@ -143,6 +145,8 @@ describe("capability matrix (default permission config)", () => {
   it("staff can only view its own profile", async () => {
     const staff = asRole("staff");
     expect(await userCan(staff, "view_own")).toBe(true);
+    // Gates the Optimum Fit staff directory + other coaches' earnings pages
+    // (view_own only grants the staff member's own profile/earnings).
     expect(await userCan(staff, "view_all_staff")).toBe(false);
     expect(await userCan(staff, "run_allowance")).toBe(false);
   });
@@ -155,6 +159,8 @@ describe("capability matrix (default permission config)", () => {
     expect(await userCan(sup, "run_kpi")).toBe(true);
     expect(await userCan(sup, "run_allowance")).toBe(true);
     // ...but not the administrative capabilities:
+    // run_kpi alone must NOT allow deleting a saved month (DELETE /api/runs/[id]).
+    expect(await userCan(sup, "finalize_kpi")).toBe(false);
     expect(await userCan(sup, "edit_staff")).toBe(false);
     expect(await userCan(sup, "view_audit")).toBe(false);
     expect(await userCan(sup, "manage_users")).toBe(false);
