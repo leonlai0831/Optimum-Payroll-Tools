@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkIngestBearer } from "@/lib/ingest/auth";
+import { parseCsvBody, resolveIngestBodyMode } from "@/lib/ingest/csv-body";
 import { hasInstructorHeader, mapCsvRows } from "@/lib/kpi/csv";
 import { createKpiIngest, recordAudit } from "@/lib/db/queries";
 
@@ -11,6 +12,12 @@ export const dynamic = "force-dynamic";
  * `kpi_ingests` row — it is never scored or saved as a run directly; the owner
  * reviews/edits it on /kpi/ingests and loads it into the calculator.
  *
+ * Two body formats, identical staging behavior and response shape:
+ * - JSON (default): `{ periodLabel: "YYYY-MM", label?, rows }`.
+ * - Raw CSV (`Content-Type: text/csv`, or a non-JSON body under a missing /
+ *   octet-stream content type): the file itself is the body; `periodLabel`
+ *   (required) and `label` (optional) come from the query string.
+ *
  * Auth is a bearer key (`Authorization: Bearer <INGEST_API_KEY>`), not a session
  * cookie — the proxy exempts /api/ingest from the cookie redirect. With the env
  * var unset the endpoint is OFF (503), mirroring how optional integrations
@@ -20,8 +27,10 @@ export const dynamic = "force-dynamic";
 /** Rows arrive with the same flexible headers a CSV upload would have. */
 type RawRow = Record<string, unknown>;
 
-/** Hard cap on the JSON body — a month of tutor rows is a few hundred KB at most. */
+/** Hard cap on the body (JSON or CSV) — a month of tutor rows is a few hundred KB at most. */
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+const PERIOD_RE = /^20\d{2}-(0[1-9]|1[0-2])$/;
 
 // Best-effort, in-process throttle per IP (mirrors the login route): a machine
 // sender pushes a handful of times a month, so 30 requests / 15 min is generous
@@ -81,34 +90,76 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Payload too large (max 2 MB)." }, { status: 413 });
   }
 
-  let body: { periodLabel?: unknown; label?: unknown; rows?: unknown };
-  try {
-    body = JSON.parse(text) as typeof body;
-  } catch {
-    return NextResponse.json({ ok: false, error: "Body must be valid JSON." }, { status: 400 });
+  // Two accepted body formats. `text/csv` is explicit CSV; a missing or
+  // octet-stream content type is sniffed (JSON if it parses, else CSV); every
+  // other content type keeps the original JSON behavior.
+  const mode = resolveIngestBodyMode(req.headers.get("content-type"), text);
+
+  let periodLabel: string;
+  let label: string;
+  let rawRows: RawRow[];
+
+  if (mode === "csv") {
+    // CSV mode: the body is the file, so metadata rides on the query string.
+    const params = new URL(req.url).searchParams;
+    periodLabel = params.get("periodLabel")?.trim() ?? "";
+    if (!PERIOD_RE.test(periodLabel)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'CSV body: the periodLabel query parameter is required in "YYYY-MM" format (e.g. POST /api/ingest/kpi?periodLabel=2026-06).',
+        },
+        { status: 400 },
+      );
+    }
+    label = params.get("label")?.trim().slice(0, 200) ?? "";
+
+    const parsed = parseCsvBody(text);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { ok: false, error: `CSV body: ${parsed.error}` },
+        { status: 400 },
+      );
+    }
+    rawRows = parsed.rows;
+  } else {
+    let body: { periodLabel?: unknown; label?: unknown; rows?: unknown };
+    try {
+      body = JSON.parse(text) as typeof body;
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "JSON body: not valid JSON. To push a raw CSV file instead, send it with Content-Type: text/csv and pass periodLabel as a query parameter.",
+        },
+        { status: 400 },
+      );
+    }
+
+    periodLabel = typeof body.periodLabel === "string" ? body.periodLabel.trim() : "";
+    if (!PERIOD_RE.test(periodLabel)) {
+      return NextResponse.json(
+        { ok: false, error: 'JSON body: periodLabel is required in "YYYY-MM" format.' },
+        { status: 400 },
+      );
+    }
+    if (
+      !Array.isArray(body.rows) ||
+      body.rows.length === 0 ||
+      !body.rows.every((r) => r != null && typeof r === "object" && !Array.isArray(r))
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "JSON body: rows must be a non-empty array of objects." },
+        { status: 400 },
+      );
+    }
+    rawRows = body.rows as RawRow[];
+    label = typeof body.label === "string" ? body.label.trim().slice(0, 200) : "";
   }
 
-  const periodLabel = typeof body.periodLabel === "string" ? body.periodLabel.trim() : "";
-  if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(periodLabel)) {
-    return NextResponse.json(
-      { ok: false, error: 'periodLabel is required in "YYYY-MM" format.' },
-      { status: 400 },
-    );
-  }
-  if (!Array.isArray(body.rows) || body.rows.length === 0) {
-    return NextResponse.json(
-      { ok: false, error: "rows must be a non-empty array of objects." },
-      { status: 400 },
-    );
-  }
-  const rawRows = body.rows as unknown[];
-  if (!rawRows.every((r) => r != null && typeof r === "object" && !Array.isArray(r))) {
-    return NextResponse.json(
-      { ok: false, error: "rows must be a non-empty array of objects." },
-      { status: 400 },
-    );
-  }
-  if (!hasInstructorHeader(rawRows as RawRow[])) {
+  if (!hasInstructorHeader(rawRows)) {
     return NextResponse.json(
       {
         ok: false,
@@ -121,8 +172,7 @@ export async function POST(req: Request) {
 
   // Normalize through the exact same header mapping the CSV upload uses, so a
   // staged delivery behaves identically to a hand-uploaded file from here on.
-  const rows = mapCsvRows(rawRows as RawRow[]);
-  const label = typeof body.label === "string" ? body.label.trim().slice(0, 200) : "";
+  const rows = mapCsvRows(rawRows);
   const id = await createKpiIngest({ periodLabel, label, rows });
   await recordAudit({
     actorId: null,
