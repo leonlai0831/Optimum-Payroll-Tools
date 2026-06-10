@@ -1,14 +1,24 @@
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import type { CurrentUser } from "./session";
 import { CAPABILITIES, type Capability } from "./types";
 import { getPermissionConfig } from "@/lib/db/queries";
 
-/** The full set of capabilities a user has. super_admin always has all of them. */
-export async function getCapabilities(user: CurrentUser): Promise<Set<Capability>> {
-  if (user.role === "super_admin") return new Set(CAPABILITIES);
-  const config = await getPermissionConfig();
-  return new Set(config[user.role] ?? []);
-}
+/**
+ * The full set of capabilities a user has. super_admin always has all of them.
+ *
+ * Wrapped in React `cache()`: layouts, pages, and `sectionNavProps` all call this
+ * for the same `CurrentUser` (itself memoized by `getCurrentUser`) within one
+ * request, so this dedupes the permission-config lookup per request. Outside a
+ * React request scope (unit tests, route handlers) `cache()` is a pass-through.
+ */
+export const getCapabilities = cache(
+  async (user: CurrentUser): Promise<Set<Capability>> => {
+    if (user.role === "super_admin") return new Set(CAPABILITIES);
+    const config = await getPermissionConfig();
+    return new Set(config[user.role] ?? []);
+  },
+);
 
 export async function userCan(user: CurrentUser, capability: Capability): Promise<boolean> {
   if (user.role === "super_admin") return true;
