@@ -22,6 +22,7 @@ import type { GradeKey, RatingMap } from "@/lib/assessment/types";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import type { TeachingConfig, TeachingRow, TeachingSummary } from "@/lib/teaching/types";
 import type { GymEmploymentType, GymPosition } from "@/lib/gym/types";
+import type { LessonPlanData, LessonPlanStatus, LessonPlanType, LevelType } from "@/lib/lesson-plan/types";
 import type { Position, RunCoach } from "@/lib/types";
 import type {
   AllowanceConfig,
@@ -243,6 +244,48 @@ export const assessments = pgTable("assessments", {
   index("assessments_coach_observed_idx").on(t.coachId, t.observedOn),
 ]);
 
+/**
+ * A digital lesson plan (actual or replacement class) with a lightweight review
+ * workflow: draft → submitted → approved / changes_requested. Any content edit
+ * resets the status to draft (the last `reviewNote` is kept visible). The full
+ * form body lives in `data` (jsonb); the promoted columns power the History
+ * list without loading the body.
+ */
+export const lessonPlans = pgTable("lesson_plans", {
+  id: serial("id").primaryKey(),
+  type: text("type").$type<LessonPlanType>().notNull(),
+  status: text("status").$type<LessonPlanStatus>().default("draft").notNull(),
+  // The login that created the plan (visibility + edit rights are creator-scoped).
+  createdByUserId: integer("created_by_user_id").notNull(),
+  createdByName: text("created_by_name").default("").notNull(),
+  // Optional link to the creator's coach profile (when their login has one).
+  coachId: integer("coach_id"),
+  // For a replacement plan this is the REPLACEMENT instructor (the person filling).
+  instructorName: text("instructor_name").notNull(),
+  // Replacement plans only: the actual class instructor being covered.
+  actualInstructorName: text("actual_instructor_name").default("").notNull(),
+  center: text("center").default("").notNull(),
+  lessonDate: timestamp("lesson_date", { withTimezone: true }).notNull(),
+  timeLabel: text("time_label").default("").notNull(),
+  // Replacement plans only: which skill-checklist set applies (low/medium/high).
+  levelType: text("level_type").$type<LevelType>(),
+  classLevel: text("class_level").default("").notNull(),
+  // Actual plans only.
+  ageGroup: text("age_group").default("").notNull(),
+  data: jsonb("data").$type<LessonPlanData>().notNull(),
+  reviewNote: text("review_note").default("").notNull(),
+  reviewedByEmail: text("reviewed_by_email").default("").notNull(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // Editors see only their own plans — the list filters by creator.
+  index("lesson_plans_creator_idx").on(t.createdByUserId),
+  index("lesson_plans_status_idx").on(t.status),
+  // The History list orders by lesson date.
+  index("lesson_plans_date_idx").on(t.lessonDate),
+]);
+
 /** A free-form HR note (recognition / disciplinary / coaching / general) on an employee. */
 export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
@@ -309,3 +352,4 @@ export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;
 export type TeachingRunRecord = typeof teachingRuns.$inferSelect;
 export type GymStaffRecord = typeof gymStaff.$inferSelect;
 export type GymNoteRecord = typeof gymNotes.$inferSelect;
+export type LessonPlanRecord = typeof lessonPlans.$inferSelect;

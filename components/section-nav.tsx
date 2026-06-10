@@ -6,6 +6,7 @@ import {
   BarChart3,
   Calculator,
   ClipboardCheck,
+  ClipboardList,
   Dumbbell,
   History,
   Home,
@@ -36,7 +37,7 @@ type SectionItem = {
 type SectionConfig = { title: string; items: SectionItem[] };
 
 const NAVS: Record<
-  "allowance" | "kpi" | "staff" | "commission" | "assessment" | "system",
+  "allowance" | "kpi" | "staff" | "commission" | "assessment" | "lesson" | "system",
   SectionConfig
 > = {
   assessment: {
@@ -45,6 +46,13 @@ const NAVS: Record<
       { href: "/assessment", label: "New assessment", icon: ClipboardCheck, exact: true },
       { href: "/assessment/recent", label: "Recent", icon: History },
       { href: "/assessment/ai", label: "AI analysis", icon: Sparkles },
+    ],
+  },
+  lesson: {
+    title: "Lesson Plan",
+    items: [
+      { href: "/lesson-plans", label: "New plan", icon: ClipboardList, exact: true },
+      { href: "/lesson-plans/history", label: "History", icon: History },
     ],
   },
   allowance: {
