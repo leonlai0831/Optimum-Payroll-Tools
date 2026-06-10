@@ -7,7 +7,6 @@ const coach = (over: Partial<LinkCoach>): LinkCoach => ({
   aliases: [],
   center: "",
   tier: null,
-  active: true,
   kpiLinkNa: false,
   kpiLinkNaTier: null,
   ...over,
