@@ -215,9 +215,8 @@ export default async function HubPage() {
           white sheet, Brand Blue heading, the guide's own footer wave (traced
           1:1 from its vector artwork). Everything below stays quiet chrome. */}
       <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 pt-7 pb-20 shadow-card sm:px-8 sm:pb-24">
-        <p className="text-overline text-gray-400">Optimum · Staff Operations</p>
-        <h1 className="text-display mt-1 text-brand">Optimum Payroll Tools</h1>
-        <p className="mt-2 text-body text-muted">Choose a calculator to get started.</p>
+        <h1 className="text-display text-brand">Optimum Payroll Tools</h1>
+        <p className="mt-2 text-body text-muted">Choose a tool to get started.</p>
         <CiWave className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20" />
       </section>
 
