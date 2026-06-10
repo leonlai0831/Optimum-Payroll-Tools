@@ -52,6 +52,7 @@ import { DEFAULT_CLASSIFY_CONFIG } from "@/lib/kpi/classify";
 import { DEFAULT_ALLOWANCE_CONFIG } from "@/lib/allowance/defaults";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
 import type { KnownCoach } from "@/lib/kpi/merge";
+import { findAliasConflict, type AliasConflict } from "@/lib/kpi/alias-conflicts";
 import { defaultCommissionConfig } from "@/lib/commission/defaults";
 import type { CommissionConfig, CommissionRow, CommissionSummary } from "@/lib/commission/types";
 import { defaultTeachingConfig } from "@/lib/teaching/defaults";
@@ -372,6 +373,24 @@ export async function updateCoachAliases(id: number, aliases: string[]): Promise
     .update(coaches)
     .set({ aliases, updatedAt: new Date() })
     .where(eq(coaches.id, id));
+}
+
+/**
+ * Duplicate-alias guard for the KPI link editor: the first submitted alias
+ * already claimed by a DIFFERENT coach (alias or canonical name), or null when
+ * all are free. Checked before `updateCoachAliases` so one account can never
+ * end up on two profiles (the "ARIF - LMY [PK]" history-fork incident).
+ */
+export async function findCoachAliasConflict(
+  coachId: number,
+  aliases: string[],
+): Promise<AliasConflict | null> {
+  const all = await listCoaches();
+  return findAliasConflict(
+    coachId,
+    aliases,
+    all.map((c) => ({ id: c.id, canonicalName: c.canonicalName, aliases: c.aliases ?? [] })),
+  );
 }
 
 /**
