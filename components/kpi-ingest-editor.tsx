@@ -1,13 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Calculator, Plus, Save, Trash2 } from "lucide-react";
-import { Badge, Button, Card, Input, Spinner } from "@/components/ui";
-import { DesktopTable, MobileCards } from "@/components/responsive-table";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Calculator,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { Badge, Button, Card, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import type { InstructorRow } from "@/lib/kpi/types";
+import {
+  filterGridRows,
+  parseNumericCell,
+  sortGridRows,
+  toGridRows,
+  type IngestGridRow,
+  type SortDir,
+} from "@/lib/kpi/ingest-grid";
 import { cn } from "@/lib/utils";
 
 /** Serializable projection of a kpi_ingests row (dates as ISO strings for the client). */
@@ -49,45 +65,249 @@ function emptyRow(): InstructorRow {
   };
 }
 
+/* Sticky-column geometry: the row-number column is 3rem wide and pinned at
+   left-0; Instructor pins right after it at left-12. Keep widths and offsets
+   in sync if you change either. */
+const STICKY_NUM_COL = "sticky left-0 z-10 w-12 min-w-12";
+const STICKY_NAME_COL = "sticky left-12 z-10 min-w-44 border-r border-gray-200";
+
+/* Spreadsheet cell input: invisible until focused (borderless, transparent),
+   then a ring + white fill. Deliberately text-sm even on phones — this dense
+   power surface trades the iOS anti-zoom rule for Excel-like density. */
+const CELL_INPUT =
+  "w-full border-0 bg-transparent px-2 py-1 text-sm text-gray-900 outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-indigo-500";
+
+const TH =
+  "border-b border-gray-200 bg-gray-50 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500";
+const TD = "border-b border-gray-100 p-0";
+
+interface GridRowProps {
+  row: IngestGridRow;
+  /** 1-based position in the FULL row set (stable under filter/sort). */
+  displayIndex: number;
+  editable: boolean;
+  dirty: boolean;
+  onCommit: (id: number, key: keyof InstructorRow & string, value: string | number) => void;
+  onDelete: (id: number) => void;
+}
+
 /**
- * Staged-delivery review screen: edit cells, delete rows, add rows — all local
- * until "Save changes" PATCHes the full row set back. "Load into calculator"
+ * One spreadsheet row. Memoized so a cell commit re-renders only the edited
+ * row, not the whole grid — at 500+ rows that keeps blur/typing smooth. Inputs
+ * are *uncontrolled* (committed onBlur), so keystrokes never touch React state.
+ */
+const GridRow = memo(function GridRow({
+  row,
+  displayIndex,
+  editable,
+  dirty,
+  onCommit,
+  onDelete,
+}: GridRowProps) {
+  const { data } = row;
+  // Sticky cells scroll over the other columns, so they need an opaque bg that
+  // matches the row tint (amber for dirty rows).
+  const bg = dirty ? "bg-amber-50" : "bg-white";
+  return (
+    <tr className={bg}>
+      <td className={cn(TD, STICKY_NUM_COL, bg, "nums px-2 py-1 text-right text-xs text-gray-400")}>
+        {displayIndex}
+      </td>
+      <td className={cn(TD, STICKY_NAME_COL, bg)}>
+        {editable ? (
+          <input
+            defaultValue={data.Instructor}
+            data-col="Instructor"
+            size={1} // collapse the intrinsic ~20ch width; the td min-w governs
+            aria-label={`Instructor, row ${displayIndex}`}
+            className={cn(CELL_INPUT, "font-medium")}
+            onBlur={(e) => onCommit(row.id, "Instructor", e.target.value)}
+          />
+        ) : (
+          <div className="px-2 py-1 text-sm font-medium text-gray-900">{data.Instructor || "—"}</div>
+        )}
+      </td>
+      <td className={cn(TD, "min-w-32")}>
+        {editable ? (
+          <input
+            defaultValue={data.Center}
+            data-col="Center"
+            size={1}
+            aria-label={`Center, row ${displayIndex}`}
+            className={CELL_INPUT}
+            onBlur={(e) => onCommit(row.id, "Center", e.target.value)}
+          />
+        ) : (
+          <div className="px-2 py-1 text-sm text-gray-500">{data.Center || "—"}</div>
+        )}
+      </td>
+      {NUM_FIELDS.map(({ key }) => (
+        <td key={key} className={cn(TD, "min-w-20")}>
+          {editable ? (
+            <input
+              defaultValue={data[key] as number}
+              data-col={key}
+              size={1}
+              inputMode="numeric"
+              aria-label={`${key}, row ${displayIndex}`}
+              className={cn(CELL_INPUT, "nums text-right")}
+              onBlur={(e) => {
+                const n = parseNumericCell(e.target.value);
+                e.target.value = String(n); // normalize garbage so the DOM matches state
+                onCommit(row.id, key, n);
+              }}
+            />
+          ) : (
+            <div className="nums px-2 py-1 text-right text-sm text-gray-600">
+              {data[key] as number}
+            </div>
+          )}
+        </td>
+      ))}
+      {editable && (
+        <td className={cn(TD, "w-9 min-w-9 text-center")}>
+          <button
+            type="button"
+            aria-label={`Delete row ${displayIndex}`}
+            className="cursor-pointer rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 active:bg-red-100"
+            onClick={() => onDelete(row.id)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </td>
+      )}
+    </tr>
+  );
+});
+
+/**
+ * Staged-delivery review screen as an Excel-like spreadsheet grid: ONE push per
+ * month carries hundreds of instructor rows, so density beats cards here. Edit
+ * cells in place, delete/add rows, filter and sort the view — all local until
+ * "Save changes" PATCHes the full row set back. "Load into calculator"
  * auto-saves any pending edits first, so what the calculator scores is always
  * exactly what this page shows. Read-only once the delivery is no longer pending.
+ *
+ * EXCEPTION to the repo's cards-on-mobile rule: the owner explicitly accepts a
+ * horizontally scrollable grid on phones for this power surface — hundreds of
+ * rows are unreviewable as a card stack. Sticky header + sticky Instructor
+ * column keep orientation while scrolling both axes.
  */
 export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
   const router = useRouter();
   const toast = useToast();
   const editable = ingest.status === "pending";
-  const [rows, setRows] = useState<InstructorRow[]>(ingest.rows);
-  const [dirty, setDirty] = useState(false);
+
+  const [rows, setRows] = useState<IngestGridRow[]>(() => toGridRows(ingest.rows));
+  // Mirror of `rows` for synchronous reads in event handlers (cell commits and
+  // saves happen after the commit phase, so the effect-synced ref is current).
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+  const nextIdRef = useRef(ingest.rows.length);
+
+  const [dirtyIds, setDirtyIds] = useState<ReadonlySet<number>>(() => new Set());
+  const [structureDirty, setStructureDirty] = useState(false); // rows added/removed
+  const dirty = structureDirty || dirtyIds.size > 0;
+
+  const [query, setQuery] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>(null);
   const [busy, setBusy] = useState<"save" | "load" | "discard" | null>(null);
 
-  function patchRow(idx: number, patch: Partial<InstructorRow>) {
-    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
-    setDirty(true);
-  }
-  function deleteRow(idx: number) {
-    setRows((prev) => prev.filter((_, i) => i !== idx));
-    setDirty(true);
-  }
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollToEndRef = useRef(false);
+
+  // Filter + sort are a VIEW over the full set; edits are keyed by stable row
+  // id, and saves always send rowsRef.current (the full set, original order).
+  const visible = useMemo(
+    () => sortGridRows(filterGridRows(rows, query), sortDir),
+    [rows, query, sortDir],
+  );
+  const indexById = useMemo(() => new Map(rows.map((r, i) => [r.id, i + 1])), [rows]);
+
+  const commitCell = useCallback(
+    (id: number, key: keyof InstructorRow & string, value: string | number) => {
+      const current = rowsRef.current.find((r) => r.id === id);
+      if (!current || current.data[key] === value) return; // blur without change: no re-render
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, data: { ...r.data, [key]: value } as InstructorRow } : r,
+        ),
+      );
+      setDirtyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+    },
+    [],
+  );
+
+  const deleteRow = useCallback((id: number) => {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    setDirtyIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setStructureDirty(true);
+  }, []);
+
   function addRow() {
-    setRows((prev) => [...prev, emptyRow()]);
-    setDirty(true);
+    const id = nextIdRef.current++;
+    // Clear the view filters so the appended row is actually visible at the end.
+    setQuery("");
+    setSortDir(null);
+    setRows((prev) => [...prev, { id, data: emptyRow() }]);
+    setDirtyIds((prev) => new Set(prev).add(id));
+    setStructureDirty(true);
+    scrollToEndRef.current = true;
+  }
+
+  // After an add, scroll the new last row into view and focus its Instructor cell.
+  useEffect(() => {
+    if (!scrollToEndRef.current) return;
+    scrollToEndRef.current = false;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    el.querySelector<HTMLInputElement>('tbody tr:last-child input[data-col="Instructor"]')?.focus();
+  }, [rows]);
+
+  function cycleSort() {
+    setSortDir((d) => (d === null ? "asc" : d === "asc" ? "desc" : null));
+  }
+
+  // Enter behaves like a spreadsheet: jump to the same column one row down.
+  function onGridKeyDown(e: React.KeyboardEvent<HTMLTableSectionElement>) {
+    if (e.key !== "Enter") return;
+    const target = e.target as HTMLInputElement;
+    if (target.tagName !== "INPUT" || !target.dataset.col) return;
+    e.preventDefault();
+    const next = target
+      .closest("tr")
+      ?.nextElementSibling?.querySelector<HTMLInputElement>(
+        `input[data-col="${target.dataset.col}"]`,
+      );
+    if (next) {
+      next.focus();
+      next.select();
+    } else {
+      target.blur(); // last row: just commit
+    }
   }
 
   async function saveRows(): Promise<boolean> {
     const res = await fetch(`/api/kpi/ingests/${ingest.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows }),
+      body: JSON.stringify({ rows: rowsRef.current.map((r) => r.data) }),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       toast.error(body.error || "Failed to save rows");
       return false;
     }
-    setDirty(false);
+    setDirtyIds(new Set());
+    setStructureDirty(false);
     return true;
   }
 
@@ -130,59 +350,144 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
     }
   }
 
-  const numField = (r: InstructorRow, idx: number, key: keyof InstructorRow & string, inputClass: string) => (
-    <Input
-      type="number"
-      value={r[key] as number}
-      onChange={(e) => patchRow(idx, { [key]: Number(e.target.value) || 0 })}
-      className={inputClass}
-      aria-label={key}
-    />
-  );
-
   return (
     <div className="space-y-4">
-      {/* Header: meta + status + actions. */}
+      {/* Header: meta + status. Actions live in the sticky bar below the grid. */}
       <Card className="p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="flex flex-wrap items-center gap-2 text-lg font-bold text-gray-900">
-              {ingest.periodLabel}
-              {ingest.status === "pending" && (
-                <Badge className="border-amber-300 bg-amber-100 text-amber-800">Pending</Badge>
-              )}
-              {ingest.status === "imported" && (
-                <Badge className="border-green-300 bg-green-100 text-green-800">Imported</Badge>
-              )}
-              {ingest.status === "discarded" && (
-                <Badge className="border-gray-300 bg-gray-100 text-gray-600">Discarded</Badge>
-              )}
-            </h1>
-            <p className="mt-0.5 text-xs text-gray-500">
-              {ingest.label || "API upload"} · {rows.length} rows · received{" "}
-              {new Date(ingest.receivedAt).toLocaleString()}
-            </p>
-            {ingest.status === "imported" && (
-              <p className="mt-1 text-sm text-green-700">
-                Imported{ingest.importedAt ? ` on ${new Date(ingest.importedAt).toLocaleDateString()}` : ""}
-                {ingest.importedRunId != null && (
-                  <>
-                    {" — "}
-                    <Link className="font-medium underline" href={`/kpi/history/${ingest.importedRunId}`}>
-                      view the saved run →
-                    </Link>
-                  </>
-                )}
-              </p>
+        <h1 className="flex flex-wrap items-center gap-2 text-lg font-bold text-gray-900">
+          {ingest.periodLabel}
+          {ingest.status === "pending" && (
+            <Badge className="border-amber-300 bg-amber-100 text-amber-800">Pending</Badge>
+          )}
+          {ingest.status === "imported" && (
+            <Badge className="border-green-300 bg-green-100 text-green-800">Imported</Badge>
+          )}
+          {ingest.status === "discarded" && (
+            <Badge className="border-gray-300 bg-gray-100 text-gray-600">Discarded</Badge>
+          )}
+        </h1>
+        <p className="mt-0.5 text-xs text-gray-500">
+          {ingest.label || "API upload"} · {rows.length} rows · received{" "}
+          {new Date(ingest.receivedAt).toLocaleString()}
+        </p>
+        {ingest.status === "imported" && (
+          <p className="mt-1 text-sm text-green-700">
+            Imported{ingest.importedAt ? ` on ${new Date(ingest.importedAt).toLocaleDateString()}` : ""}
+            {ingest.importedRunId != null && (
+              <>
+                {" — "}
+                <Link className="font-medium underline" href={`/kpi/history/${ingest.importedRunId}`}>
+                  view the saved run →
+                </Link>
+              </>
             )}
-            {ingest.status === "discarded" && (
-              <p className="mt-1 text-sm text-gray-500">
-                This delivery was discarded — kept for the record, it can no longer be loaded.
-              </p>
-            )}
+          </p>
+        )}
+        {ingest.status === "discarded" && (
+          <p className="mt-1 text-sm text-gray-500">
+            This delivery was discarded — kept for the record, it can no longer be loaded.
+          </p>
+        )}
+      </Card>
+
+      {/* The spreadsheet grid. */}
+      <Card className="overflow-hidden">
+        {/* Toolbar: counts, view filter, add row. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-3 py-2">
+          <span className="nums text-xs font-medium text-gray-500">
+            {rows.length} rows
+            {visible.length !== rows.length && ` · ${visible.length} shown`}
+          </span>
+          <div className="relative ml-auto min-w-0 flex-1 sm:max-w-64 sm:flex-none">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter instructor / center"
+              aria-label="Filter rows by instructor or center"
+              className="w-full rounded-md border border-gray-300 py-1 pl-7 pr-2 text-sm outline-none transition-colors hover:border-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+            />
           </div>
           {editable && (
-            <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={addRow} disabled={busy !== null}>
+              <Plus className="h-3.5 w-3.5" /> Add row
+            </Button>
+          )}
+        </div>
+
+        {/* Bounded-height, both-axis scroll. Horizontal scroll is INTENTIONAL on
+            phones here (owner-approved exception to the cards-on-mobile rule —
+            see the component doc comment). border-separate keeps cell borders
+            attached to the sticky cells while scrolling. */}
+        <div ref={scrollRef} className="max-h-[70vh] overflow-auto overscroll-contain">
+          <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
+            <thead>
+              <tr>
+                <th className={cn(TH, STICKY_NUM_COL, "top-0 z-30 text-right")}>#</th>
+                <th className={cn(TH, STICKY_NAME_COL, "top-0 z-30 p-0 text-left")}>
+                  <button
+                    type="button"
+                    onClick={cycleSort}
+                    className="flex w-full cursor-pointer items-center gap-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide hover:text-gray-800"
+                    aria-label={`Sort by instructor (${sortDir ?? "original order"})`}
+                  >
+                    Instructor
+                    {sortDir === "asc" ? (
+                      <ArrowUp className="h-3 w-3 text-indigo-600" />
+                    ) : sortDir === "desc" ? (
+                      <ArrowDown className="h-3 w-3 text-indigo-600" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 text-gray-300" />
+                    )}
+                  </button>
+                </th>
+                <th className={cn(TH, "sticky top-0 z-20 text-left")}>Center</th>
+                {NUM_FIELDS.map(({ key, label }) => (
+                  <th key={key} className={cn(TH, "sticky top-0 z-20 text-right")}>
+                    {label}
+                  </th>
+                ))}
+                {editable && <th className={cn(TH, "sticky top-0 z-20")}></th>}
+              </tr>
+            </thead>
+            <tbody onKeyDown={editable ? onGridKeyDown : undefined}>
+              {visible.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={editable ? 12 : 11}
+                    className="px-3 py-8 text-center text-sm text-gray-500"
+                  >
+                    {rows.length === 0 ? "No rows." : "No rows match the filter."}
+                  </td>
+                </tr>
+              ) : (
+                visible.map((r) => (
+                  <GridRow
+                    key={r.id}
+                    row={r}
+                    displayIndex={indexById.get(r.id) ?? 0}
+                    editable={editable}
+                    dirty={dirtyIds.has(r.id)}
+                    onCommit={commitCell}
+                    onDelete={deleteRow}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Sticky save bar (pending only): counts + the three actions. */}
+      {editable && (
+        <div className="sticky bottom-2 z-30">
+          <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 shadow-lg">
+            <span className="nums text-xs text-gray-500">
+              {rows.length} rows · {dirtyIds.size} edited
+              {structureDirty && " · rows added/removed"}
+              {dirty && <span className="ml-1 font-medium text-amber-700">— unsaved</span>}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" onClick={onSave} disabled={busy !== null || !dirty}>
                 {busy === "save" ? <Spinner /> : <Save className="h-4 w-4" />} Save changes
               </Button>
@@ -193,172 +498,9 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
                 {busy === "discard" ? <Spinner /> : <Trash2 className="h-4 w-4" />} Discard
               </Button>
             </div>
-          )}
+          </Card>
         </div>
-        {editable && dirty && (
-          <p className="mt-2 text-xs text-amber-700">
-            Unsaved edits — “Save changes” keeps them, “Load into calculator” saves them first.
-          </p>
-        )}
-      </Card>
-
-      {/* Rows. */}
-      <Card className="overflow-hidden">
-        {/* Mobile (< lg): one editable card per row. */}
-        <MobileCards>
-          {rows.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-gray-500">No rows.</div>
-          ) : (
-            rows.map((r, idx) => (
-              <div key={idx} className="space-y-3 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-xs font-bold text-gray-400">#{idx + 1}</span>
-                  {editable && (
-                    <button
-                      type="button"
-                      className="flex min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-red-600 hover:bg-red-50 active:bg-red-100"
-                      onClick={() => deleteRow(idx)}
-                    >
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </button>
-                  )}
-                </div>
-                {editable ? (
-                  <>
-                    <label className="block">
-                      <span className="text-overline text-muted">Instructor</span>
-                      <Input
-                        value={r.Instructor}
-                        onChange={(e) => patchRow(idx, { Instructor: e.target.value })}
-                        className="mt-1 w-full py-2 text-base"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-overline text-muted">Center</span>
-                      <Input
-                        value={r.Center}
-                        onChange={(e) => patchRow(idx, { Center: e.target.value })}
-                        className="mt-1 w-full py-2 text-base"
-                      />
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {NUM_FIELDS.map(({ key, label }) => (
-                        <label key={key} className="block">
-                          <span className="text-overline text-muted">{label}</span>
-                          <div className="mt-1">{numField(r, idx, key, "w-full py-2 text-base")}</div>
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <div className="font-semibold text-gray-900">{r.Instructor || "—"}</div>
-                      <div className="text-[11px] text-gray-400">{r.Center || "—"}</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                      {NUM_FIELDS.map(({ key, label }) => (
-                        <div key={key} className="flex items-baseline justify-between gap-2">
-                          <span className="text-[11px] text-gray-400">{label}</span>
-                          <span className="nums text-sm font-medium text-gray-700">
-                            {r[key] as number}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </MobileCards>
-
-        {/* Desktop (lg+): the full editable table. */}
-        <DesktopTable>
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Instructor</th>
-                <th className="px-3 py-2 text-left">Center</th>
-                {NUM_FIELDS.map(({ key, label }) => (
-                  <th key={key} className="px-3 py-2 text-center">
-                    {label}
-                  </th>
-                ))}
-                {editable && <th className="px-3 py-2"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={editable ? 12 : 11} className="px-3 py-8 text-center text-sm text-gray-500">
-                    No rows.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r, idx) => (
-                  <tr key={idx} className={cn(editable && "hover:bg-indigo-50/40")}>
-                    <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
-                    {editable ? (
-                      <>
-                        <td className="px-3 py-2">
-                          <Input
-                            value={r.Instructor}
-                            onChange={(e) => patchRow(idx, { Instructor: e.target.value })}
-                            className="w-44 py-1 text-xs"
-                            aria-label="Instructor"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input
-                            value={r.Center}
-                            onChange={(e) => patchRow(idx, { Center: e.target.value })}
-                            className="w-28 py-1 text-xs"
-                            aria-label="Center"
-                          />
-                        </td>
-                        {NUM_FIELDS.map(({ key }) => (
-                          <td key={key} className="px-3 py-2 text-center">
-                            {numField(r, idx, key, "w-20 py-1 text-center text-xs")}
-                          </td>
-                        ))}
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-red-600 hover:text-red-800"
-                            onClick={() => deleteRow(idx)}
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-3 py-2 font-medium text-gray-900">{r.Instructor || "—"}</td>
-                        <td className="px-3 py-2 text-gray-500">{r.Center || "—"}</td>
-                        {NUM_FIELDS.map(({ key }) => (
-                          <td key={key} className="nums px-3 py-2 text-center text-gray-600">
-                            {r[key] as number}
-                          </td>
-                        ))}
-                      </>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </DesktopTable>
-
-        {editable && (
-          <div className="border-t border-gray-100 p-3">
-            <Button variant="outline" onClick={addRow} disabled={busy !== null}>
-              <Plus className="h-4 w-4" /> Add row
-            </Button>
-          </div>
-        )}
-      </Card>
+      )}
     </div>
   );
 }
