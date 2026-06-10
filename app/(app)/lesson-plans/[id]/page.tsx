@@ -7,11 +7,12 @@ import { getLessonPlan } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
 import { LessonPlanActions } from "@/components/lesson-plan-actions";
 import { LessonPlanStatusBadge, LessonPlanTypeBadge } from "@/components/lesson-plan-badges";
+import { LessonPlanSelfEval } from "@/components/lesson-plan-self-eval";
+import { canFillSelfEval } from "@/lib/lesson-plan/self-eval";
 import {
   LEVEL_TYPE_LABELS,
   OBJECTIVE_HELPER,
   REPLACEMENT_SECTIONS,
-  SELF_EVAL_GROUPS,
 } from "@/lib/lesson-plan/templates";
 
 export const dynamic = "force-dynamic";
@@ -260,49 +261,19 @@ export default async function LessonPlanDetailPage({
           )}
         </div>
 
-        {plan.type === "replacement" && (
-          <>
-            <div>
-              <SectionHeading>Remarks</SectionHeading>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{d.remarks || "—"}</p>
-            </div>
-            <div>
-              <SectionHeading>Teaching performance self-evaluation</SectionHeading>
-              {SELF_EVAL_GROUPS.map((group) => (
-                <div key={group.key} className="mt-3">
-                  <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                    {group.title}
-                  </div>
-                  <div className="mt-1 divide-y divide-gray-100">
-                    {group.questions.map((q) => {
-                      const a = d.selfEval[q.key];
-                      return (
-                        <div
-                          key={q.key}
-                          className="flex items-center justify-between gap-3 py-1.5 text-sm"
-                        >
-                          <span className="min-w-0 text-gray-700">{q.label}</span>
-                          <span
-                            className={
-                              a === "yes"
-                                ? "shrink-0 font-semibold text-green-700"
-                                : a === "no"
-                                  ? "shrink-0 font-semibold text-gray-900"
-                                  : "shrink-0 text-gray-300"
-                            }
-                          >
-                            {a === "yes" ? "Yes" : a === "no" ? "No" : "—"}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
       </Card>
+
+      {/* Post-lesson self-evaluation — filled AFTER the class, separate from
+          the pre-class plan content (saving it never changes the status). */}
+      {plan.type === "replacement" && (
+        <LessonPlanSelfEval
+          planId={plan.id}
+          canFill={isOwner && canFillSelfEval(plan)}
+          selfEval={d.selfEval}
+          remarks={d.remarks}
+          selfEvalAt={plan.selfEvalAt ? plan.selfEvalAt.toISOString() : null}
+        />
+      )}
     </div>
   );
 }

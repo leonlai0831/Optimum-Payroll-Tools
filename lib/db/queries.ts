@@ -65,6 +65,7 @@ import type {
   LessonPlanStatus,
   LessonPlanType,
   LevelType,
+  SelfEvalAnswer,
 } from "@/lib/lesson-plan/types";
 import {
   extractStaffMonth,
@@ -2296,13 +2297,45 @@ export async function createLessonPlan(
  * Replace a plan's content. ANY content edit resets the status to draft so the
  * plan must be re-submitted and re-reviewed — but the last review note (and
  * reviewer attribution) is deliberately kept, so the owner can still see what
- * was asked of them while editing.
+ * was asked of them while editing. The post-lesson self-evaluation
+ * (`data.selfEval` + `data.remarks`, stamped by `selfEvalAt`) is NOT part of
+ * the pre-class content: a content edit always preserves whatever is stored.
  */
 export async function updateLessonPlan(id: number, content: LessonPlanContent): Promise<void> {
   const db = await getDb();
+  const existing = await getLessonPlan(id);
+  if (!existing) return;
+  const data: LessonPlanData = {
+    ...content.data,
+    remarks: existing.data.remarks,
+    selfEval: existing.data.selfEval,
+  };
   await db
     .update(lessonPlans)
-    .set({ ...content, status: "draft", updatedAt: new Date() })
+    .set({ ...content, data, status: "draft", updatedAt: new Date() })
+    .where(eq(lessonPlans.id, id));
+}
+
+/**
+ * Fill (or re-fill) the post-lesson self-evaluation. Unlike a content edit
+ * this never touches the review status — an approved plan stays approved.
+ * `selfEvalAt` records the latest fill.
+ */
+export async function setLessonPlanSelfEval(
+  id: number,
+  selfEval: Record<string, SelfEvalAnswer>,
+  remarks: string,
+): Promise<void> {
+  const db = await getDb();
+  const existing = await getLessonPlan(id);
+  if (!existing) return;
+  await db
+    .update(lessonPlans)
+    .set({
+      data: { ...existing.data, selfEval, remarks },
+      selfEvalAt: new Date(),
+      updatedAt: new Date(),
+    })
     .where(eq(lessonPlans.id, id));
 }
 
@@ -2326,6 +2359,7 @@ export interface LessonPlanListRow {
   timeLabel: string;
   levelType: LevelType | null;
   classLevel: string;
+  selfEvalAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2351,6 +2385,7 @@ export async function listLessonPlans(
     timeLabel: lessonPlans.timeLabel,
     levelType: lessonPlans.levelType,
     classLevel: lessonPlans.classLevel,
+    selfEvalAt: lessonPlans.selfEvalAt,
     createdAt: lessonPlans.createdAt,
     updatedAt: lessonPlans.updatedAt,
   };

@@ -183,6 +183,13 @@
       "when": 1781069801768,
       "tag": "0025_slippery_vance_astro",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1781074909479,
+      "tag": "0026_neat_garia",
+      "breakpoints": true
     }
   ]
 }

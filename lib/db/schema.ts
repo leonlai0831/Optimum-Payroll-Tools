@@ -273,6 +273,10 @@ export const lessonPlans = pgTable("lesson_plans", {
   // Actual plans only.
   ageGroup: text("age_group").default("").notNull(),
   data: jsonb("data").$type<LessonPlanData>().notNull(),
+  // When the post-lesson self-evaluation (data.selfEval + data.remarks) was
+  // last filled in; null = not filled yet. Set by the self_eval action only —
+  // content edits never touch it.
+  selfEvalAt: timestamp("self_eval_at", { withTimezone: true }),
   reviewNote: text("review_note").default("").notNull(),
   reviewedByEmail: text("reviewed_by_email").default("").notNull(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),

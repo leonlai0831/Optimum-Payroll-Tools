@@ -3,11 +3,17 @@ import {
   deleteLessonPlan,
   getLessonPlan,
   recordAudit,
+  setLessonPlanSelfEval,
   submitLessonPlan,
   updateLessonPlan,
 } from "@/lib/db/queries";
 import { canDeletePlan, canViewPlan, isPlanCreator, lessonPlanAccess } from "@/lib/lesson-plan/access";
-import { parseLessonPlanContent, type LessonPlanContentBody } from "@/lib/lesson-plan/validate";
+import { canFillSelfEval } from "@/lib/lesson-plan/self-eval";
+import {
+  parseLessonPlanContent,
+  parseSelfEval,
+  type LessonPlanContentBody,
+} from "@/lib/lesson-plan/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +33,10 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/lesson-plans/[i
 /**
  * Creator-only mutations:
  *  - `{ action: "submit" }` moves a draft / changes-requested plan into review;
+ *  - `{ action: "self_eval", selfEval, remarks }` fills the POST-LESSON
+ *    self-evaluation (sets `selfEvalAt`) without changing the review status;
  *  - any other body is a content edit, which always resets the status to draft
- *    (the last review note stays visible on the plan).
+ *    (the last review note stays visible; the stored self-eval is preserved).
  */
 export async function PATCH(req: Request, ctx: RouteContext<"/api/lesson-plans/[id]">) {
   const gate = await lessonPlanAccess();
@@ -40,7 +48,11 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/lesson-plans/[
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as LessonPlanContentBody & { action?: unknown };
+  const body = (await req.json().catch(() => ({}))) as LessonPlanContentBody & {
+    action?: unknown;
+    selfEval?: unknown;
+    remarks?: unknown;
+  };
   // The instructor (replacement instructor on a replacement plan) is always the
   // person filling the form — server truth, never client input.
   const { user } = gate.access;
@@ -55,6 +67,25 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/lesson-plans/[
     }
     await submitLessonPlan(plan.id);
     return NextResponse.json({ ok: true, status: "submitted" });
+  }
+
+  if (body.action === "self_eval") {
+    if (plan.type !== "replacement") {
+      return NextResponse.json(
+        { error: "Only a replacement plan carries a self-evaluation" },
+        { status: 409 },
+      );
+    }
+    if (!canFillSelfEval(plan)) {
+      return NextResponse.json(
+        { error: "Fill the self-evaluation after the class has been taught" },
+        { status: 409 },
+      );
+    }
+    const remarks = typeof body.remarks === "string" ? body.remarks.trim() : "";
+    await setLessonPlanSelfEval(plan.id, parseSelfEval(body.selfEval), remarks);
+    // Unlike a content edit, filling the self-eval never changes the status.
+    return NextResponse.json({ ok: true, status: plan.status });
   }
 
   const parsed = parseLessonPlanContent(plan.type, body);

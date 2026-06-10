@@ -52,7 +52,10 @@ export type SelfEvalAnswer = "yes" | "no" | "";
 /**
  * The full form body stored in the `lesson_plans.data` jsonb column. One shape
  * serves both plan types: actual plans use `priorKnowledge` + `procedure`,
- * replacement plans use `priorSkills` + `sections` + `remarks` + `selfEval`.
+ * replacement plans use `priorSkills` + `sections`. `remarks` + `selfEval` are
+ * POST-LESSON fields on replacement plans — filled after the class via the
+ * self_eval action (stamped by `lesson_plans.self_eval_at`), never via the
+ * pre-class form.
  */
 export interface LessonPlanData {
   /** Students' prior knowledge — free text (actual plans). */
@@ -65,9 +68,9 @@ export interface LessonPlanData {
   procedure: ProcedureRow[];
   /** Fixed procedure sections (replacement plans). */
   sections: ReplacementSection[];
-  /** Remarks (replacement plans). */
+  /** Post-lesson remarks (replacement plans; filled after the class). */
   remarks: string;
-  /** Teaching-performance self-evaluation, keyed by question key (replacement plans). */
+  /** Post-lesson self-evaluation, keyed by question key (replacement plans). */
   selfEval: Record<string, SelfEvalAnswer>;
 }
 

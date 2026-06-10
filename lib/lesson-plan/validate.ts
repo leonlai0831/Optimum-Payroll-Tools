@@ -75,8 +75,12 @@ function parseSections(v: unknown, levelType: LevelType): ReplacementSection[] {
   });
 }
 
-/** Keep only known question keys with a definite yes/no answer. */
-function parseSelfEval(v: unknown): Record<string, SelfEvalAnswer> {
+/**
+ * Keep only known question keys with a definite yes/no answer. Used by the
+ * post-lesson `self_eval` action — the self-evaluation (and remarks) are NOT
+ * part of the pre-class content body parsed below.
+ */
+export function parseSelfEval(v: unknown): Record<string, SelfEvalAnswer> {
   const out: Record<string, SelfEvalAnswer> = {};
   if (typeof v !== "object" || v === null) return out;
   const answers = v as Record<string, unknown>;
@@ -91,9 +95,9 @@ function parseSelfEval(v: unknown): Record<string, SelfEvalAnswer> {
 
 /**
  * Validate + sanitize an untrusted create/edit body into a clean
- * {@link LessonPlanContent} for the given plan type. Unknown skills, section
- * keys, and self-eval questions are dropped (never invented); strings are
- * trimmed. Returns a user-facing `error` string when the body is unusable.
+ * {@link LessonPlanContent} for the given plan type. Unknown skills and
+ * section keys are dropped (never invented); strings are trimmed. Returns a
+ * user-facing `error` string when the body is unusable.
  */
 export function parseLessonPlanContent(
   type: LessonPlanType,
@@ -142,8 +146,11 @@ export function parseLessonPlanContent(
           objectives,
           procedure: [],
           sections: parseSections(raw.sections, levelType!),
-          remarks: str(raw.remarks),
-          selfEval: parseSelfEval(raw.selfEval),
+          // Post-lesson fields — never read from a content body. On create the
+          // plan starts unfilled; on edit `updateLessonPlan` preserves what's
+          // stored (only the self_eval action writes these).
+          remarks: "",
+          selfEval: {},
         };
 
   return {
