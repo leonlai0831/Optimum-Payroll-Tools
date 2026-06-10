@@ -9,6 +9,7 @@ import { ConfirmModal } from "@/components/modal";
 import dynamic from "next/dynamic";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
@@ -131,7 +132,35 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
         <span className="text-sm font-bold text-gray-900">Assessments</span>
         <span className="text-xs text-gray-500">{assessments.length}</span>
       </div>
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {assessments.map((a, i) => (
+          <div key={a.id} className="flex items-start justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900">
+                {new Date(a.observedOn).toLocaleDateString()}
+                {i === 0 && (
+                  <span className="ml-2 text-[10px] font-semibold uppercase text-indigo-500">
+                    latest → KPI
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                {a.assessor || "—"}
+                <span> · {[a.classType, a.poolType].filter(Boolean).join(" · ") || "—"}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-base font-bold tabular-nums text-gray-900">
+                {a.totalPercent.toFixed(1)}%
+              </div>
+              <div className="mt-1">
+                <Badge>{GRADE_LABEL[a.finalGrade]}</Badge>
+              </div>
+            </div>
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -167,7 +196,7 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }
@@ -191,7 +220,25 @@ function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
           <ProfileScoreChart data={chart} />
         </div>
       )}
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {kpi.map((k) => (
+          <div key={k.period} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900">{k.period}</div>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                Grade <span className="font-semibold text-gray-600">{k.grade}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-base font-bold tabular-nums text-gray-900">
+                {k.finalScore.toFixed(3)}
+              </div>
+              <div className="text-[11px] tabular-nums text-gray-400">{rm(k.payout)}</div>
+            </div>
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
@@ -212,7 +259,7 @@ function KpiHistoryCard({ kpi }: { kpi: KpiPoint[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }
@@ -224,7 +271,28 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
       <h3 className="mb-3 flex items-center gap-2 text-h3 text-gray-900">
         <Wallet className="h-4 w-4" /> Allowance history
       </h3>
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {allowance.map((a) => (
+          <div key={a.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900">{a.period}</div>
+              <div className="mt-0.5 truncate text-[11px] text-gray-400">
+                {a.tier}
+                <span> · {a.center || "—"}</span>
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-base font-bold tabular-nums text-green-700">
+                {rm(a.grandTotal)}
+              </div>
+              <div className="text-[11px] tabular-nums text-gray-400">
+                teaching {rm(a.teaching)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full text-sm">
           <thead className="text-[11px] uppercase tracking-wide text-gray-400">
             <tr>
@@ -247,7 +315,7 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }

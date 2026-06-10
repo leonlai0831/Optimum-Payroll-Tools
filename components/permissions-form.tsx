@@ -4,14 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, ShieldCheck } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
 import {
   CAPABILITY_LABELS,
   CONFIGURABLE_ROLES,
   ROLE_LABELS,
   type Capability,
+  type ConfigurableRole,
   type PermissionConfig,
 } from "@/lib/auth/types";
+import { cn } from "@/lib/utils";
 
 const GROUPS: { title: string; caps: Capability[] }[] = [
   { title: "Settings", caps: ["view_settings", "edit_settings"] },
@@ -26,6 +29,8 @@ export function PermissionsForm({ initial }: { initial: PermissionConfig }) {
   const toast = useToast();
   const [cfg, setCfg] = useState<PermissionConfig>(() => structuredClone(initial));
   const [busy, setBusy] = useState(false);
+  // Mobile shows one role at a time (the full matrix doesn't fit a phone).
+  const [mobileRole, setMobileRole] = useState<ConfigurableRole>(CONFIGURABLE_ROLES[0]);
 
   function toggle(role: (typeof CONFIGURABLE_ROLES)[number], cap: Capability) {
     setCfg((c) => {
@@ -70,7 +75,60 @@ export function PermissionsForm({ initial }: { initial: PermissionConfig }) {
         changed.
       </p>
 
-      <Card className="overflow-x-auto p-0">
+      <Card className="overflow-hidden p-0">
+        {/* Mobile (< lg): pick a role, then toggle its capabilities as a
+            stacked touch list. Desktop keeps the full capability × role matrix. */}
+        <MobileCards>
+          <div className="p-4">
+            <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Role">
+              {CONFIGURABLE_ROLES.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileRole === r}
+                  onClick={() => setMobileRole(r)}
+                  className={cn(
+                    "min-h-11 rounded-lg border px-2 py-1.5 text-sm font-semibold transition",
+                    mobileRole === r
+                      ? "border-indigo-600 bg-indigo-600 text-white"
+                      : "border-gray-200 bg-white text-gray-600 active:bg-gray-100",
+                  )}
+                >
+                  {ROLE_LABELS[r]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-gray-400">
+              Editing capabilities for <strong>{ROLE_LABELS[mobileRole]}</strong>.{" "}
+              {ROLE_LABELS.super_admin} always has every capability.
+            </p>
+          </div>
+          {GROUPS.map((group) => (
+            <div key={group.title} className="px-4 py-3">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                {group.title}
+              </div>
+              <div className="mt-1">
+                {group.caps.map((cap) => (
+                  <label
+                    key={cap}
+                    className="flex min-h-11 cursor-pointer items-center justify-between gap-3 py-1.5"
+                  >
+                    <span className="text-sm text-gray-700">{CAPABILITY_LABELS[cap]}</span>
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 shrink-0 accent-indigo-600"
+                      checked={cfg[mobileRole].includes(cap)}
+                      onChange={() => toggle(mobileRole, cap)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </MobileCards>
+        <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -89,6 +147,7 @@ export function PermissionsForm({ initial }: { initial: PermissionConfig }) {
             ))}
           </tbody>
         </table>
+        </DesktopTable>
       </Card>
     </div>
   );
