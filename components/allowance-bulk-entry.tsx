@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Lock, Save } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
 import { calcAllowance } from "@/lib/allowance/calc";
 import { extractCenterHours, mergeBulkRow, type BulkRow } from "@/lib/allowance/bulk";
@@ -29,6 +30,15 @@ function currentPeriod(): string {
 }
 
 const num = (v: string) => (v === "" ? 0 : Number(v) || 0);
+
+/** Hour fields shared by the mobile cards and the desktop table columns. */
+const HOUR_FIELDS = [
+  ["opHours", "Op hrs"],
+  ["leaveHours", "Leave"],
+  ["normalH", "LTS"],
+  ["ysH", "YS"],
+  ["precompH", "PC & LS"],
+] as const;
 
 export function AllowanceBulkEntry({
   config,
@@ -214,30 +224,29 @@ export function AllowanceBulkEntry({
           No active staff assigned to {center}.
         </Card>
       ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-3 py-2 text-left">Staff</th>
-                <th className="px-3 py-2 text-left">Tier</th>
-                <th className="px-3 py-2 text-center">Op hrs</th>
-                <th className="px-3 py-2 text-center">Leave</th>
-                <th className="px-3 py-2 text-center">LTS</th>
-                <th className="px-3 py-2 text-center">YS</th>
-                <th className="px-3 py-2 text-center">PC &amp; LS</th>
-                <th className="px-3 py-2 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {lines.map((l, i) => (
-                <tr key={l.coachId ?? l.name} className={cn(l.dirty && "bg-amber-50/40")}>
-                  <td className="px-3 py-1.5 font-medium text-gray-900">{l.name}</td>
-                  <td className="px-3 py-1.5">
+        <Card className="overflow-hidden p-0">
+          <MobileCards>
+            {lines.map((l, i) => (
+              <div key={l.coachId ?? l.name} className={cn("p-4", l.dirty && "bg-amber-50/40")}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 truncate font-semibold text-gray-900">{l.name}</div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-base font-bold tabular-nums text-green-700">
+                      {rm(lineTotal(l))}
+                    </div>
+                    <div className="text-[11px] text-gray-400">
+                      {l.dirty ? "unsaved" : "total"}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-overline text-muted">Tier</span>
                     <Select
                       value={l.tier}
                       disabled={locked}
                       onChange={(e) => update(i, { tier: e.target.value as AllowanceTier })}
-                      className="w-20 py-1 text-xs"
+                      className="mt-1"
                     >
                       {ALLOWANCE_TIERS.map((t) => (
                         <option key={t} value={t}>
@@ -245,25 +254,74 @@ export function AllowanceBulkEntry({
                         </option>
                       ))}
                     </Select>
-                  </td>
-                  {(["opHours", "leaveHours", "normalH", "ysH", "precompH"] as const).map((field) => (
-                    <td key={field} className="px-3 py-1.5 text-center">
+                  </label>
+                  {HOUR_FIELDS.map(([field, label]) => (
+                    <label key={field} className="block">
+                      <span className="text-overline text-muted">{label}</span>
                       <Input
                         type="number"
                         disabled={locked}
-                        className="w-20 py-1 text-center text-xs"
+                        className="mt-1"
                         value={l[field]}
                         onChange={(e) => update(i, { [field]: num(e.target.value) })}
                       />
-                    </td>
+                    </label>
                   ))}
-                  <td className="px-3 py-1.5 text-right font-medium text-green-700">
-                    {rm(lineTotal(l))}
-                  </td>
+                </div>
+              </div>
+            ))}
+          </MobileCards>
+          <DesktopTable>
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">Staff</th>
+                  <th className="px-3 py-2 text-left">Tier</th>
+                  {HOUR_FIELDS.map(([field, label]) => (
+                    <th key={field} className="px-3 py-2 text-center">
+                      {label}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {lines.map((l, i) => (
+                  <tr key={l.coachId ?? l.name} className={cn(l.dirty && "bg-amber-50/40")}>
+                    <td className="px-3 py-1.5 font-medium text-gray-900">{l.name}</td>
+                    <td className="px-3 py-1.5">
+                      <Select
+                        value={l.tier}
+                        disabled={locked}
+                        onChange={(e) => update(i, { tier: e.target.value as AllowanceTier })}
+                        className="w-20 py-1 text-xs"
+                      >
+                        {ALLOWANCE_TIERS.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                    {HOUR_FIELDS.map(([field]) => (
+                      <td key={field} className="px-3 py-1.5 text-center">
+                        <Input
+                          type="number"
+                          disabled={locked}
+                          className="w-20 py-1 text-center text-xs"
+                          value={l[field]}
+                          onChange={(e) => update(i, { [field]: num(e.target.value) })}
+                        />
+                      </td>
+                    ))}
+                    <td className="px-3 py-1.5 text-right font-medium text-green-700">
+                      {rm(lineTotal(l))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DesktopTable>
         </Card>
       )}
       {center && lines.length > 0 && (

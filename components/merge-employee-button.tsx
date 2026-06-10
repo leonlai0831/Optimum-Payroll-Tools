@@ -17,9 +17,12 @@ import { useToast } from "@/components/toast";
 export function MergeEmployeeButton({
   employee,
   others,
+  variant = "icon",
 }: {
   employee: { id: number; name: string };
   others: { id: number; name: string }[];
+  /** "icon" = compact table-row trigger; "button" = full touch-size card button. */
+  variant?: "icon" | "button";
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -58,13 +61,24 @@ export function MergeEmployeeButton({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center text-gray-400 transition hover:text-indigo-600"
-        title="Merge into another employee (duplicate profile)"
-      >
-        <GitMerge className="h-4 w-4" />
-      </button>
+      {variant === "button" ? (
+        <Button
+          variant="outline"
+          className="min-h-11 flex-1"
+          onClick={() => setOpen(true)}
+          title="Merge into another employee (duplicate profile)"
+        >
+          <GitMerge className="h-4 w-4" /> Merge
+        </Button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center text-gray-400 transition hover:text-indigo-600"
+          title="Merge into another employee (duplicate profile)"
+        >
+          <GitMerge className="h-4 w-4" />
+        </button>
+      )}
       <Modal open={open} onClose={() => !busy && setOpen(false)} title={`Merge ${employee.name}`}>
         <div className="space-y-3 text-sm text-gray-600">
           <p>
