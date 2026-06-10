@@ -10,6 +10,7 @@ import {
   REPLACEMENT_SECTIONS,
   SELF_EVAL_GROUPS,
 } from "@/lib/lesson-plan/templates";
+import { safe } from "@/lib/reports/pdf-text";
 
 /** Everything the lesson-plan PDF renders (a flattened `LessonPlanRecord`). */
 export interface LessonPlanPdfInput {
@@ -25,37 +26,6 @@ export interface LessonPlanPdfInput {
   classLevel: string;
   ageGroup: string;
   data: LessonPlanData;
-}
-
-const PUNCT: Record<string, string> = {
-  "—": "-",
-  "–": "-",
-  "‒": "-",
-  "−": "-",
-  "’": "'",
-  "‘": "'",
-  "“": '"',
-  "”": '"',
-  "•": "-",
-  "→": "->",
-  "…": "...",
-};
-
-/**
- * Make text safe for the standard (WinAnsi) fonts: map common typographic
- * punctuation to ASCII, strip diacritics, then replace anything still outside
- * the encodable range with "?". (Same rule as the payslip; the standard fonts
- * have no ✓ glyph either, which is why checked skills print as "[x]".)
- */
-function safe(input: string): string {
-  const mapped = (input ?? "").replace(/[—–‒−’‘“”•→…]/g, (c) => PUNCT[c] ?? c);
-  const stripped = mapped.normalize("NFKD").replace(/[̀-ͯ]/g, "");
-  let out = "";
-  for (const ch of stripped) {
-    const c = ch.charCodeAt(0);
-    out += (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) ? ch : "?";
-  }
-  return out;
 }
 
 const STATUS_LABEL: Record<LessonPlanStatus, string> = {

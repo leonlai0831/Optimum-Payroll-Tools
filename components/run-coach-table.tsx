@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Badge, Card } from "@/components/ui";
+import { CoachResultPdfButton } from "@/components/coach-result-pdf-button";
 import { Drawer } from "@/components/drawer";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { makeCenterNormalizer } from "@/lib/allowance/centers";
@@ -41,10 +42,13 @@ function fmtTarget(v: number, type: BreakdownItem["type"]): string {
  */
 export function RunCoachTable({
   coaches,
+  periodLabel,
   centers = [],
   centerAliases = {},
 }: {
   coaches: RunCoach[];
+  /** The run's period label (e.g. "2026-04") — stamped onto the PDF export. */
+  periodLabel: string;
   centers?: string[];
   centerAliases?: Record<string, string[]>;
 }) {
@@ -165,7 +169,12 @@ export function RunCoachTable({
       </DesktopTable>
 
       {active && (
-        <CoachDetailDrawer coach={active} normCenter={normCenter} onClose={() => setActive(null)} />
+        <CoachDetailDrawer
+          coach={active}
+          periodLabel={periodLabel}
+          normCenter={normCenter}
+          onClose={() => setActive(null)}
+        />
       )}
     </Card>
   );
@@ -173,10 +182,12 @@ export function RunCoachTable({
 
 function CoachDetailDrawer({
   coach,
+  periodLabel,
   normCenter,
   onClose,
 }: {
   coach: RunCoach;
+  periodLabel: string;
   normCenter: (raw: string) => string;
   onClose: () => void;
 }) {
@@ -188,13 +199,20 @@ function CoachDetailDrawer({
       open
       onClose={onClose}
       header={
-        <>
-          <h3 className="text-h2 text-gray-900">{coach.canonicalName}</h3>
-          <p className="text-caption text-muted">
-            {coach.position} · {normCenter(coach.center) || "—"} · {coach.students} students
-            {!coach.isComplete && <span className="ml-1.5 text-amber-600">· incomplete</span>}
-          </p>
-        </>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-h2 text-gray-900">{coach.canonicalName}</h3>
+            <p className="text-caption text-muted">
+              {coach.position} · {normCenter(coach.center) || "—"} · {coach.students} students
+              {!coach.isComplete && <span className="ml-1.5 text-amber-600">· incomplete</span>}
+            </p>
+          </div>
+          <CoachResultPdfButton
+            className="shrink-0"
+            coach={{ ...coach, center: normCenter(coach.center) }}
+            periodLabel={periodLabel}
+          />
+        </div>
       }
     >
       <div className="grid grid-cols-3 gap-2">

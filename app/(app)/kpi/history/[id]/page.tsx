@@ -122,6 +122,7 @@ export default async function RunDetailPage({
 
       <RunCoachTable
         coaches={coaches}
+        periodLabel={run.periodLabel}
         centers={allowanceConfig.centers}
         centerAliases={allowanceConfig.centerAliases}
       />
