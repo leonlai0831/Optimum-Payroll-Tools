@@ -48,28 +48,30 @@ export default function LoginPage() {
             Powering the people behind it.
           </p>
         </div>
-        <Card className="relative w-full max-w-sm shrink-0 overflow-hidden border-t-4 border-t-brand">
-          <div className="bg-white px-6 pb-4 pt-7 text-center">
-            <div className="flex items-center justify-center gap-2.5">
+        <Card className="relative w-full max-w-md shrink-0 overflow-hidden border-t-4 border-t-brand">
+          <div className="bg-white px-6 pb-5 pt-8 text-center">
+            <div className="flex items-center justify-center gap-3">
               <Image
                 src="/logo-full.png"
                 alt="Optimum Swim School"
                 width={1080}
                 height={350}
                 priority
-                className="h-8 w-auto"
+                className="h-12 w-auto"
               />
-              <span className="h-5 w-px bg-gray-200" aria-hidden />
+              <span className="h-7 w-px bg-gray-200" aria-hidden />
               <Image
                 src="/logo-fit.png"
                 alt="Optimum Fit"
                 width={1600}
                 height={355}
                 priority
-                className="h-5 w-auto"
+                className="h-7 w-auto"
               />
             </div>
-            <p className="mt-3 text-sm font-semibold text-gray-500">Optimum Payroll Tools</p>
+            <p className="mt-4 text-lg font-bold tracking-tight text-gray-800">
+              Optimum Payroll Tools
+            </p>
           </div>
           <form onSubmit={submit} className="space-y-4 p-6">
             <div>
