@@ -2,9 +2,14 @@
 
 import { usePathname } from "next/navigation";
 import { Nav } from "@/components/nav";
-import type { Role } from "@/lib/auth/types";
+import type { Role, ToolCategory } from "@/lib/auth/types";
 
-export type Brand = "swim" | "fit" | "marketing" | "system";
+/**
+ * Launcher/skin brands = the assignable tool categories plus the super_admin-only
+ * System group. Derived from ToolCategory so adding a category automatically
+ * extends Brand (and the compiler flags every switch/group that must follow).
+ */
+export type Brand = ToolCategory | "system";
 
 /**
  * Which brand a route belongs to. Everything under /commission is Optimum Fit

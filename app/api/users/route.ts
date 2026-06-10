@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { createUser, listUsers, recordAudit } from "@/lib/db/queries";
-import { ROLES, type Role } from "@/lib/auth/types";
+import { ROLES, sanitizeToolCategories, type Role, type ToolCategory } from "@/lib/auth/types";
 import type { UserRecord } from "@/lib/db/schema";
 
 /** Never expose the password hash to the client. */
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     displayName?: string;
     coachId?: number | null;
     gymStaffId?: number | null;
+    visibleCategories?: unknown;
   };
   const email = body.email?.trim();
   const password = body.password ?? "";
@@ -55,6 +56,29 @@ export async function POST(req: Request) {
   const link = resolveEmployeeLink(body);
   if ("error" in link) return link.error;
 
+  // Optional creation-time category grant (defaults to all when omitted).
+  // Same rules as PATCH: super_admin only, and never stored on a super_admin.
+  let visibleCategories: ToolCategory[] | undefined;
+  if (body.visibleCategories !== undefined) {
+    if (actor.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Only a super admin can set category visibility." },
+        { status: 403 },
+      );
+    }
+    if (role === "super_admin") {
+      return NextResponse.json(
+        { error: "Super admins always see every category." },
+        { status: 400 },
+      );
+    }
+    const categories = sanitizeToolCategories(body.visibleCategories);
+    if (!categories) {
+      return NextResponse.json({ error: "Invalid categories." }, { status: 400 });
+    }
+    visibleCategories = categories;
+  }
+
   try {
     const created = await createUser({
       email,
@@ -63,6 +87,7 @@ export async function POST(req: Request) {
       displayName: body.displayName,
       coachId: link.coachId,
       gymStaffId: link.gymStaffId,
+      visibleCategories,
     });
     await recordAudit({
       actorId: actor.id,
