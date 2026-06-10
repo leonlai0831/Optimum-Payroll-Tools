@@ -13,6 +13,8 @@ export interface PayslipData {
   companyName: string;
   /** Period label as saved on the run, e.g. "2026-04". */
   period: string;
+  /** The KPI bonus month shown on the statement (one month before `period`). */
+  kpiPeriod?: string;
   generatedAt: Date;
   coach: {
     name: string;
@@ -178,7 +180,7 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
 
   // ── Header ────────────────────────────────────────────────────────────────
   draw(data.companyName, margin, { font: bold, size: 20 });
-  drawRight("PAYSLIP", { font: bold, size: 16, color: brand });
+  drawRight("INCOME STATEMENT", { font: bold, size: 16, color: brand });
   y -= 22;
   draw(`Period: ${data.period}`, margin, { color: muted });
   y -= 14;
@@ -196,14 +198,20 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   row("Pay tier", data.coach.tier ?? "-");
 
   // ── KPI bonus ────────────────────────────────────────────────────────────────
-  section("KPI Bonus");
+  section(data.kpiPeriod ? `KPI Bonus (${data.kpiPeriod})` : "KPI Bonus");
   if (data.kpi) {
     row("Final score", data.kpi.finalScore.toFixed(3));
     row("Grade", data.kpi.grade);
     row("Students", String(data.kpi.students));
     row("Bonus payout", rm(amounts.bonus ?? 0), true);
   } else {
-    draw("No KPI bonus recorded for this period.", margin, { color: muted });
+    draw(
+      data.kpiPeriod
+        ? `No KPI bonus recorded for ${data.kpiPeriod}.`
+        : "No KPI bonus recorded for this period.",
+      margin,
+      { color: muted },
+    );
     y -= 18;
   }
 
