@@ -28,7 +28,12 @@ export async function POST(req: Request) {
   const denied = await requireCapability("run_allowance");
   if (denied) return denied;
   const actor = await getCurrentUser();
-  const body = (await req.json().catch(() => ({}))) as { periodLabel?: string; input?: AllowanceInput };
+  const body = (await req.json().catch(() => ({}))) as {
+    periodLabel?: string;
+    input?: AllowanceInput;
+    /** Bulk-by-center saves: this save edits only this center's hours (see queries.ts). */
+    bulkCenter?: string;
+  };
   if (!body.periodLabel || !isValidPeriod(body.periodLabel)) {
     return NextResponse.json({ error: "periodLabel must be a valid YYYY-MM month" }, { status: 400 });
   }
@@ -68,6 +73,10 @@ export async function POST(req: Request) {
     input: body.input,
     result,
     configSnapshot,
+    // Bulk-by-center saves re-merge against the STORED record inside the save
+    // transaction (and recompute the result), so a stale client snapshot can't
+    // overwrite hours another manager just saved for a different center.
+    mergeCenter: typeof body.bulkCenter === "string" ? body.bulkCenter : undefined,
   });
   if (saved.locked) {
     return NextResponse.json(

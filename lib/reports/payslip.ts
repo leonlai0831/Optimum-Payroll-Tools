@@ -46,6 +46,42 @@ export interface PayslipData {
 /** At most this many "other allowance" lines are itemized; the rest collapse. */
 const MAX_OTHER_LINES = 8;
 
+/** Whole-RM amounts as printed on the payslip (see `payslipAmounts`). */
+export interface PayslipAmounts {
+  /** KPI bonus line, or null when the section is absent. */
+  bonus: number | null;
+  attendance: number | null;
+  teaching: number | null;
+  other: number | null;
+  /** Allowance total = attendance + teaching + other (already-rounded lines). */
+  allowanceTotal: number | null;
+  /** Grand total = bonus + allowanceTotal, absent sections counting as 0. */
+  total: number;
+}
+
+/**
+ * Compute the whole-RM amounts the payslip prints. Each money line is rounded
+ * ONCE (the `rm()` whole-ringgit convention), and every total is the SUM of the
+ * already-rounded lines — never a rounding of the raw sum — so the printed
+ * lines always add up to the printed totals (10.5 + 10.5 → 11 + 11 = 22, not 21).
+ */
+export function payslipAmounts(data: Pick<PayslipData, "kpi" | "allowance">): PayslipAmounts {
+  const bonus = data.kpi ? Math.round(data.kpi.bonus) : null;
+  const a = data.allowance;
+  const attendance = a ? Math.round(a.attendance) : null;
+  const teaching = a ? Math.round(a.teaching) : null;
+  const other = a ? Math.round(a.other) : null;
+  const allowanceTotal = a ? (attendance ?? 0) + (teaching ?? 0) + (other ?? 0) : null;
+  return {
+    bonus,
+    attendance,
+    teaching,
+    other,
+    allowanceTotal,
+    total: (bonus ?? 0) + (allowanceTotal ?? 0),
+  };
+}
+
 const PUNCT: Record<string, string> = {
   "—": "-",
   "–": "-",
@@ -98,6 +134,9 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   const bandFill = rgb(0.95, 0.96, 0.99);
 
   let y = height - margin;
+
+  // Single source for every printed money line/total so the document reconciles.
+  const amounts = payslipAmounts(data);
 
   interface TextOpts {
     size?: number;
@@ -162,7 +201,7 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
     row("Final score", data.kpi.finalScore.toFixed(3));
     row("Grade", data.kpi.grade);
     row("Students", String(data.kpi.students));
-    row("Bonus payout", rm(data.kpi.bonus), true);
+    row("Bonus payout", rm(amounts.bonus ?? 0), true);
   } else {
     draw("No KPI bonus recorded for this period.", margin, { color: muted });
     y -= 18;
@@ -174,9 +213,9 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
     const a = data.allowance;
     row("Pay tier", a.tier);
     row("Attendance", `${Math.round(a.attendancePct * 100)}%`);
-    row("Attendance allowance", rm(a.attendance));
-    row("Teaching", rm(a.teaching));
-    row("Other", rm(a.other));
+    row("Attendance allowance", rm(amounts.attendance ?? 0));
+    row("Teaching", rm(amounts.teaching ?? 0));
+    row("Other", rm(amounts.other ?? 0));
     const shown = a.otherItems.slice(0, MAX_OTHER_LINES);
     for (const it of shown) {
       const where = it.center ? ` (${it.center})` : "";
@@ -190,7 +229,9 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
       draw(`   - (+${extra} more)`, margin, { size: 9, color: muted });
       y -= 15;
     }
-    row("Allowance total", rm(a.grandTotal), true);
+    // Sum of the three printed lines above (not the stored grandTotal), so the
+    // section always adds up on paper.
+    row("Allowance total", rm(amounts.allowanceTotal ?? 0), true);
   } else {
     draw("No allowance recorded for this period.", margin, { color: muted });
     y -= 18;
@@ -200,9 +241,8 @@ export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   y -= 6;
   rule();
   y -= 24;
-  const total = (data.kpi?.bonus ?? 0) + (data.allowance?.grandTotal ?? 0);
   draw(`TOTAL FOR ${data.period}`, margin, { font: bold, size: 12 });
-  drawRight(rm(total), { font: bold, size: 14, color: brand });
+  drawRight(rm(amounts.total), { font: bold, size: 14, color: brand });
 
   // ── Footer ────────────────────────────────────────────────────────────────────
   const stamp = data.generatedAt.toISOString().slice(0, 10);

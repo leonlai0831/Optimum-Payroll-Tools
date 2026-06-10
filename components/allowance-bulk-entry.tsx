@@ -131,7 +131,11 @@ export function AllowanceBulkEntry({
         const res = await fetch("/api/allowance/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ periodLabel: period, input: merged }),
+          // bulkCenter tells the server this save edits only this center's
+          // hours: it re-merges against the freshly stored record inside the
+          // save transaction, so this client's possibly-stale `existing`
+          // snapshot can't clobber another manager's just-saved centers.
+          body: JSON.stringify({ periodLabel: period, input: merged, bulkCenter: center }),
         });
         if (!res.ok) throw new Error();
         ok += 1;
