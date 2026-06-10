@@ -50,7 +50,7 @@ const NAVS: Record<
   allowance: {
     title: "Staff Allowance",
     items: [
-      { href: "/allowance", label: "Calculator", icon: Calculator, exact: true },
+      { href: "/allowance", label: "Single entry", icon: Calculator, exact: true },
       { href: "/allowance/bulk", label: "Bulk entry", icon: Layers },
       { href: "/allowance/history", label: "History", icon: History },
       { href: "/allowance/trends", label: "Trends", icon: BarChart3 },

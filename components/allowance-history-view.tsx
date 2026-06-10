@@ -244,7 +244,7 @@ export function AllowanceHistoryView({
       <EmptyState
         icon={History}
         title="No allowances saved yet"
-        body="Compute one on the Calculator tab and click “Save” to start the history."
+        body="Compute one on the Single entry tab and click “Save” to start the history."
       />
     );
   }
