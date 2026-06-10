@@ -17,8 +17,11 @@ export default async function LessonPlanHistoryPage() {
   return (
     <LessonPlanHistory
       isReviewer={isReviewer}
+      isAdmin={user.role === "admin" || user.role === "super_admin"}
+      currentUserId={user.id}
       rows={rows.map((r) => ({
         id: r.id,
+        createdByUserId: r.createdByUserId,
         type: r.type,
         status: r.status,
         createdByName: r.createdByName,

@@ -2,8 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, History } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ClipboardList, History, Trash2 } from "lucide-react";
 import { Button, Card, Select } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
+import { useToast } from "@/components/toast";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { EmptyState } from "@/components/empty-state";
 import { TableToolbar } from "@/components/table-controls";
@@ -26,6 +29,7 @@ import { LEVEL_TYPE_LABELS } from "@/lib/lesson-plan/templates";
 /** A serialized `LessonPlanListRow` (dates as ISO strings across the RSC boundary). */
 export interface LessonPlanHistoryRow {
   id: number;
+  createdByUserId: number;
   type: LessonPlanType;
   status: LessonPlanStatus;
   createdByName: string;
@@ -58,12 +62,43 @@ function levelLabel(row: LessonPlanHistoryRow): string {
 export function LessonPlanHistory({
   rows,
   isReviewer,
+  isAdmin,
+  currentUserId,
 }: {
   rows: LessonPlanHistoryRow[];
   isReviewer: boolean;
+  /** admin / super_admin: may delete any plan from the list. */
+  isAdmin: boolean;
+  currentUserId: number;
 }) {
+  const router = useRouter();
+  const toast = useToast();
   const [typeFilter, setTypeFilter] = useState<"" | LessonPlanType>("");
   const [statusFilter, setStatusFilter] = useState<"" | LessonPlanStatus>("");
+  const [pendingDelete, setPendingDelete] = useState<LessonPlanHistoryRow | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Same rule as the detail page / DELETE route: admins delete anything,
+  // creators only their own drafts.
+  const canDelete = (r: LessonPlanHistoryRow) =>
+    isAdmin || (r.createdByUserId === currentUserId && r.status === "draft");
+
+  async function deletePlan() {
+    if (!pendingDelete) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/lesson-plans/${pendingDelete.id}`, { method: "DELETE" });
+      const d = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(d.error || "Delete failed");
+      toast.success("Lesson plan deleted.");
+      setPendingDelete(null);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const filtered = useMemo(
     () =>
@@ -155,6 +190,19 @@ export function LessonPlanHistory({
                       status={r.status}
                       selfEvalAt={r.selfEvalAt}
                     />
+                    {canDelete(r) && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPendingDelete(r);
+                        }}
+                        className="mt-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                        title="Delete plan"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -171,6 +219,7 @@ export function LessonPlanHistory({
                   <th className="px-4 py-2 text-left">Level</th>
                   <th className="px-4 py-2 text-left">Status</th>
                   {isReviewer && <th className="px-4 py-2 text-left">Created by</th>}
+                  <th className="px-4 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -209,6 +258,17 @@ export function LessonPlanHistory({
                     {isReviewer && (
                       <td className="px-4 py-2 text-gray-500">{r.createdByName || "—"}</td>
                     )}
+                    <td className="px-4 py-2 text-right">
+                      {canDelete(r) && (
+                        <button
+                          onClick={() => setPendingDelete(r)}
+                          className="inline-flex items-center text-gray-400 transition hover:text-red-600"
+                          title="Delete plan"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -216,6 +276,19 @@ export function LessonPlanHistory({
           </DesktopTable>
         </>
       )}
+
+      <ConfirmModal
+        open={pendingDelete !== null}
+        onClose={() => !busy && setPendingDelete(null)}
+        onConfirm={deletePlan}
+        title="Delete this lesson plan?"
+        message={
+          pendingDelete
+            ? `${pendingDelete.instructorName} · ${new Date(pendingDelete.lessonDate).toLocaleDateString()} — this cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete plan"
+      />
     </Card>
   );
 }
