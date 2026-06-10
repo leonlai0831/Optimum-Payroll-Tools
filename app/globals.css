@@ -193,14 +193,15 @@ body {
 }
 
 /* Login hero entrance (app/login/page.tsx): the headline settles down from
-   above while the support line rises from below — deliberately slow, with the
-   support line trailing slightly. `both` keeps the delayed line invisible
-   until its turn. Stilled by the global prefers-reduced-motion rule. */
+   above while the support line rises from below — deliberately slow, held
+   back for a beat (1s) before starting, with the support line trailing
+   slightly. `both` keeps both lines invisible until their turn. Stilled by
+   the global prefers-reduced-motion rule. */
 .enter-from-top {
-  animation: enterFromTop 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: enterFromTop 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1s both;
 }
 .enter-from-bottom {
-  animation: enterFromBottom 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+  animation: enterFromBottom 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1.25s both;
 }
 @keyframes enterFromTop {
   from {
