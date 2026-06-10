@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, UserPlus } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { rm } from "@/lib/utils";
 import type { UnmatchedEarner } from "@/lib/earnings/income";
 
@@ -45,7 +46,53 @@ export function UnmatchedEarners({
           name / aliases</b>.
         </span>
       </div>
-      <div className="overflow-x-auto">
+      <MobileCards>
+        {earners.map((e) => (
+          <div key={e.name + e.staffCode} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-gray-900">{e.name}</div>
+                <div className="mt-0.5 text-[11px] text-gray-400">
+                  {e.staffCode ? <span className="font-mono">{e.staffCode} · </span> : null}
+                  <span title={e.periods.join(", ")}>
+                    {e.months} month{e.months === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="nums text-base font-bold text-amber-700">{rm(e.total)}</div>
+                <div className="text-[11px] text-gray-400">total</div>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <div>
+                <div className="text-overline text-muted">Source</div>
+                <div className="mt-0.5">
+                  <Badge className="border-amber-200 bg-amber-50 text-amber-700">{SOURCE_LABEL[e.source]}</Badge>
+                </div>
+              </div>
+              <div>
+                <div className="text-overline text-muted">Commission</div>
+                <div className="nums mt-0.5 text-sm text-gray-700">{rm(e.totalCommission)}</div>
+              </div>
+              <div>
+                <div className="text-overline text-muted">Coaching</div>
+                <div className="nums mt-0.5 text-sm text-gray-700">{rm(e.totalCoaching)}</div>
+              </div>
+            </div>
+            {showAdd && (
+              <button
+                onClick={() => onAdd!(e)}
+                title={`Pre-fill the roster form to add ${e.name}`}
+                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-brand/30 text-sm font-medium text-brand hover:bg-brand/5 active:bg-brand/10"
+              >
+                <UserPlus className="h-4 w-4" /> Add to roster
+              </button>
+            )}
+          </div>
+        ))}
+      </MobileCards>
+      <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-overline text-muted">
@@ -88,7 +135,7 @@ export function UnmatchedEarners({
             ))}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }
