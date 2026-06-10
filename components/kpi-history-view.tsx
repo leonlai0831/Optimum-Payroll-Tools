@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight, History } from "lucide-react";
 import { Badge, Card, Input } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 import type { RunSummary } from "@/lib/db/queries";
 import { makeCenterNormalizer } from "@/lib/allowance/centers";
@@ -78,7 +79,133 @@ export function KpiHistoryView({
           {sorted.length} of {runs.length}
         </span>
       </TableToolbar>
-      <div className="overflow-x-auto">
+
+      {/* Mobile (< lg): one card per saved month with explicit tap targets. */}
+      <MobileCards>
+        {sorted.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-gray-500">
+            No saved months match the current filter.
+          </div>
+        ) : (
+          sorted.map((r) => {
+            const open = expanded.has(r.id);
+            return (
+              <div key={r.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900">{r.periodLabel}</div>
+                    <div className="mt-0.5 break-words text-[11px] text-gray-400">
+                      {r.filename} · saved {new Date(r.createdAt).toLocaleDateString()}
+                      {savers && <> · by {savers[r.id] ?? "—"}</>}
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    {r.status === "draft" ? (
+                      <Badge className="border-amber-300 bg-amber-100 text-amber-800">
+                        Pending review
+                      </Badge>
+                    ) : (
+                      <Badge className="border-green-300 bg-green-100 text-green-800">
+                        Finalized
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-overline text-muted">Coaches</span>
+                    <div className="nums mt-0.5 text-sm font-medium text-gray-700">
+                      {r.coachCount}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-overline text-muted">Total payout</span>
+                    <div className="nums mt-0.5 text-base font-bold text-green-700">
+                      {rm(r.totalPayout)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-md border border-gray-200 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                    onClick={() => toggle(r.id)}
+                    aria-expanded={open}
+                  >
+                    {open ? (
+                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                    )}
+                    Coaches
+                  </button>
+                  {canExport && (
+                    <a
+                      href={`/api/runs/${r.id}/summary`}
+                      className="flex min-h-11 items-center justify-center rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+                      title="Download all-coach summary CSV"
+                    >
+                      CSV
+                    </a>
+                  )}
+                  <Link
+                    href={`/kpi/history/${r.id}`}
+                    className="flex min-h-11 flex-1 items-center justify-center rounded-md border border-gray-200 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+                  >
+                    {r.status === "draft" ? "Review" : "View"}
+                  </Link>
+                </div>
+
+                {open &&
+                  (r.coaches.length === 0 ? (
+                    <p className="mt-3 text-xs text-gray-500">
+                      No coaches recorded for this month.
+                    </p>
+                  ) : (
+                    <div className="mt-3 divide-y divide-gray-100 rounded-lg border border-gray-100 bg-gray-50/60">
+                      {r.coaches.map((c) => (
+                        <div key={c.canonicalName} className="px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-sm font-medium text-gray-900">
+                              {c.canonicalName}
+                              {!c.isComplete && (
+                                <span className="ml-1.5 text-[10px] text-amber-600">
+                                  incomplete
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex shrink-0 items-baseline gap-1.5">
+                              <span className="nums text-sm font-bold text-indigo-600">
+                                {c.finalScore.toFixed(2)}
+                              </span>
+                              <span className="text-xs font-semibold text-gray-700">
+                                {c.grade}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+                            <span className="truncate">
+                              {normCenter(c.center) || "—"} · {c.position} · {c.students} students
+                            </span>
+                            <span className="nums shrink-0">
+                              {c.teachingAllowance ? `${rm(c.teachingAllowance)} → ` : ""}
+                              <span className="font-medium text-green-700">{rm(c.payout)}</span>
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+              </div>
+            );
+          })
+        )}
+      </MobileCards>
+
+      {/* Desktop (lg+): sortable table with inline expansion. */}
+      <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -236,7 +363,7 @@ export function KpiHistoryView({
             )}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
     </Card>
   );
 }

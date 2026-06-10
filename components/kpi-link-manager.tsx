@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Link2, Lock, Search, TriangleAlert, X } from "lucide-react";
 import { Badge, Card, Input, Select } from "@/components/ui";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { SortTh, useTableSort } from "@/components/table-controls";
 import { useToast } from "@/components/toast";
 import { isLinkableTier } from "@/lib/allowance/tier-rules";
@@ -272,7 +273,109 @@ export function KpiLinkManager({
         </span>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile (< lg): one card per coach with full-size tap targets. */}
+      <MobileCards className="rounded-lg border border-gray-100">
+        {sorted.length === 0 ? (
+          <div className="px-3 py-8 text-center text-sm text-gray-500">No coaches match.</div>
+        ) : (
+          sorted.map((c) => {
+            const locked = !isLinkableTier(c.tier);
+            const recheck = needsRecheck(c);
+            return (
+              <div key={c.id} className={cn("p-4", recheck && "bg-amber-50/60")}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900">{c.canonicalName}</div>
+                    <div className="text-[11px] text-gray-400">
+                      {c.center || "—"}
+                      {!c.active && <span className="ml-1 text-gray-400">· inactive</span>}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-gray-700">
+                    {c.tier ?? "—"}
+                  </span>
+                </div>
+
+                <div className="mt-3">
+                  <span className="text-overline text-muted">Accounts (aliases)</span>
+                  {editingId === c.id ? (
+                    <div className="mt-1.5">
+                      <AliasEditor
+                        initial={c.aliases}
+                        busy={busy === c.id}
+                        suggestions={accountNames}
+                        onCancel={() => setEditingId(null)}
+                        onSave={(next) => saveAliases(c, next)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-1 flex items-start justify-between gap-2">
+                      <p
+                        className="min-w-0 break-words text-xs text-gray-500"
+                        title={c.aliases.join(", ")}
+                      >
+                        {c.aliases.length ? (
+                          c.aliases.join(", ")
+                        ) : (
+                          <span className="text-gray-300">none</span>
+                        )}
+                      </p>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="min-h-11 shrink-0 rounded-md border border-gray-200 px-4 text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100"
+                          onClick={() => setEditingId(c.id)}
+                        >
+                          {c.aliases.length ? "edit" : "+ add"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex min-h-11 items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                  {locked ? (
+                    <Badge className="bg-gray-100 text-gray-500">
+                      <Lock className="mr-1 inline h-3 w-3" /> Locked
+                    </Badge>
+                  ) : c.kpiLinkNa ? (
+                    <>
+                      <Badge className="bg-amber-100 text-amber-700">Not applicable</Badge>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="min-h-11 shrink-0 rounded-md border border-gray-200 px-4 text-sm font-medium text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 disabled:opacity-50"
+                          disabled={busy === c.id}
+                          onClick={() => toggleNa(c, false)}
+                        >
+                          enable
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Badge className="bg-green-100 text-green-700">Linkable</Badge>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="min-h-11 shrink-0 rounded-md border border-gray-200 px-4 text-sm font-medium text-gray-600 hover:bg-amber-50 hover:text-amber-700 active:bg-amber-100 disabled:opacity-50"
+                          disabled={busy === c.id}
+                          onClick={() => toggleNa(c, true)}
+                        >
+                          mark N/A
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </MobileCards>
+
+      {/* Desktop (lg+): sortable table. */}
+      <DesktopTable>
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
@@ -377,7 +480,7 @@ export function KpiLinkManager({
             )}
           </tbody>
         </table>
-      </div>
+      </DesktopTable>
 
       {!canEdit && (
         <p className="mt-3 text-xs text-gray-500">You have read-only access to these links.</p>
