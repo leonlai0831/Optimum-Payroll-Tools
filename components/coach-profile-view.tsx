@@ -12,6 +12,7 @@ import { CenterSelect } from "@/components/center-select";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
+import { nextPeriod } from "@/lib/allowance/period";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { GRADE_LABEL, type GradeKey } from "@/lib/assessment/types";
@@ -118,7 +119,7 @@ export function CoachProfileView({
       <AssessmentsCard assessments={assessments} />
       <KpiHistoryCard kpi={kpi} />
       <AllowanceHistoryCard allowance={allowance} />
-      <PayslipsCard coachId={coach.id} kpi={kpi} allowance={allowance} />
+      <IncomeCard coachId={coach.id} kpi={kpi} allowance={allowance} />
     </div>
   );
 }
@@ -320,7 +321,7 @@ function AllowanceHistoryCard({ allowance }: { allowance: AllowancePoint[] }) {
   );
 }
 
-function PayslipsCard({
+function IncomeCard({
   coachId,
   kpi,
   allowance,
@@ -329,28 +330,35 @@ function PayslipsCard({
   kpi: KpiPoint[];
   allowance: AllowancePoint[];
 }) {
+  // Month M's income = M's teaching allowance + the KPI bonus earned in M-1
+  // (the bonus is computed after month close, so it pays out a cycle later).
+  // Offer every month that has either component.
   const periods = [
-    ...new Set([...kpi.map((k) => k.period), ...allowance.map((a) => a.period)]),
+    ...new Set([
+      ...allowance.map((a) => a.period),
+      ...kpi.map((k) => nextPeriod(k.period)),
+    ]),
   ].sort((a, b) => b.localeCompare(a));
   if (periods.length === 0) return null;
 
   return (
     <Card className="p-4">
       <h3 className="mb-1 flex items-center gap-2 text-h3 text-gray-900">
-        <FileText className="h-4 w-4" /> Payslips
+        <FileText className="h-4 w-4" /> Monthly income
       </h3>
       <p className="mb-3 text-sm text-gray-500">
-        A one-page PDF combining the KPI bonus and teaching allowance for the month.
+        A one-page PDF per payout month: that month&rsquo;s teaching allowance plus the
+        previous month&rsquo;s KPI bonus, which pay out together.
       </p>
       <ul className="divide-y divide-gray-100">
         {periods.map((period) => (
           <li key={period} className="flex items-center justify-between py-2">
             <span className="text-sm font-medium text-gray-700">{period}</span>
             <a
-              href={`/api/coaches/${coachId}/payslip?period=${encodeURIComponent(period)}`}
+              href={`/api/coaches/${coachId}/income?period=${encodeURIComponent(period)}`}
               className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
             >
-              <Download className="h-4 w-4" /> Payslip
+              <Download className="h-4 w-4" /> Income
             </a>
           </li>
         ))}
