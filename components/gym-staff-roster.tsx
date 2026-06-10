@@ -8,6 +8,8 @@ import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components
 import { useToast } from "@/components/toast";
 import { EmptyState } from "@/components/empty-state";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
+import { DesktopTable, MobileCards } from "@/components/responsive-table";
+import { cn } from "@/lib/utils";
 import {
   GYM_EMPLOYMENT_TYPES,
   GYM_POSITIONS,
@@ -276,7 +278,72 @@ export function GymStaffRoster({
               </span>
             </TableToolbar>
 
-            <div className="overflow-x-auto">
+            <MobileCards>
+              {sorted.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-gray-500">
+                  No staff match the current filters.
+                </div>
+              ) : (
+                sorted.map((m) => (
+                  <div key={m.id} className={cn("p-4", !m.active && "bg-gray-50/60 opacity-60")}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/commission/staff/${m.id}`}
+                            className="truncate font-semibold text-gray-900 hover:text-brand"
+                          >
+                            {m.name}
+                          </Link>
+                          {!m.active && (
+                            <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-gray-400">
+                          {gymPositionLabel(m.position)}
+                          {m.staffCode && <span className="ml-1 font-mono">· {m.staffCode}</span>}
+                        </div>
+                        {(m.email || m.phone) && (
+                          <div className="mt-0.5 truncate text-[11px] text-gray-400">
+                            {[m.email, m.phone].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </div>
+                      <Badge
+                        className={
+                          m.employmentType === "freelancer"
+                            ? "shrink-0 border-amber-200 bg-amber-50 text-amber-700"
+                            : "shrink-0 border-gray-200 bg-gray-50 text-gray-600"
+                        }
+                      >
+                        {gymEmploymentLabel(m.employmentType)}
+                      </Badge>
+                    </div>
+                    {canEdit && (
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => startEdit(m)}
+                          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 text-sm font-medium text-brand hover:bg-brand/5 active:bg-brand/10"
+                        >
+                          <Pencil className="h-4 w-4" /> Edit
+                        </button>
+                        <button
+                          onClick={() => remove(m)}
+                          disabled={removing === m.id}
+                          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 text-sm font-medium text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-50"
+                        >
+                          {removing === m.id ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />} Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </MobileCards>
+
+            <DesktopTable>
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
@@ -338,7 +405,7 @@ export function GymStaffRoster({
                   )}
                 </tbody>
               </table>
-            </div>
+            </DesktopTable>
           </>
         )}
       </Card>
