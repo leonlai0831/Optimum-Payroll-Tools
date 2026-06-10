@@ -44,10 +44,23 @@ export function canViewPlan(
   return access.canReview || (access.canEdit && plan.createdByUserId === access.user.id);
 }
 
-/** Whether this user may edit / submit / delete the plan: its creator only. */
+/** Whether this user may edit / submit the plan: its creator only. */
 export function isPlanCreator(
   access: LessonPlanAccess,
   plan: { createdByUserId: number },
 ): boolean {
   return access.canEdit && plan.createdByUserId === access.user.id;
+}
+
+/**
+ * Whether this user may delete the plan: its creator while it is still a
+ * draft, or an admin / super_admin at any status (cleanup of stale or
+ * mis-filed plans — audited in the route).
+ */
+export function canDeletePlan(
+  access: LessonPlanAccess,
+  plan: { createdByUserId: number; status: string },
+): boolean {
+  if (access.user.role === "admin" || access.user.role === "super_admin") return true;
+  return isPlanCreator(access, plan) && plan.status === "draft";
 }

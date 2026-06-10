@@ -98,9 +98,12 @@ const LEVEL_TYPE_HINT: Record<LevelType, string> = {
  * live — ticks that don't exist in the new level's lists are dropped.
  */
 export function LessonPlanForm({
+  instructorName,
   centers,
   initial,
 }: {
+  /** The signed-in user's name — instructor is server-derived, not typed. */
+  instructorName: string;
   centers: string[];
   initial?: LessonPlanFormInitial;
 }) {
@@ -110,7 +113,6 @@ export function LessonPlanForm({
   const [busy, setBusy] = useState(false);
 
   // Shared meta
-  const [instructorName, setInstructorName] = useState(initial?.instructorName ?? "");
   const [actualInstructorName, setActualInstructorName] = useState(
     initial?.actualInstructorName ?? "",
   );
@@ -178,12 +180,6 @@ export function LessonPlanForm({
 
   async function save() {
     if (!type) return;
-    if (!instructorName.trim()) {
-      toast.error(
-        type === "replacement" ? "Enter the replacement instructor's name." : "Enter the instructor's name.",
-      );
-      return;
-    }
     if (!lessonDate) {
       toast.error("Pick the lesson date.");
       return;
@@ -196,7 +192,6 @@ export function LessonPlanForm({
           : { priorSkills, objectives, sections: REPLACEMENT_SECTIONS.map((s) => ({ key: s.key, ...sections[s.key] })), remarks, selfEval };
       const payload = {
         type,
-        instructorName,
         actualInstructorName,
         center,
         lessonDate,
@@ -283,16 +278,11 @@ export function LessonPlanForm({
             </div>
           )}
           <div>
-            <Label htmlFor="lp-instructor">
-              {type === "replacement" ? "Replacement instructor" : "Instructor name"}
-            </Label>
-            <Input
-              id="lp-instructor"
-              className="mt-1"
-              value={instructorName}
-              onChange={(e) => setInstructorName(e.target.value)}
-              placeholder={type === "replacement" ? "You — the person filling in" : "Instructor"}
-            />
+            <Label>{type === "replacement" ? "Replacement instructor" : "Instructor"}</Label>
+            {/* Always the signed-in user — recorded server-side, not typed. */}
+            <p className="mt-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-base text-gray-700 sm:text-sm">
+              {instructorName}
+            </p>
           </div>
           <div>
             <Label htmlFor="lp-center">Branch</Label>

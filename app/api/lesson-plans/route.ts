@@ -27,6 +27,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "type must be 'actual' or 'replacement'" }, { status: 400 });
   }
   const type = body.type as LessonPlanType;
+  // The instructor (replacement instructor on a replacement plan) is always the
+  // person filling the form — server truth, never client input.
+  body.instructorName = user.displayName || user.email;
   const parsed = parseLessonPlanContent(type, body);
   if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 

@@ -6,7 +6,7 @@ import {
   submitLessonPlan,
   updateLessonPlan,
 } from "@/lib/db/queries";
-import { canViewPlan, isPlanCreator, lessonPlanAccess } from "@/lib/lesson-plan/access";
+import { canDeletePlan, canViewPlan, isPlanCreator, lessonPlanAccess } from "@/lib/lesson-plan/access";
 import { parseLessonPlanContent, type LessonPlanContentBody } from "@/lib/lesson-plan/validate";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +41,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/lesson-plans/[
   }
 
   const body = (await req.json().catch(() => ({}))) as LessonPlanContentBody & { action?: unknown };
+  // The instructor (replacement instructor on a replacement plan) is always the
+  // person filling the form — server truth, never client input.
+  const { user } = gate.access;
+  body.instructorName = user.displayName || user.email;
 
   if (body.action === "submit") {
     if (plan.status !== "draft" && plan.status !== "changes_requested") {
@@ -59,18 +63,15 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/lesson-plans/[
   return NextResponse.json({ ok: true, status: "draft" });
 }
 
-/** Delete a plan — its creator only, and only while it is still a draft. */
+/** Delete a plan — its creator while a draft, or an admin at any status. */
 export async function DELETE(_req: Request, ctx: RouteContext<"/api/lesson-plans/[id]">) {
   const gate = await lessonPlanAccess();
   if ("error" in gate) return gate.error;
   const { id } = await ctx.params;
   const plan = await getLessonPlan(Number(id));
   if (!plan) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (!isPlanCreator(gate.access, plan)) {
+  if (!canDeletePlan(gate.access, plan)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-  if (plan.status !== "draft") {
-    return NextResponse.json({ error: "Only a draft plan can be deleted" }, { status: 409 });
   }
 
   await deleteLessonPlan(plan.id);
