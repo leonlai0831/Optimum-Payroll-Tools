@@ -12,12 +12,14 @@ const nextConfig: NextConfig = {
     "/**": ["./lib/db/migrations/**/*"],
   },
   // Users / Audit log / Permissions moved out of Staff into the System Setting
-  // section (super_admin only) — keep old bookmarks/links working.
+  // section (super_admin only); Category Visibility later merged into the
+  // Permissions page (role defaults + user overrides) — keep old bookmarks working.
   async redirects() {
     return [
       { source: "/staff/users", destination: "/system/users", permanent: true },
       { source: "/staff/audit", destination: "/system/audit", permanent: true },
       { source: "/staff/permissions", destination: "/system/permissions", permanent: true },
+      { source: "/system/categories", destination: "/system/permissions", permanent: true },
     ];
   },
 };

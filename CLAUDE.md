@@ -167,9 +167,12 @@ anti-zoom). The CI guide's footer wave is traced 1:1 into
 
 Per-user accounts (email + password, bcrypt-style hash in the `users` table) with roles
 `super_admin / admin / supervisor / staff`; a role → capability matrix (`/system/permissions`)
-gates everything else. Per-user **Category Visibility** additionally controls which launcher
-brand groups (swim / fit / marketing) an account sees, enforced on the launcher AND in the
-brand-section layouts.
+gates everything else. Launcher **category visibility** (swim / fit / marketing) lives in the
+same permissions matrix: each role has **default categories**, and the page's "User overrides"
+tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
+`getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
+all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in the brand-section
+layouts. The old `/system/categories` page 301-redirects to `/system/permissions`.
 
 - **`proxy.ts`** is an *optimistic* gate: redirects to `/login` when the `kpi_session` cookie is
   **absent**. Public paths: `/login`, `/api/auth/*`. (Matcher excludes `_next/static`, images, favicon.)
@@ -241,9 +244,11 @@ rule below rather than relocating UI:
 - **Staff entities live under Staff; system administration lives under System Setting.**
   The staff directory and Centers (`/staff/settings`) stay under Staff. **Users / accounts
   (`/system/users`), Audit log (`/system/audit`), and the Permissions matrix
-  (`/system/permissions`) live under the System Setting section** (`/system/*`) — which,
-  together with its launcher group, is gated to `role === "super_admin"`. The old
-  `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`).
+  (`/system/permissions` — role capabilities, role-default launcher categories, AND per-user
+  category overrides, all on one page) live under the System Setting section** (`/system/*`) —
+  which, together with its launcher group, is gated to `role === "super_admin"`. The old
+  `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`),
+  and `/system/categories` (the retired Category Visibility page) 301s to `/system/permissions`.
 - **Calculator math lives under its calculator.** Allowance tiers + rate tables
   (`/allowance/settings`), KPI metrics + weights + min/max (`/kpi/settings`).
 - **All three section tabs are labeled "Settings"** — Allowance, KPI, and Staff — never

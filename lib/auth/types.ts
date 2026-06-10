@@ -61,7 +61,7 @@ export const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
   marketing: "Optimum Marketing",
 };
 
-/** Default for new (and pre-existing) accounts: everything visible. */
+/** Every assignable category (super_admin's effective list; legacy backfills). */
 export const ALL_TOOL_CATEGORIES: ToolCategory[] = [...TOOL_CATEGORIES];
 
 /** Validate + dedupe an untrusted category list, preserving canonical order. */
@@ -89,10 +89,39 @@ export function canSeeCategory(
 export type ConfigurableRole = Exclude<Role, "super_admin">;
 export const CONFIGURABLE_ROLES: ConfigurableRole[] = ["admin", "supervisor", "staff"];
 
-/** The editable permission matrix (super_admin omitted — it can never be locked out). */
-export type PermissionConfig = Record<ConfigurableRole, Capability[]>;
+/**
+ * The editable permission matrix (super_admin omitted — it can never be locked
+ * out): per-role capabilities + per-role default launcher categories. A user's
+ * effective visibility = their `visibleCategories` override when set, else
+ * `categories[role]` (see {@link effectiveCategories}). Rows stored before
+ * `categories` existed were the flat `Record<ConfigurableRole, Capability[]>`
+ * shape — `normalizePermissionConfig` (lib/db/queries.ts) migrates on read.
+ */
+export interface PermissionConfig {
+  capabilities: Record<ConfigurableRole, Capability[]>;
+  categories: Record<ConfigurableRole, ToolCategory[]>;
+}
 
-export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
+/** The pre-`categories` stored shape, still accepted on read. */
+export type LegacyPermissionConfig = Record<ConfigurableRole, Capability[]>;
+
+/**
+ * Resolve the launcher categories an account effectively sees:
+ * per-user override (when set) ?? the role's default; super_admin always all.
+ * Pure so the rule is unit-testable — `getCurrentUser()` is the ONE place that
+ * applies it (into `CurrentUser.visibleCategories`); everything downstream
+ * (launcher, `canSeeCategory`, brand layouts) consumes the resolved list.
+ */
+export function effectiveCategories(
+  role: Role,
+  override: ToolCategory[] | null | undefined,
+  roleDefaults: PermissionConfig["categories"],
+): ToolCategory[] {
+  if (role === "super_admin") return [...TOOL_CATEGORIES];
+  return [...(override ?? roleDefaults[role] ?? [])];
+}
+
+const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
   admin: [
     "view_settings",
     "edit_staff",
@@ -125,4 +154,16 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
     "review_lesson_plans",
   ],
   staff: ["view_own", "edit_lesson_plans"],
+};
+
+export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
+  capabilities: DEFAULT_CAPABILITIES,
+  // Role defaults for launcher visibility. All three per role preserves the
+  // pre-unification behavior (every account saw everything unless a per-user
+  // override narrowed it) until the owner tightens these in /system/permissions.
+  categories: {
+    admin: [...TOOL_CATEGORIES],
+    supervisor: [...TOOL_CATEGORIES],
+    staff: [...TOOL_CATEGORIES],
+  },
 };

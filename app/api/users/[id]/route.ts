@@ -54,7 +54,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     patch.gymStaffId = link.gymStaffId;
   }
   if (body.visibleCategories !== undefined) {
-    // Category Visibility is a super_admin-only module (System Setting).
+    // Category visibility lives in System Setting → Permissions (super_admin only).
     if (actor.role !== "super_admin") {
       return NextResponse.json(
         { error: "Only a super admin can change category visibility." },
@@ -69,11 +69,16 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
         { status: 400 },
       );
     }
-    const categories = sanitizeToolCategories(body.visibleCategories);
-    if (!categories) {
-      return NextResponse.json({ error: "Invalid categories." }, { status: 400 });
+    if (body.visibleCategories === null) {
+      // Reset to inherit the role's default categories.
+      patch.visibleCategories = null;
+    } else {
+      const categories = sanitizeToolCategories(body.visibleCategories);
+      if (!categories) {
+        return NextResponse.json({ error: "Invalid categories." }, { status: 400 });
+      }
+      patch.visibleCategories = categories;
     }
-    patch.visibleCategories = categories;
   }
   if (typeof body.password === "string" && body.password) patch.password = body.password;
 
@@ -96,7 +101,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
     (patch.coachId !== undefined || patch.gymStaffId !== undefined) && "linked employee",
     patch.visibleCategories !== undefined &&
-      `categories→${patch.visibleCategories.join("+") || "none"}`,
+      (patch.visibleCategories === null
+        ? "categories→inherit role default"
+        : `categories→${patch.visibleCategories.join("+") || "none"}`),
     patch.password !== undefined && "password reset",
   ].filter(Boolean);
   await recordAudit({

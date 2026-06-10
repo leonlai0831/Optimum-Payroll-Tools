@@ -204,12 +204,12 @@ describe("Lesson plan DB layer (PGlite in-memory)", () => {
       staff: ["view_own"],
     });
     // edit_lesson_plans → staff + supervisor + admin; review_lesson_plans → supervisor + admin.
-    expect(normalized.admin).toContain("edit_lesson_plans");
-    expect(normalized.admin).toContain("review_lesson_plans");
-    expect(normalized.supervisor).toContain("edit_lesson_plans");
-    expect(normalized.supervisor).toContain("review_lesson_plans");
-    expect(normalized.staff).toContain("edit_lesson_plans");
-    expect(normalized.staff).not.toContain("review_lesson_plans");
+    expect(normalized.capabilities.admin).toContain("edit_lesson_plans");
+    expect(normalized.capabilities.admin).toContain("review_lesson_plans");
+    expect(normalized.capabilities.supervisor).toContain("edit_lesson_plans");
+    expect(normalized.capabilities.supervisor).toContain("review_lesson_plans");
+    expect(normalized.capabilities.staff).toContain("edit_lesson_plans");
+    expect(normalized.capabilities.staff).not.toContain("review_lesson_plans");
   });
 });
 

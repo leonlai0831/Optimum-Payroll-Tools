@@ -4,7 +4,6 @@ import {
   ClipboardCheck,
   ClipboardList,
   Dumbbell,
-  LayoutGrid,
   ScrollText,
   ShieldCheck,
   Trophy,
@@ -98,14 +97,6 @@ const TOOLS: Tool[] = [
     brand: "system",
   },
   {
-    href: "/system/categories",
-    title: "Category Visibility",
-    subtitle: "Which home-screen categories each account sees",
-    icon: LayoutGrid,
-    superAdmin: true,
-    brand: "system",
-  },
-  {
     href: "/system/audit",
     title: "Audit log",
     subtitle: "History of sensitive changes",
@@ -116,7 +107,7 @@ const TOOLS: Tool[] = [
   {
     href: "/system/permissions",
     title: "Permissions",
-    subtitle: "Role → capability matrix",
+    subtitle: "Role capabilities, launcher categories & user overrides",
     icon: ShieldCheck,
     superAdmin: true,
     brand: "system",
@@ -124,7 +115,7 @@ const TOOLS: Tool[] = [
 ];
 
 /** Launcher groups, in display order. Labels for the assignable categories come
- * from TOOL_CATEGORY_LABELS so the Category Visibility page can never drift. */
+ * from TOOL_CATEGORY_LABELS so the Permissions page can never drift. */
 const BRAND_GROUPS: { brand: Brand; label: string }[] = [
   { brand: "swim", label: TOOL_CATEGORY_LABELS.swim },
   { brand: "fit", label: TOOL_CATEGORY_LABELS.fit },
@@ -185,9 +176,10 @@ export default async function HubPage() {
   const user = await getCurrentUser();
   const caps = user ? await getCapabilities(user) : new Set<Capability>();
   const isSuperAdmin = user?.role === "super_admin";
-  // Category Visibility (System Setting): non-super-admins only see the brand
-  // groups granted on their account; super_admin short-circuits the check and
-  // always sees everything (including the superAdmin-gated System group).
+  // Launcher categories (System Setting → Permissions): non-super-admins only
+  // see the brand groups effective on their account — role default or per-user
+  // override, already resolved by getCurrentUser(); super_admin short-circuits
+  // and always sees everything (including the superAdmin-gated System group).
   const visibleBrands = new Set<Brand>(user?.visibleCategories ?? []);
   // The Marketing group's cards are owned by the marketing sandbox
   // (lib/marketing/tools.ts), so that module can add cards without touching this

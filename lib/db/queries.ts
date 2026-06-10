@@ -36,7 +36,18 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { CONFIGURABLE_ROLES, DEFAULT_PERMISSION_CONFIG, type Capability, type PermissionConfig, type Role, type ToolCategory } from "@/lib/auth/types";
+import {
+  ALL_TOOL_CATEGORIES,
+  CONFIGURABLE_ROLES,
+  DEFAULT_PERMISSION_CONFIG,
+  sanitizeToolCategories,
+  type Capability,
+  type ConfigurableRole,
+  type LegacyPermissionConfig,
+  type PermissionConfig,
+  type Role,
+  type ToolCategory,
+} from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -2011,7 +2022,8 @@ export async function createUser(input: {
   displayName?: string;
   coachId?: number | null;
   gymStaffId?: number | null;
-  visibleCategories?: ToolCategory[];
+  /** Explicit launcher-category override; omitted/null = inherit role default. */
+  visibleCategories?: ToolCategory[] | null;
 }): Promise<UserRecord> {
   const db = await getDb();
   const email = normalizeEmail(input.email);
@@ -2027,7 +2039,7 @@ export async function createUser(input: {
       role: input.role,
       coachId: input.coachId ?? null,
       gymStaffId: input.gymStaffId ?? null,
-      // Omitted → column default (all categories).
+      // Omitted → NULL (inherit the role's default categories).
       ...(input.visibleCategories !== undefined
         ? { visibleCategories: input.visibleCategories }
         : {}),
@@ -2045,7 +2057,8 @@ export async function updateUser(
     active?: boolean;
     coachId?: number | null;
     gymStaffId?: number | null;
-    visibleCategories?: ToolCategory[];
+    /** Array = pin an override; null = reset to inherit the role default. */
+    visibleCategories?: ToolCategory[] | null;
     password?: string;
   },
 ): Promise<void> {
@@ -2075,11 +2088,6 @@ export async function deleteUser(id: number): Promise<void> {
 }
 
 /**
- * Backfill any configurable role missing from a stored matrix with its
- * defaults — lets a newly added role (e.g. supervisor) work on deployments
- * whose matrix was saved before the role existed, with no migration.
- */
-/**
  * Capabilities introduced after a permission_config row may already have been
  * written are backfilled to the roles that hold them by default. Safe because a
  * brand-new capability can't have been intentionally revoked. Extend when adding
@@ -2087,15 +2095,49 @@ export async function deleteUser(id: number): Promise<void> {
  */
 const BACKFILL_CAPS: Capability[] = ["finalize_kpi", "edit_lesson_plans", "review_lesson_plans"];
 
-export function normalizePermissionConfig(data: PermissionConfig): PermissionConfig {
-  const out: PermissionConfig = { ...data };
+/**
+ * Migrate-on-read for the stored permission matrix (the same trick as the
+ * capability backfill — no SQL migration needed):
+ *
+ * - Accepts BOTH stored shapes: the current `{ capabilities, categories }` and
+ *   the legacy flat `Record<role, Capability[]>` written before launcher
+ *   categories joined the matrix.
+ * - Backfills any configurable role missing from `capabilities` with its
+ *   defaults (lets a newly added role work with no migration), plus the
+ *   {@link BACKFILL_CAPS}.
+ * - Backfills `categories` to ALL THREE launcher categories per role — the
+ *   pre-unification behavior — until the owner tightens them in Settings.
+ */
+export function normalizePermissionConfig(
+  data: PermissionConfig | LegacyPermissionConfig,
+): PermissionConfig {
+  // New shape carries `capabilities`; the legacy flat shape keyed roles directly.
+  const rawCaps = (
+    "capabilities" in data && isPlainObject(data.capabilities)
+      ? data.capabilities
+      : data
+  ) as Partial<Record<ConfigurableRole, Capability[]>>;
+  const rawCats =
+    "categories" in data && isPlainObject(data.categories)
+      ? (data.categories as Partial<Record<ConfigurableRole, ToolCategory[]>>)
+      : {};
+
+  const out: PermissionConfig = {
+    capabilities: {} as PermissionConfig["capabilities"],
+    categories: {} as PermissionConfig["categories"],
+  };
   for (const role of CONFIGURABLE_ROLES) {
-    if (!Array.isArray(out[role])) out[role] = [...DEFAULT_PERMISSION_CONFIG[role]];
+    let caps = Array.isArray(rawCaps[role])
+      ? [...rawCaps[role]]
+      : [...DEFAULT_PERMISSION_CONFIG.capabilities[role]];
     for (const cap of BACKFILL_CAPS) {
-      if (DEFAULT_PERMISSION_CONFIG[role].includes(cap) && !out[role].includes(cap)) {
-        out[role] = [...out[role], cap];
+      if (DEFAULT_PERMISSION_CONFIG.capabilities[role].includes(cap) && !caps.includes(cap)) {
+        caps = [...caps, cap];
       }
     }
+    out.capabilities[role] = caps;
+    // Unknown/invalid stored values fall back to all (sanitize self-heals order/dupes).
+    out.categories[role] = sanitizeToolCategories(rawCats[role]) ?? [...ALL_TOOL_CATEGORIES];
   }
   return out;
 }

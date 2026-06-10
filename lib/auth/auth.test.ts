@@ -6,7 +6,12 @@ delete process.env.POSTGRES_URL;
 
 import { hashPassword, verifyPassword } from "./password";
 import { getCapabilities, userCan } from "./permissions";
-import { ALL_TOOL_CATEGORIES, sanitizeToolCategories } from "./types";
+import {
+  ALL_TOOL_CATEGORIES,
+  effectiveCategories,
+  sanitizeToolCategories,
+  type PermissionConfig,
+} from "./types";
 import type { CurrentUser } from "./session";
 
 describe("password hashing", () => {
@@ -114,7 +119,7 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(reread!.coachId).toBeNull();
   });
 
-  it("createUser can narrow categories at creation", async () => {
+  it("createUser can pin a category override at creation", async () => {
     const u = await queries.createUser({
       email: "cat-create@x.io",
       password: "pw",
@@ -124,18 +129,55 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(u.visibleCategories).toEqual(["marketing"]);
   });
 
-  it("new users default to every launcher category; updateUser narrows them", async () => {
+  it("new users default to NULL (inherit role default); updateUser overrides and resets", async () => {
+    // Omitted at creation → NULL → the account inherits its role's categories,
+    // so effective = the role default from the permission matrix.
     const u = await queries.createUser({ email: "cat@x.io", password: "pw", role: "staff" });
-    expect(u.visibleCategories).toEqual(["swim", "fit", "marketing"]);
+    expect(u.visibleCategories).toBeNull();
+    const config = await queries.getPermissionConfig();
+    expect(effectiveCategories(u.role, u.visibleCategories, config.categories)).toEqual(
+      config.categories.staff,
+    );
 
     await queries.updateUser(u.id, { visibleCategories: ["fit"] });
     let reread = await queries.getUserById(u.id);
     expect(reread!.visibleCategories).toEqual(["fit"]);
 
-    // An empty list is allowed (account sees no category groups).
+    // An empty list is a valid override (account sees no category groups).
     await queries.updateUser(u.id, { visibleCategories: [] });
     reread = await queries.getUserById(u.id);
     expect(reread!.visibleCategories).toEqual([]);
+
+    // null resets the override → inherit the role default again.
+    await queries.updateUser(u.id, { visibleCategories: null });
+    reread = await queries.getUserById(u.id);
+    expect(reread!.visibleCategories).toBeNull();
+  });
+});
+
+describe("effectiveCategories (override ?? role default; super_admin all)", () => {
+  const defaults: PermissionConfig["categories"] = {
+    admin: [...ALL_TOOL_CATEGORIES],
+    supervisor: ["swim"],
+    staff: ["fit"],
+  };
+
+  it("inherits the role default when the override is null/undefined", () => {
+    expect(effectiveCategories("staff", null, defaults)).toEqual(["fit"]);
+    expect(effectiveCategories("supervisor", undefined, defaults)).toEqual(["swim"]);
+  });
+
+  it("a per-user override wins over the role default (even an empty one)", () => {
+    expect(effectiveCategories("staff", ["swim", "marketing"], defaults)).toEqual([
+      "swim",
+      "marketing",
+    ]);
+    expect(effectiveCategories("admin", [], defaults)).toEqual([]);
+  });
+
+  it("super_admin always sees every category, override or not", () => {
+    expect(effectiveCategories("super_admin", null, defaults)).toEqual(ALL_TOOL_CATEGORIES);
+    expect(effectiveCategories("super_admin", ["fit"], defaults)).toEqual(ALL_TOOL_CATEGORIES);
   });
 });
 
