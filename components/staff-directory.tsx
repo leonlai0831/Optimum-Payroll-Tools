@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, Plus, Save, UserPlus, Users, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { MergeEmployeeButton } from "@/components/merge-employee-button";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
@@ -163,6 +164,9 @@ export function StaffDirectory({
                         employee={e}
                         centers={centers}
                         canEdit={canEdit}
+                        mergeTargets={employees
+                          .filter((o) => o.id !== e.id)
+                          .map((o) => ({ id: o.id, name: o.name }))}
                       />
                     ))
                   )}
@@ -180,10 +184,12 @@ function DirectoryRow({
   employee,
   centers,
   canEdit,
+  mergeTargets,
 }: {
   employee: EmployeeRow;
   centers: string[];
   canEdit: boolean;
+  mergeTargets: { id: number; name: string }[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -330,6 +336,12 @@ function DirectoryRow({
             >
               {busy ? <Spinner /> : <Save className="h-3.5 w-3.5" />} Save
             </Button>
+          )}
+          {canEdit && (
+            <MergeEmployeeButton
+              employee={{ id: employee.id, name: employee.name }}
+              others={mergeTargets}
+            />
           )}
           <Link
             href={`/staff/${employee.id}`}

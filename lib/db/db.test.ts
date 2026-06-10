@@ -205,6 +205,96 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(kpiPoints[0].finalScore).toBe(1.2);
   });
 
+  it("mergeCoaches: folds a CSV-created duplicate into the real profile (the ARIF case)", async () => {
+    // The real person, created from the staff side with the full name.
+    const farhan = await queries.createCoach({ canonicalName: "ARIF FARHAN", center: "PK" });
+    // A KPI upload auto-created a duplicate under the cleaned CSV name, with a month of history.
+    await queries.createRun({
+      periodLabel: "2027-05",
+      filename: "may.csv",
+      csvRows: [],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [
+        makeCoach("ARIF", {
+          accounts: ["ARIF - LMY [PK]"],
+          center: "PK",
+          teachingAllowance: 900,
+          payout: 900,
+        }),
+      ],
+    });
+    const dup = (await queries.listCoaches()).find((c) => c.canonicalName === "ARIF")!;
+
+    // Dependents on the duplicate: an allowance month, an assessment, and a login.
+    const cfg = await queries.getAllowanceConfig();
+    const { calcAllowance } = await import("../allowance/calc");
+    const input = {
+      coachId: dup.id,
+      name: "ARIF",
+      tier: "T3" as const,
+      center: "PK",
+      opHours: 160,
+      leaveHours: 0,
+      teachingRows: [{ center: "PK", normalH: 8, ysH: 0, precompH: 0 }],
+      otherItems: [],
+    };
+    await queries.createAllowanceRunIfUnlocked({
+      periodLabel: "2027-05",
+      input,
+      result: calcAllowance(input, cfg),
+      configSnapshot: cfg,
+    });
+    await queries.createAssessment({
+      coachId: dup.id,
+      observedOn: new Date(),
+      assessor: "QA",
+      classType: "LTS",
+      poolType: "Indoor",
+      pax: 4,
+      levels: [],
+      hasHelper: false,
+      ratings: {},
+      totalPercent: 80,
+      finalGrade: "B" as Parameters<typeof queries.createAssessment>[0]["finalGrade"],
+      comments: "",
+    });
+    const login = await queries.createUser({
+      email: "arif@opt.page",
+      password: "pw",
+      role: "staff",
+      coachId: dup.id,
+    });
+
+    const result = await queries.mergeCoaches(farhan.id, dup.id);
+    expect(result.duplicateName).toBe("ARIF");
+    expect(result.movedAllowanceRuns).toBe(1);
+    expect(result.conflictingPeriods).toEqual([]);
+
+    // The duplicate is gone; its identity is now an alias of the survivor.
+    const all = await queries.listCoaches();
+    expect(all.some((c) => c.canonicalName === "ARIF")).toBe(false);
+    const survivor = all.find((c) => c.canonicalName === "ARIF FARHAN")!;
+    expect(survivor.aliases).toContain("ARIF");
+    expect(survivor.aliases).toContain("ARIF - LMY [PK]");
+    expect(survivor.allowanceTier).toBe("T3"); // carried over from the duplicate
+
+    // Allowance history renamed + re-pointed, including the snapshot input's name.
+    const runsFor = await queries.listAllowanceRuns("2027-05");
+    const moved = runsFor.find((r) => r.coachId === farhan.id)!;
+    expect(moved.canonicalName).toBe("ARIF FARHAN");
+    const inputs = await queries.getAllowanceInputsForPeriod("2027-05");
+    expect(inputs.get("ARIF FARHAN")?.name).toBe("ARIF FARHAN");
+    expect(inputs.has("ARIF")).toBe(false);
+
+    // Assessment + login follow the survivor.
+    expect((await queries.listAssessmentsForCoach(farhan.id)).length).toBe(1);
+    expect((await queries.getUserById(login.id))!.coachId).toBe(farhan.id);
+
+    // KPI history follows via the alias set — the saved month shows on the survivor.
+    const profile = await queries.getCoachProfile(farhan.id);
+    expect(profile!.kpi.some((p) => p.period === "2027-05" && p.payout === 900)).toBe(true);
+  });
+
   it("backfills finalize_kpi for admin but not supervisor/staff", () => {
     const normalized = queries.normalizePermissionConfig({
       admin: ["run_kpi"],
