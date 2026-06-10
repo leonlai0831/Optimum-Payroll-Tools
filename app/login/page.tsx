@@ -39,9 +39,7 @@ export default function LoginPage() {
       {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
       <div className="relative mb-7 max-w-md text-center">
         <h1 className="text-display text-brand">Optimizing Joy at Work</h1>
-        <p className="mx-auto mt-2 max-w-xs text-sm text-muted sm:max-w-none">
-          Powering the people behind the joy — allowance, KPI &amp; commission in one place.
-        </p>
+        <p className="mt-2 text-sm text-muted">Powering the people behind the joy.</p>
       </div>
       <Card className="relative w-full max-w-sm overflow-hidden border-t-4 border-t-brand">
         <div className="bg-white px-6 pb-4 pt-7 text-center">
