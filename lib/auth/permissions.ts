@@ -16,7 +16,7 @@ export const getCapabilities = cache(
   async (user: CurrentUser): Promise<Set<Capability>> => {
     if (user.role === "super_admin") return new Set(CAPABILITIES);
     const config = await getPermissionConfig();
-    return new Set(config[user.role] ?? []);
+    return new Set(config.capabilities[user.role] ?? []);
   },
 );
 

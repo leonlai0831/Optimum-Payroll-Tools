@@ -10,7 +10,12 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { ALL_TOOL_CATEGORIES, type PermissionConfig, type Role, type ToolCategory } from "@/lib/auth/types";
+import type {
+  LegacyPermissionConfig,
+  PermissionConfig,
+  Role,
+  ToolCategory,
+} from "@/lib/auth/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -65,10 +70,15 @@ export const coaches = pgTable("coaches", {
   // history. UNIQUE makes that a hard guarantee (dedup runs first in the migration).
 }, (t) => [uniqueIndex("coaches_name_idx").on(t.canonicalName)]);
 
-/** Singleton role→capability matrix (one row, id = 1). super_admin is not stored. */
+/**
+ * Singleton role permission matrix (one row, id = 1). super_admin is not stored.
+ * `data` = { capabilities, categories } (PermissionConfig); rows written before
+ * `categories` existed hold the flat capability map and are migrated on read by
+ * `normalizePermissionConfig`, so the stored type is the union of both shapes.
+ */
 export const permissionConfig = pgTable("permission_config", {
   id: integer("id").primaryKey().default(1),
-  data: jsonb("data").$type<PermissionConfig>().notNull(),
+  data: jsonb("data").$type<PermissionConfig | LegacyPermissionConfig>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -86,13 +96,11 @@ export const users = pgTable("users", {
   // gym-staff member (`gymStaffId`) — the two are mutually exclusive, enforced at the API.
   coachId: integer("coach_id"),
   gymStaffId: integer("gym_staff_id"),
-  // Which home-launcher categories this account sees (System Setting →
-  // Category Visibility). Defaults to all so existing accounts lose nothing;
+  // Per-user launcher-category OVERRIDE (System Setting → Permissions → User
+  // overrides). NULL = inherit the role's default categories from the
+  // permission matrix; a non-null array pins this account to exactly that list.
   // super_admin ignores this and always sees everything.
-  visibleCategories: jsonb("visible_categories")
-    .$type<ToolCategory[]>()
-    .notNull()
-    .default(ALL_TOOL_CATEGORIES),
+  visibleCategories: jsonb("visible_categories").$type<ToolCategory[] | null>(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

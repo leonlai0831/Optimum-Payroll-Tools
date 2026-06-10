@@ -12,7 +12,6 @@ import {
   Home,
   Layers,
   LayoutDashboard,
-  LayoutGrid,
   Link2,
   ScrollText,
   Settings,
@@ -108,12 +107,6 @@ const NAVS: Record<
     title: "System Setting",
     items: [
       { href: "/system/users", label: "Users", icon: UserCog, requires: { superAdmin: true } },
-      {
-        href: "/system/categories",
-        label: "Category Visibility",
-        icon: LayoutGrid,
-        requires: { superAdmin: true },
-      },
       { href: "/system/audit", label: "Audit log", icon: ScrollText, requires: { superAdmin: true } },
       {
         href: "/system/permissions",

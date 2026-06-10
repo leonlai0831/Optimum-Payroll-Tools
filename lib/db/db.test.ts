@@ -296,14 +296,44 @@ describe("DB layer (PGlite in-memory)", () => {
   });
 
   it("backfills finalize_kpi for admin but not supervisor/staff", () => {
+    // Old flat stored shape (pre-categories) — must still normalize.
     const normalized = queries.normalizePermissionConfig({
       admin: ["run_kpi"],
       supervisor: ["run_kpi"],
       staff: ["view_own"],
     });
-    expect(normalized.admin).toContain("finalize_kpi");
-    expect(normalized.supervisor).not.toContain("finalize_kpi");
-    expect(normalized.staff).not.toContain("finalize_kpi");
+    expect(normalized.capabilities.admin).toContain("finalize_kpi");
+    expect(normalized.capabilities.supervisor).not.toContain("finalize_kpi");
+    expect(normalized.capabilities.staff).not.toContain("finalize_kpi");
+  });
+
+  it("migrates an old flat permission config to { capabilities, categories } on read", () => {
+    const normalized = queries.normalizePermissionConfig({
+      admin: ["run_kpi"],
+      supervisor: ["run_kpi"],
+      staff: ["view_own"],
+    });
+    // Stored capability choices survive the shape change…
+    expect(normalized.capabilities.admin).toContain("run_kpi");
+    expect(normalized.capabilities.staff).toEqual(
+      expect.arrayContaining(["view_own"]),
+    );
+    // …and categories backfill to ALL THREE per role (the pre-unification
+    // behavior) until the owner tightens them.
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      expect(normalized.categories[role]).toEqual(["swim", "fit", "marketing"]);
+    }
+  });
+
+  it("keeps stored categories and backfills only invalid/missing role entries", () => {
+    const normalized = queries.normalizePermissionConfig({
+      capabilities: { admin: ["run_kpi"], supervisor: [], staff: ["view_own"] },
+      // staff narrowed; supervisor invalid (unknown value); admin missing.
+      categories: { staff: ["fit"], supervisor: ["nope"] },
+    } as never);
+    expect(normalized.categories.staff).toEqual(["fit"]);
+    expect(normalized.categories.supervisor).toEqual(["swim", "fit", "marketing"]);
+    expect(normalized.categories.admin).toEqual(["swim", "fit", "marketing"]);
   });
 
   it("lists distinct CSV account names across runs, sorted and trimmed", async () => {
