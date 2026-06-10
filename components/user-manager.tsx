@@ -7,7 +7,7 @@ import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
-import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/types";
+import { ROLE_LABELS, ROLES, canManageUserRole, type Role } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
 export interface SafeUser {
@@ -87,17 +87,20 @@ export function UserManager({
   coaches,
   gymStaff,
   actorId,
-  actorIsSuperAdmin,
+  actorRole,
 }: {
   users: SafeUser[];
   coaches: CoachOption[];
   gymStaff: GymStaffOption[];
   actorId: number;
-  actorIsSuperAdmin: boolean;
+  actorRole: Role;
 }) {
   const router = useRouter();
   const toast = useToast();
-  const roleOptions = ROLES.filter((r) => r !== "super_admin" || actorIsSuperAdmin);
+  // Hierarchy scope: only roles strictly below the actor are assignable
+  // (super_admin assigns anything). Higher-ranked accounts never reach this
+  // component — the page filters them out server-side.
+  const roleOptions = ROLES.filter((r) => canManageUserRole(actorRole, r));
   const [busyIds, setBusyIds] = useState<ReadonlySet<number>>(new Set());
   // Display-name drafts keyed by user id; saved on blur when changed.
   const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
@@ -157,8 +160,9 @@ export function UserManager({
     gymStaff,
     roleOptions,
     isSelf: u.id === actorId,
-    // A non-super admin cannot change the super_admin role on a row.
-    roleLocked: u.role === "super_admin" && !actorIsSuperAdmin,
+    // Same-rank accounts (incl. the actor's own) are view-only; only rows
+    // ranked strictly below the actor are editable (super_admin edits all).
+    readOnly: !canManageUserRole(actorRole, u.role),
     busy: busyIds.has(u.id),
     name: nameDrafts[u.id] ?? u.displayName,
     onNameChange: (v: string) => setNameDrafts((m) => ({ ...m, [u.id]: v })),
@@ -172,7 +176,10 @@ export function UserManager({
 
   return (
     <div className="space-y-4">
-      <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
+      {/* No assignable role below the actor's own → nothing they could create. */}
+      {roleOptions.length > 0 && (
+        <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
+      )}
       <Card className="overflow-hidden">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-bold text-gray-900">
           User accounts · {users.length}
@@ -294,7 +301,7 @@ function UserEntry({
   gymStaff,
   roleOptions,
   isSelf,
-  roleLocked,
+  readOnly,
   busy,
   name,
   onNameChange,
@@ -309,7 +316,8 @@ function UserEntry({
   gymStaff: GymStaffOption[];
   roleOptions: Role[];
   isSelf: boolean;
-  roleLocked: boolean;
+  /** Same-rank account: render every field disabled, no actions (API enforces too). */
+  readOnly: boolean;
   busy: boolean;
   name: string;
   onNameChange: (value: string) => void;
@@ -322,7 +330,7 @@ function UserEntry({
     <Select
       className={className}
       value={user.role}
-      disabled={busy || roleLocked}
+      disabled={busy || readOnly}
       onChange={(e) => onPatch({ role: e.target.value })}
     >
       {roleOptions.map((r) => (
@@ -330,14 +338,17 @@ function UserEntry({
           {ROLE_LABELS[r]}
         </option>
       ))}
-      {roleLocked && <option value="super_admin">{ROLE_LABELS.super_admin}</option>}
+      {/* A read-only row's role sits at the actor's own rank, outside roleOptions. */}
+      {!roleOptions.includes(user.role) && (
+        <option value={user.role}>{ROLE_LABELS[user.role]}</option>
+      )}
     </Select>
   );
   const linkSelect = (className: string) => (
     <Select
       className={className}
       value={linkToken(user)}
-      disabled={busy}
+      disabled={busy || readOnly}
       onChange={(e) => onPatch(parseLinkToken(e.target.value))}
     >
       <EmployeeLinkOptions coaches={coaches} gymStaff={gymStaff} />
@@ -347,7 +358,7 @@ function UserEntry({
     <Input
       className={className}
       value={name}
-      disabled={busy}
+      disabled={busy || readOnly}
       placeholder="—"
       onChange={(e) => onNameChange(e.target.value)}
       onBlur={() => onNameBlur(name)}
@@ -355,6 +366,11 @@ function UserEntry({
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
     />
+  );
+  const viewOnlyBadge = (
+    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-400">
+      View only
+    </span>
   );
 
   if (layout === "card") {
@@ -365,16 +381,19 @@ function UserEntry({
             {user.email}
             {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
           </div>
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-gray-600">
-            Active
-            <input
-              type="checkbox"
-              className="h-5 w-5 accent-indigo-600"
-              checked={user.active}
-              disabled={busy}
-              onChange={(e) => onPatch({ active: e.target.checked })}
-            />
-          </label>
+          <div className="flex shrink-0 items-center gap-2">
+            {readOnly && viewOnlyBadge}
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+              Active
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-indigo-600"
+                checked={user.active}
+                disabled={busy || readOnly}
+                onChange={(e) => onPatch({ active: e.target.checked })}
+              />
+            </label>
+          </div>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block">
@@ -390,26 +409,28 @@ function UserEntry({
             {linkSelect("mt-1")}
           </label>
         </div>
-        <div className="mt-3 flex gap-2">
-          <Button
-            variant="outline"
-            className="min-h-11 flex-1"
-            onClick={onResetPassword}
-            disabled={busy}
-          >
-            <KeyRound className="h-4 w-4" /> Reset password
-          </Button>
-          {!isSelf && (
+        {!readOnly && (
+          <div className="mt-3 flex gap-2">
             <Button
               variant="outline"
-              className="min-h-11 flex-1 text-red-600"
-              onClick={onDelete}
+              className="min-h-11 flex-1"
+              onClick={onResetPassword}
               disabled={busy}
             >
-              <Trash2 className="h-4 w-4" /> Delete
+              <KeyRound className="h-4 w-4" /> Reset password
             </Button>
-          )}
-        </div>
+            {!isSelf && (
+              <Button
+                variant="outline"
+                className="min-h-11 flex-1 text-red-600"
+                onClick={onDelete}
+                disabled={busy}
+              >
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -428,32 +449,36 @@ function UserEntry({
           type="checkbox"
           className="h-4 w-4 accent-indigo-600"
           checked={user.active}
-          disabled={busy}
+          disabled={busy || readOnly}
           onChange={(e) => onPatch({ active: e.target.checked })}
           title={user.active ? "Active" : "Inactive"}
         />
       </td>
       <td className="px-4 py-2">
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={onResetPassword}
-            disabled={busy}
-            className="text-gray-400 transition hover:text-indigo-600 disabled:opacity-40"
-            title="Reset password"
-          >
-            <KeyRound className="h-4 w-4" />
-          </button>
-          {!isSelf && (
+        {readOnly ? (
+          <div className="flex justify-end">{viewOnlyBadge}</div>
+        ) : (
+          <div className="flex items-center justify-end gap-2">
             <button
-              onClick={onDelete}
+              onClick={onResetPassword}
               disabled={busy}
-              className="text-gray-300 transition hover:text-red-500 disabled:opacity-40"
-              title="Delete user"
+              className="text-gray-400 transition hover:text-indigo-600 disabled:opacity-40"
+              title="Reset password"
             >
-              <Trash2 className="h-4 w-4" />
+              <KeyRound className="h-4 w-4" />
             </button>
-          )}
-        </div>
+            {!isSelf && (
+              <button
+                onClick={onDelete}
+                disabled={busy}
+                className="text-gray-300 transition hover:text-red-500 disabled:opacity-40"
+                title="Delete user"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );

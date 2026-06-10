@@ -108,7 +108,9 @@ const NAVS: Record<
   system: {
     title: "System Setting",
     items: [
-      { href: "/system/users", label: "Users", icon: UserCog, requires: { superAdmin: true } },
+      // Users is capability-gated (hierarchy-scoped manage_users); the other
+      // two System tabs stay super_admin-only.
+      { href: "/system/users", label: "Users", icon: UserCog, requires: { cap: "manage_users" } },
       { href: "/system/audit", label: "Audit log", icon: ScrollText, requires: { superAdmin: true } },
       {
         href: "/system/permissions",

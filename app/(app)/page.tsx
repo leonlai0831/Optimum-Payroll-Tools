@@ -93,7 +93,9 @@ const TOOLS: Tool[] = [
     title: "Users",
     subtitle: "Accounts, roles & staff links",
     icon: UserCog,
-    superAdmin: true,
+    // Hierarchy-scoped: a manage_users holder administers only roles below
+    // their own (the other System cards stay super_admin-only).
+    cap: "manage_users",
     brand: "system",
   },
   {
@@ -191,7 +193,9 @@ export default async function HubPage() {
     (tool) =>
       (!tool.cap || caps.has(tool.cap)) &&
       (!tool.superAdmin || isSuperAdmin) &&
-      (isSuperAdmin || visibleBrands.has(tool.brand ?? "swim")),
+      // "system" is not an assignable launcher category — its cards are gated
+      // purely by cap/superAdmin above (e.g. hierarchy-scoped manage_users).
+      (isSuperAdmin || tool.brand === "system" || visibleBrands.has(tool.brand ?? "swim")),
   );
   // The user's own profile is not a category tool — it stays reachable in its
   // own group even when every brand category is hidden for the account.

@@ -3,7 +3,32 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { deleteUser, getUserById, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
-import { ROLES, sanitizeToolCategories, type Role } from "@/lib/auth/types";
+import {
+  ROLES,
+  canManageUserRole,
+  canViewUserRole,
+  sanitizeToolCategories,
+  type Role,
+} from "@/lib/auth/types";
+
+/**
+ * Hierarchy scope shared by PATCH and DELETE: accounts ranked above the actor
+ * are invisible (404, not 403, so their existence doesn't leak), and accounts
+ * of the actor's own rank are view-only (super_admin excepted — see
+ * `canManageUserRole`).
+ */
+function hierarchyDenied(actorRole: Role, targetRole: Role): NextResponse | null {
+  if (!canViewUserRole(actorRole, targetRole)) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  if (!canManageUserRole(actorRole, targetRole)) {
+    return NextResponse.json(
+      { error: "Accounts at your own role level are view-only." },
+      { status: 403 },
+    );
+  }
+  return null;
+}
 
 async function otherActiveSuperAdmins(exceptId: number) {
   return (await listUsers()).filter(
@@ -21,6 +46,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   const userId = Number(id);
   const target = await getUserById(userId);
   if (!target) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const scopeDenied = hierarchyDenied(actor.role, target.role);
+  if (scopeDenied) return scopeDenied;
 
   const body = (await req.json().catch(() => ({}))) as {
     role?: string;
@@ -38,9 +65,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     if (!(ROLES as readonly string[]).includes(body.role)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     }
-    // Granting or revoking super_admin is reserved for super_admins.
-    if ((body.role === "super_admin" || target.role === "super_admin") && actor.role !== "super_admin") {
-      return NextResponse.json({ error: "Only a super admin can change the super admin role." }, { status: 403 });
+    // Hierarchy scope: you may only assign roles ranked strictly below your
+    // own (super_admin may assign anything, incl. super_admin itself).
+    if (!canManageUserRole(actor.role, body.role as Role)) {
+      return NextResponse.json(
+        { error: "You can only assign roles below your own." },
+        { status: 403 },
+      );
     }
     patch.role = body.role as Role;
   }
@@ -128,13 +159,14 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/users/[id]">
   const target = await getUserById(userId);
   if (!target) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  const scopeDenied = hierarchyDenied(actor.role, target.role);
+  if (scopeDenied) return scopeDenied;
+
   if (target.id === actor.id) {
     return NextResponse.json({ error: "You cannot delete your own account." }, { status: 400 });
   }
+  // Only a super_admin reaches a super_admin target (hierarchy gate above).
   if (target.role === "super_admin") {
-    if (actor.role !== "super_admin") {
-      return NextResponse.json({ error: "Only a super admin can delete a super admin." }, { status: 403 });
-    }
     if ((await otherActiveSuperAdmins(target.id)).length === 0) {
       return NextResponse.json(
         { error: "Cannot delete the last active super admin." },
