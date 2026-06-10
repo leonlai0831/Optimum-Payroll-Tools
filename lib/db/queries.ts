@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
@@ -279,13 +279,18 @@ export interface CoachProfileData {
  * merged account/alias — mirroring `upsertCoachesFromRun`'s precedence.
  */
 export async function getCoachProfile(coachId: number): Promise<CoachProfileData | null> {
-  const coach = await getCoach(coachId);
-  if (!coach) return null;
   const db = await getDb();
-  const runRows = await db
-    .select({ periodLabel: runs.periodLabel, coachResults: runs.coachResults })
-    .from(runs)
-    .orderBy(runs.createdAt);
+  // The runs scan and the allowance history don't depend on the coach row, so
+  // fetch all three in parallel and bail afterwards if the coach doesn't exist.
+  const [coach, runRows, allowanceRows] = await Promise.all([
+    getCoach(coachId),
+    db
+      .select({ periodLabel: runs.periodLabel, coachResults: runs.coachResults })
+      .from(runs)
+      .orderBy(runs.createdAt),
+    listAllowanceRuns(),
+  ]);
+  if (!coach) return null;
 
   const names = new Set([coach.canonicalName, ...(coach.aliases ?? [])]);
   // Ordered asc by createdAt: when the same period label was saved twice, the
@@ -311,7 +316,7 @@ export async function getCoachProfile(coachId: number): Promise<CoachProfileData
   }
   const kpi = [...kpiByPeriod.values()];
 
-  const allowance = (await listAllowanceRuns()).filter(
+  const allowance = allowanceRows.filter(
     (a) => a.coachId === coachId || a.canonicalName === coach.canonicalName,
   );
   return { coach, kpi, allowance };
@@ -1591,11 +1596,11 @@ export async function deleteAllowanceRun(id: number): Promise<void> {
 /** How many allowance rows are filed under `period`. */
 export async function countAllowanceRunsForPeriod(period: string): Promise<number> {
   const db = await getDb();
-  const rows = await db
-    .select({ id: allowanceRuns.id })
+  const [row] = await db
+    .select({ n: count() })
     .from(allowanceRuns)
     .where(eq(allowanceRuns.periodLabel, period));
-  return rows.length;
+  return row.n;
 }
 
 /** True when any allowance row exists at all (used to exempt the very first month). */
@@ -1608,8 +1613,10 @@ export async function hasAnyAllowanceRuns(): Promise<boolean> {
 /** Distinct months that already have at least one allowance entry. */
 export async function listAllowancePeriods(): Promise<string[]> {
   const db = await getDb();
-  const rows = await db.select({ periodLabel: allowanceRuns.periodLabel }).from(allowanceRuns);
-  return [...new Set(rows.map((r) => r.periodLabel))];
+  const rows = await db
+    .selectDistinct({ periodLabel: allowanceRuns.periodLabel })
+    .from(allowanceRuns);
+  return rows.map((r) => r.periodLabel);
 }
 
 /**
@@ -1734,37 +1741,30 @@ export async function unlockPeriod(period: string): Promise<void> {
   await db.delete(allowancePeriodLocks).where(eq(allowancePeriodLocks.periodLabel, period));
 }
 
-/** Live map of user id → display name (falling back to email when unset). */
-async function displayNamesByUserId(): Promise<Map<number, string>> {
-  const db = await getDb();
-  const rows = await db.select({ id: users.id, displayName: users.displayName, email: users.email }).from(users);
-  const map = new Map<number, string>();
-  for (const r of rows) map.set(r.id, r.displayName.trim() || r.email);
-  return map;
-}
-
 /**
  * Map of audit entityId → the name of whoever last did `action` on it, resolving
  * the actor to their current display name (falling back to the snapshotted
  * email). Powers the saved-by / edited-by attribution shown to admins. Only
  * covers actions recorded since the audit log existed; older rows map to nothing.
+ *
+ * One round-trip: `DISTINCT ON (entity_id)` keeps only the latest *named* audit
+ * row per entity (matching the old "ascending ⇒ latest wins" fold), left-joined
+ * to `users` for the actor's current display name → email → snapshot email.
  */
 async function saversFromAudit(entity: string, action: string): Promise<Record<number, string>> {
   const db = await getDb();
-  const [rows, names] = await Promise.all([
-    db
-      .select({ entityId: auditLog.entityId, actorId: auditLog.actorId, actorEmail: auditLog.actorEmail })
-      .from(auditLog)
-      .where(and(eq(auditLog.entity, entity), eq(auditLog.action, action)))
-      .orderBy(auditLog.createdAt, auditLog.id),
-    displayNamesByUserId(),
-  ]);
+  const name = sql<string>`coalesce(nullif(trim(${users.displayName}), ''), nullif(${users.email}, ''), nullif(${auditLog.actorEmail}, ''))`;
+  const rows = await db
+    .selectDistinctOn([auditLog.entityId], { entityId: auditLog.entityId, name })
+    .from(auditLog)
+    .leftJoin(users, eq(users.id, auditLog.actorId))
+    .where(and(eq(auditLog.entity, entity), eq(auditLog.action, action), sql`${name} is not null`))
+    .orderBy(auditLog.entityId, desc(auditLog.createdAt), desc(auditLog.id));
   const byEntity: Record<number, string> = {};
   for (const r of rows) {
     const id = Number(r.entityId);
     if (!Number.isFinite(id)) continue;
-    const name = (r.actorId != null ? names.get(r.actorId) : undefined) || r.actorEmail;
-    if (name) byEntity[id] = name; // ascending ⇒ latest wins
+    byEntity[id] = r.name;
   }
   return byEntity;
 }
@@ -1806,8 +1806,8 @@ export async function getUserByEmail(email: string): Promise<UserRecord | undefi
 
 export async function countUsers(): Promise<number> {
   const db = await getDb();
-  const rows = await db.select({ id: users.id }).from(users);
-  return rows.length;
+  const [row] = await db.select({ n: count() }).from(users);
+  return row.n;
 }
 
 export async function createUser(input: {

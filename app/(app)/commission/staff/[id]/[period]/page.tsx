@@ -32,7 +32,7 @@ export default async function GymStaffMonthPage({ params }: { params: Promise<{ 
   if (!user) redirect("/login");
 
   // Same access rule as the export route: anyone who can view all staff, or the
-  // staff member viewing their own earnings.
+  // staff member viewing their own earnings. Gate before fetching member data.
   const caps = await getCapabilities(user);
   const canViewAll = caps.has("view_all_staff");
   const isOwn = caps.has("view_own") && user.gymStaffId === staffId;
