@@ -5,6 +5,7 @@ export const MALAYSIAN_BANKS: { name: string; code: string }[] = [
   { name: "ALLIANCE BANK", code: "ALBB" },
   { name: "AMBANK", code: "AMBB" },
   { name: "BANK ISLAM", code: "BIMB" },
+  { name: "BANK OF CHINA", code: "BOCM" },
   { name: "BANK RAKYAT", code: "BKRM" },
   { name: "BANK SIMPANAN NASIONAL", code: "BSNB" },
   { name: "CIMB BANK", code: "CIMB" },
