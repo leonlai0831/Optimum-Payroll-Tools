@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 // In-memory PGlite for tests (no POSTGRES_URL, no on-disk dev DB).
 process.env.PGLITE_PATH = "memory://";
@@ -6,6 +6,7 @@ delete process.env.POSTGRES_URL;
 
 import { hashPassword, verifyPassword } from "./password";
 import { getCapabilities, userCan } from "./permissions";
+import { resolveSessionPassword } from "./session";
 import {
   ALL_TOOL_CATEGORIES,
   ROLES,
@@ -288,5 +289,48 @@ describe("capability matrix (default permission config)", () => {
     expect(await userCan(sup, "manage_users")).toBe(false);
     expect(await userCan(sup, "swim_edit_settings")).toBe(false);
     expect(await userCan(sup, "fit_edit_settings")).toBe(false);
+  });
+});
+
+describe("resolveSessionPassword", () => {
+  const orig = { secret: process.env.SESSION_SECRET, env: process.env.NODE_ENV, phase: process.env.NEXT_PHASE };
+  const set = (k: string, v: string | undefined) => {
+    if (v === undefined) delete (process.env as Record<string, string | undefined>)[k];
+    else (process.env as Record<string, string | undefined>)[k] = v;
+  };
+  afterEach(() => {
+    set("SESSION_SECRET", orig.secret);
+    set("NODE_ENV", orig.env);
+    set("NEXT_PHASE", orig.phase);
+  });
+
+  it("returns a valid 32+ char secret in any environment", () => {
+    const secret = "x".repeat(40);
+    set("SESSION_SECRET", secret);
+    set("NODE_ENV", "production");
+    set("NEXT_PHASE", undefined);
+    expect(resolveSessionPassword()).toBe(secret);
+  });
+
+  it("throws in production when the secret is missing or too short", () => {
+    set("NODE_ENV", "production");
+    set("NEXT_PHASE", undefined);
+    set("SESSION_SECRET", undefined);
+    expect(() => resolveSessionPassword()).toThrow(/SESSION_SECRET is required/);
+    set("SESSION_SECRET", "too-short");
+    expect(() => resolveSessionPassword()).toThrow(/at least 32/);
+  });
+
+  it("does NOT throw during next build (phase-production-build), so a build needs no secret", () => {
+    set("NODE_ENV", "production");
+    set("NEXT_PHASE", "phase-production-build");
+    set("SESSION_SECRET", undefined);
+    expect(() => resolveSessionPassword()).not.toThrow();
+  });
+
+  it("falls back to the dev constant outside production (no setup needed)", () => {
+    set("NODE_ENV", "development");
+    set("SESSION_SECRET", undefined);
+    expect(resolveSessionPassword()).toMatch(/dev-only-insecure/);
   });
 });

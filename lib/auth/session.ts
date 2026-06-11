@@ -10,10 +10,42 @@ export interface SessionData {
 
 export const SESSION_COOKIE = "kpi_session";
 
+const DEV_FALLBACK_SECRET = "dev-only-insecure-session-secret-change-me-please";
+
+/**
+ * Resolve the iron-session password at REQUEST time (never at module load).
+ *
+ * In production a missing/too-short `SESSION_SECRET` is fatal: the app would
+ * otherwise sign cookies with a public built-in string, making every session
+ * forgeable (full account takeover). We refuse to serve traffic instead of
+ * degrading silently — `/api/health` + `/setup` already warn, but a warning is
+ * easy to miss. The check is skipped during `next build`
+ * (`phase-production-build`), which evaluates code but never serves a request,
+ * so a build without the env var still succeeds. Dev/test fall back to a
+ * clearly-insecure constant so the app runs with no setup.
+ */
+export function resolveSessionPassword(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PHASE !== "phase-production-build"
+  ) {
+    throw new Error(
+      "SESSION_SECRET is required in production and must be at least 32 characters. " +
+        "Set it (e.g. `openssl rand -base64 32`) before serving traffic.",
+    );
+  }
+  return DEV_FALLBACK_SECRET;
+}
+
 export const sessionOptions: SessionOptions = {
-  // Must be >= 32 chars. Set SESSION_SECRET in production; dev fallback below.
-  password:
-    process.env.SESSION_SECRET || "dev-only-insecure-session-secret-change-me-please",
+  // Resolved lazily per request via this getter so `next build` (which never
+  // serves a request) succeeds without SESSION_SECRET, while production runtime
+  // fails fast when it's missing. See resolveSessionPassword.
+  get password() {
+    return resolveSessionPassword();
+  },
   cookieName: SESSION_COOKIE,
   cookieOptions: {
     httpOnly: true,
