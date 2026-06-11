@@ -1,4 +1,4 @@
-# Optimum Payroll Tools
+# Optimum Payroll Suite
 
 Optimum Swim School's payroll calculators. The post-login hub lists the tools — **Staff
 Allowance** and **Instructor KPI Bonus** today, with **Admin KPI Bonus** planned.

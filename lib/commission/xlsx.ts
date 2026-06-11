@@ -234,7 +234,7 @@ export async function buildReportWorkbook(opts: {
 }): Promise<Buffer> {
   const { monthLabel, rows, summary, config } = opts;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Optimum Payroll Tools";
+  wb.creator = "Optimum Payroll Suite";
   wb.created = new Date();
 
   // ── Tab 1: consolidated "All Sales" ──

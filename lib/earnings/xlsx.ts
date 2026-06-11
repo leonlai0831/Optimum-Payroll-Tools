@@ -20,7 +20,7 @@ export async function buildStaffEarningsWorkbook(opts: {
 }): Promise<Buffer> {
   const { staffName, staffCode, report } = opts;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Optimum Payroll Tools";
+  wb.creator = "Optimum Payroll Suite";
   wb.created = new Date();
 
   const ws = wb.addWorksheet("Earnings", { views: [{ state: "frozen", ySplit: 1 }] });

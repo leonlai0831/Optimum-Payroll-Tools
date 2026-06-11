@@ -29,7 +29,7 @@ export async function buildTeachingWorkbook(opts: {
 }): Promise<Buffer> {
   const { monthLabel, summary, config } = opts;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Optimum Payroll Tools";
+  wb.creator = "Optimum Payroll Suite";
   wb.created = new Date();
 
   // ── Tab 1: per-coach income ──

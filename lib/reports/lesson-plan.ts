@@ -72,7 +72,7 @@ export async function buildLessonPlanPdf(plan: LessonPlanPdfInput): Promise<Uint
 
   const doc = await PDFDocument.create();
   doc.setTitle(`${title} — ${plan.instructorName} — ${plan.lessonDate.toISOString().slice(0, 10)}`);
-  doc.setProducer("Optimum Payroll Tools");
+  doc.setProducer("Optimum Payroll Suite");
 
   const pageSize: [number, number] = [595.28, 841.89]; // A4 portrait, points
   const margin = 50;
@@ -316,7 +316,7 @@ export async function buildLessonPlanPdf(plan: LessonPlanPdfInput): Promise<Uint
   const pages = doc.getPages();
   pages.forEach((p, i) => {
     p.drawText(
-      safe(`Generated ${stamp} - Optimum Payroll Tools - Page ${i + 1} of ${pages.length}`),
+      safe(`Generated ${stamp} - Optimum Payroll Suite - Page ${i + 1} of ${pages.length}`),
       { x: margin, y: margin - 18, size: 8, font, color: muted },
     );
   });

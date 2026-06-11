@@ -89,7 +89,7 @@ export function payslipAmounts(data: Pick<PayslipData, "kpi" | "allowance">): Pa
 export async function buildPayslipPdf(data: PayslipData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Payslip — ${data.coach.name} — ${data.period}`);
-  doc.setProducer("Optimum Payroll Tools");
+  doc.setProducer("Optimum Payroll Suite");
 
   const page = doc.addPage([595.28, 841.89]); // A4 portrait, points
   const { width, height } = page.getSize();
