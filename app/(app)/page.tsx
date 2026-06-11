@@ -16,6 +16,7 @@ import {
 import { Card } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
 import { BrandStripes } from "@/components/brand-stripes";
+import { HubStripeBand } from "@/components/hub-stripe-band";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
@@ -212,10 +213,16 @@ export default async function HubPage() {
 
   return (
     <div className="fade-in space-y-6">
+      {/* Arrival flourish after sign-in: rendered BEFORE the hero so the
+          band's bend hides behind the opaque card (id="hub-hero" below). */}
+      <HubStripeBand />
       {/* The one brand "splash" moment, photocopied from a CI guide page:
           white sheet, Brand Blue heading, the guide's own footer wave (traced
           1:1 from its vector artwork). Everything below stays quiet chrome. */}
-      <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 pt-7 pb-20 shadow-card sm:px-8 sm:pb-24">
+      <section
+        id="hub-hero"
+        className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 pt-7 pb-20 shadow-card sm:px-8 sm:pb-24"
+      >
         {/* The gym deck's racing stripes, anchoring the hero's top-right the
             way the deck slides do (hidden on phones — the text needs the room). */}
         <BrandStripes className="absolute right-6 top-7 hidden w-28 sm:flex md:w-36" />

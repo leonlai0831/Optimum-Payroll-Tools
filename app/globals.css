@@ -235,6 +235,60 @@ body {
    Per-path distances arrive as custom properties; `both` parks everything
    off-screen during the entrance delay. Stilled by the global
    prefers-reduced-motion rule. */
+/* Login → dashboard handoff. The login page covers its last frame with a
+   paper panel rising from the bottom (curtain-cover, delayed so the stripe
+   exit plays first); the dashboard mounts behind ArrivalCurtain, which lifts
+   upward (curtain-reveal) once the launcher has painted — together they read
+   as one bottom-to-top screen swap, as if the stripe arrow pulled the next
+   screen up. Then the arrival band (components/hub-stripe-band.tsx) runs:
+   up from the bottom-right, a hidden bend behind the hero card, out the
+   viewport's left edge, on the same dash/motion-path machinery as the login
+   band. Stilled by the global prefers-reduced-motion rule. */
+.curtain-cover {
+  animation: curtainUp 0.5s cubic-bezier(0.5, 0, 0.2, 1) 0.75s both;
+}
+.curtain-reveal {
+  animation: curtainAway 0.55s cubic-bezier(0.6, 0, 0.3, 1) both;
+}
+@keyframes curtainUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes curtainAway {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+.hub-flow-run {
+  animation: hubFlow 2s cubic-bezier(0.55, 0, 0.3, 1) 0.65s both;
+}
+.hub-arrow-run {
+  animation: hubArrow 2s cubic-bezier(0.55, 0, 0.3, 1) 0.65s both;
+}
+@keyframes hubFlow {
+  from {
+    stroke-dashoffset: var(--dash-from);
+  }
+  to {
+    stroke-dashoffset: var(--dash-to);
+  }
+}
+@keyframes hubArrow {
+  from {
+    offset-distance: var(--arrow-from);
+  }
+  to {
+    offset-distance: var(--arrow-to);
+  }
+}
+
 .stripe-flow-enter {
   animation: stripeFlowIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1s both;
 }

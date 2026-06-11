@@ -1,6 +1,11 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import {
+  STRIPE_ARROW_TIP,
+  STRIPE_ARROW_W,
+  StripeArrowPlate,
+} from "@/components/stripe-arrow";
 
 /**
  * The login page's racing-stripe band, built as SVG so it can FLOW like the
@@ -44,15 +49,11 @@ const STRIPE_COLORS = [
 const CARD_W = 448; // the sign-in card (max-w-md)
 const CARD_TOP_OFFSET = 219.2; // 13.7rem — card top above the centerline
 const BAND_RAISE = 56; // band floats this far above the card's top edge
-const BAND_H = BAR_H * 4 + BAR_GAP * 3; // 124px
 const INNER_R = 64; // innermost corner radius
 const LEG_NUDGE = 20; // innermost upward leg this far right of the card edge
 const EXIT_Y = -160; // path end above the viewport (arrow fully clears it)
 /** Bars stop this far short of the card; the chevron arrow floats in the gap. */
 const BAR_INSET = 110;
-/** Chevron arrow plate: two `>` strokes (yellow behind blue), full band height. */
-const ARROW_W = 84;
-const ARROW_TIP = 76; // x of the chevron tips inside the plate
 const ARROW_TIP_GAP = 18; // resting clearance between the blue tip and the card
 
 function subscribeResize(cb: () => void) {
@@ -97,7 +98,7 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   const arrowR = INNER_R + 1.5 * STRIPE_STEP;
   const arrowD = flowPath(bandTop + BAR_H / 2 + 1.5 * STRIPE_STEP, arrowR);
   // Anchor = plate center; the blue tip leads it by (ARROW_TIP - ARROW_W/2).
-  const arrowRest = vw + cardLeft - ARROW_TIP_GAP - (ARROW_TIP - ARROW_W / 2);
+  const arrowRest = vw + cardLeft - ARROW_TIP_GAP - (STRIPE_ARROW_TIP - STRIPE_ARROW_W / 2);
 
   return (
     <div aria-hidden className="absolute inset-0 z-0 hidden lg:block">
@@ -135,33 +136,13 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
             offsetPath: `path("${arrowD}")`,
             offsetRotate: "auto",
             offsetDistance: `${arrowRest}px`,
-            "--arrow-from": `${vw - ARROW_W / 2}px`, // tips at the viewport's left edge
+            "--arrow-from": `${vw - STRIPE_ARROW_W / 2}px`, // tips at the viewport's left edge
             "--arrow-rest": `${arrowRest}px`,
             "--arrow-exit": `${flowLen(arrowR)}px`, // path end, above the viewport
           } as React.CSSProperties
         }
       >
-        <svg
-          width={ARROW_W}
-          height={BAND_H}
-          viewBox={`0 0 ${ARROW_W} ${BAND_H}`}
-          fill="none"
-        >
-          <path
-            d={`M 10 10 L 42 ${BAND_H / 2} L 10 ${BAND_H - 10}`}
-            stroke="var(--color-accent)"
-            strokeWidth={BAR_H}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d={`M 44 10 L ${ARROW_TIP} ${BAND_H / 2} L 44 ${BAND_H - 10}`}
-            stroke="var(--color-brand)"
-            strokeWidth={BAR_H}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <StripeArrowPlate />
       </div>
     </div>
   );
