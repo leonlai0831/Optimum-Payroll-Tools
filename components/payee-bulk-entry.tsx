@@ -7,6 +7,7 @@ import { Button, Card, Input, Select, Spinner } from "@/components/ui";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
 import { MALAYSIAN_BANKS, bankCode } from "@/lib/freelancer/banks";
+import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
 
 export interface PayeeRow {
   id: number;
@@ -29,6 +30,7 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
   const toast = useToast();
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   async function importFile(file: File) {
@@ -81,6 +83,25 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
         .map((r) => r.id),
     [rows, drafts],
   );
+
+  // Search across the fields someone would actually look a payee up by.
+  const filtered = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          q.trim() === "" ||
+          includesText(r.name, q) ||
+          includesText(r.icNo, q) ||
+          includesText(r.bankAccount, q),
+      ),
+    [rows, q],
+  );
+  const { sorted, sort, toggleSort } = useTableSort(filtered, {
+    name: (r: PayeeRow) => r.name,
+    ic: (r: PayeeRow) => r.icNo,
+    bank: (r: PayeeRow) => r.bankName,
+    account: (r: PayeeRow) => r.bankAccount,
+  });
 
   async function saveAll() {
     if (dirtyIds.length === 0) return;
@@ -159,6 +180,17 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
           <Landmark className="h-4 w-4 text-indigo-500" /> Payee details · {rows.length}{" "}
           freelancer(s)
         </div>
+        <TableToolbar>
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search name, IC or account…"
+            className="w-56 max-w-full"
+          />
+          <span className="ml-auto text-xs text-gray-400 nums">
+            {sorted.length} of {rows.length}
+          </span>
+        </TableToolbar>
         {rows.length === 0 ? (
           <p className="p-6 text-sm text-gray-500">
             No freelancers in the directory yet. Add one with “Add member” and set its type to
@@ -167,7 +199,10 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
         ) : (
           <>
             <MobileCards>
-              {rows.map((r) => (
+              {sorted.length === 0 && (
+                <p className="p-6 text-sm text-gray-500">No payees match “{q}”.</p>
+              )}
+              {sorted.map((r) => (
                 <div key={r.id} className="space-y-3 p-4">
                   <div className="font-medium text-gray-800">{r.name}</div>
                   <label className="block">
@@ -200,15 +235,22 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="px-4 py-2 text-left">Name</th>
-                    <th className="px-4 py-2 text-left">IC No</th>
-                    <th className="px-4 py-2 text-left">Bank</th>
+                    <SortTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+                    <SortTh label="IC No" sortKey="ic" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Bank" sortKey="bank" sort={sort} onSort={toggleSort} />
                     <th className="px-4 py-2 text-left">Bank code</th>
-                    <th className="px-4 py-2 text-left">Bank account</th>
+                    <SortTh label="Bank account" sortKey="account" sort={sort} onSort={toggleSort} />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {rows.map((r) => (
+                  {sorted.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-sm text-gray-500">
+                        No payees match “{q}”.
+                      </td>
+                    </tr>
+                  )}
+                  {sorted.map((r) => (
                     <tr key={r.id} className={dirtyIds.includes(r.id) ? "bg-indigo-50/40" : undefined}>
                       <td className="px-4 py-2 font-medium text-gray-800">{r.name}</td>
                       <td className="px-4 py-2">

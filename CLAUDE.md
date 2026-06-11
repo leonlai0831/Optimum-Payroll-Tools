@@ -153,6 +153,7 @@ exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route
 Monthly pay for freelance swim instructors, faithful to the operator's
 FREELANCER_CALCULATOR.xlsx. Positions REUSE the allowance tiers
 (`coaches.allowanceTier` IS the freelancer position; subset A1–A3, PA, T0–T4, I1 —
+plus the freelancer-only **CC** (RM26/42), which never writes back onto the tier —
 `FREELANCER_POSITIONS`). Pure engine in `lib/freelancer/calc.ts` (locked by
 `calc.test.ts`): **hourly rate** = `rates[position]` × center group (groupA =
 HQ/BK/BT, groupB = the rest); **student result** = `1 − black/colour` (T1–T4 + I1
@@ -167,8 +168,12 @@ extras; money rounds to 2dp at the end only. Defaults in
 (swim_view/edit_settings; entities + center groups read-only for now).
 
 Mirrors the Allowance module: singleton `freelancer_config` + `freelancer_runs`
-(UNIQUE (period, canonicalName) upsert, config snapshot per run; no period locks
-in v1). Saving recomputes server-side from a FRESH config read, audits
+(UNIQUE (period, canonicalName, **positionGroup**, **workPeriod**) upsert — one
+record per position family (admin A1–A3 / teaching PA–I1 / cc) per work month,
+so a person can hold several records in one payout batch; `workPeriod` earlier
+than the payout month = a late submission (补交), KPI-bound and reported under
+the work month like the operator's APRIL-rows-in-MAY-batch practice; config
+snapshot per run; no period locks in v1). Saving recomputes server-side from a FRESH config read, audits
 `freelancer.save`, and carries the position + **payee details** (icNo / bankName /
 bankAccount — nullable `coaches` columns, also editable on the staff profile)
 back onto the coach profile; blank payee fields never wipe stored values. Pages:
@@ -176,8 +181,9 @@ back onto the coach profile; blank payee fields never wipe stored values. Pages:
 month; edit/delete/export), `/freelancer/settings`. `GET
 /api/freelancer/export?period=` builds the **bank-transfer XLSX**
 (`Freelancer-Payments-<period>.xlsx`, one worksheet per paying entity with a
-payout: No / Name / IC / Bank / Bank Code (`lib/freelancer/banks.ts`) / Account /
-Amount + TOTAL row). Run routes gate on the `run_freelancer` capability (admin +
+payout: No / **Month** / Name / IC / Bank / Bank Code (`lib/freelancer/banks.ts`)
+/ Account / Amount + TOTAL row — one row per (person, work month): position-family
+records merge, late submissions keep their own Month-labelled row). Run routes gate on the `run_freelancer` capability (admin +
 supervisor by default); the section gates the "swim" category like the other swim
 surfaces.
 

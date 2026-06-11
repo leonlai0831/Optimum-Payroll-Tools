@@ -106,11 +106,12 @@ import {
 } from "@/lib/allowance/types";
 import { previousPeriod } from "@/lib/allowance/period";
 import { DEFAULT_FREELANCER_CONFIG } from "@/lib/freelancer/defaults";
-import type {
-  FreelancerConfig,
-  FreelancerInput,
-  FreelancerPosition,
-  FreelancerResult,
+import {
+  positionGroupOf,
+  type FreelancerConfig,
+  type FreelancerInput,
+  type FreelancerPosition,
+  type FreelancerResult,
 } from "@/lib/freelancer/types";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { calcAllowance } from "@/lib/allowance/calc";
@@ -2202,9 +2203,12 @@ async function ensureCoachForFreelancerWith(
     existing.find((c) => c.canonicalName === input.name);
 
   if (match) {
+    // "CC" is freelancer-only — it is NOT an allowance tier, so it never
+    // writes back onto the profile (the existing tier stays).
+    const tier = input.position === "CC" ? {} : { allowanceTier: input.position };
     await exec
       .update(coaches)
-      .set({ allowanceTier: input.position, ...payee, updatedAt: new Date() })
+      .set({ ...tier, ...payee, updatedAt: new Date() })
       .where(eq(coaches.id, match.id));
     return match.id;
   }
@@ -2214,8 +2218,9 @@ async function ensureCoachForFreelancerWith(
     .values({
       canonicalName: input.name,
       employmentType: "freelancer",
-      jobRole: jobRoleForTier(input.position),
-      allowanceTier: input.position,
+      // CC has no allowance-tier equivalent: instructor role, tier unset.
+      jobRole: input.position === "CC" ? "instructor" : jobRoleForTier(input.position),
+      allowanceTier: input.position === "CC" ? null : input.position,
       ...payee,
     })
     .returning({ id: coaches.id });
@@ -2238,12 +2243,20 @@ export async function upsertFreelancerRun(data: FreelancerRunData): Promise<numb
       input: { ...data.input, coachId },
       result: data.result,
       configSnapshot: data.configSnapshot,
+      positionGroup: positionGroupOf(data.input.position),
+      // Defaults to the payout month; an earlier month = a late submission.
+      workPeriod: data.input.workPeriod || data.periodLabel,
     };
     const [row] = await tx
       .insert(freelancerRuns)
       .values(values)
       .onConflictDoUpdate({
-        target: [freelancerRuns.periodLabel, freelancerRuns.canonicalName],
+        target: [
+          freelancerRuns.periodLabel,
+          freelancerRuns.canonicalName,
+          freelancerRuns.positionGroup,
+          freelancerRuns.workPeriod,
+        ],
         set: {
           coachId: values.coachId,
           input: values.input,
@@ -2264,6 +2277,8 @@ export interface FreelancerRunSummary {
   coachId: number | null;
   canonicalName: string;
   position: FreelancerPosition;
+  /** The month the work belongs to; differs from periodLabel on a late submission. */
+  workPeriod: string;
   totalServiceHours: number;
   commitment: number;
   attendance: number;
@@ -2282,6 +2297,7 @@ export async function listFreelancerRuns(period?: string): Promise<FreelancerRun
       coachId: freelancerRuns.coachId,
       canonicalName: freelancerRuns.canonicalName,
       input: freelancerRuns.input,
+      workPeriod: freelancerRuns.workPeriod,
       result: freelancerRuns.result,
       createdAt: freelancerRuns.createdAt,
     })
@@ -2294,6 +2310,7 @@ export async function listFreelancerRuns(period?: string): Promise<FreelancerRun
     coachId: r.coachId,
     canonicalName: r.canonicalName,
     position: r.input.position,
+    workPeriod: r.workPeriod ?? r.periodLabel,
     totalServiceHours: r.result.totalServiceHours,
     commitment: r.result.commitment,
     attendance: r.result.attendance,

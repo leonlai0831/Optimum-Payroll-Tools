@@ -56,16 +56,18 @@ export async function POST(req: Request) {
       bankName: p.bankName || null,
       bankAccount: p.bankAccount || null,
     };
+    // "CC" is freelancer-only — not an allowance tier, never stored as one.
+    const tier = p.position === "CC" ? null : p.position;
     if (!match) {
       const coach = await createCoach({
         canonicalName: p.name,
         employmentType: "freelancer",
-        allowanceTier: p.position,
+        allowanceTier: tier,
       });
       await updateCoach(coach.id, payee);
       created++;
     } else if (match.employmentType === "freelancer") {
-      await updateCoach(match.id, { ...payee, allowanceTier: p.position ?? match.allowanceTier });
+      await updateCoach(match.id, { ...payee, allowanceTier: tier ?? match.allowanceTier });
       updated++;
     } else {
       skipped.push({ name: p.name, reason: `exists as ${match.employmentType}` });

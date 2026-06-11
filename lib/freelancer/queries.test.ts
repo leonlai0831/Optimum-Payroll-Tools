@@ -106,6 +106,37 @@ describe("Freelancer DB layer (PGlite in-memory)", () => {
     expect(fiona?.bankName).toBe("MAYBANK");
   });
 
+  it("allows several records per month across position groups + late submissions; CC never touches the tier", async () => {
+    const cfg = await queries.getFreelancerConfig();
+    const save = (input: ReturnType<typeof mkInput>) =>
+      queries.upsertFreelancerRun({
+        periodLabel: "2026-06",
+        input,
+        result: calcFreelancer(input, cfg),
+        configSnapshot: cfg,
+      });
+
+    // teaching + admin + CC in the SAME payout month → three rows.
+    await save(mkInput({ position: "T1" }));
+    await save(mkInput({ position: "A1" }));
+    await save(mkInput({ position: "CC" }));
+    // …and an APRIL late submission of the teaching family → a fourth.
+    await save(mkInput({ position: "T1", workPeriod: "2026-04" }));
+    expect((await queries.listFreelancerRuns("2026-06")).length).toBe(4);
+
+    // Re-saving the same (group, work month) replaces, not duplicates.
+    await save(mkInput({ position: "T2" })); // still teaching, same June work
+    const list = await queries.listFreelancerRuns("2026-06");
+    expect(list.length).toBe(4);
+    expect(list.map((r) => r.position).sort()).toEqual(["A1", "CC", "T1", "T2"]);
+
+    // CC must not overwrite the coach's allowance tier (last tier write wins:
+    // T2 from the teaching re-save).
+    const coaches = await queries.listCoaches();
+    const fiona = coaches.find((c) => c.canonicalName === "FREE FIONA");
+    expect(fiona?.allowanceTier).toBe("T2");
+  });
+
   it("links to an existing coach by name and remembers the new position", async () => {
     await queries.createCoach({ canonicalName: "KNOWN KARL", allowanceTier: "T0" });
     const cfg = await queries.getFreelancerConfig();

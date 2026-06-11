@@ -152,7 +152,10 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
             { offsetDistance: `${arrowRest}px`, easing: EASE_IN_UNIT },
             { offsetDistance: `${vw + cornerX + arrowLead}px`, offset: p1 },
             { offsetDistance: `${vw + cornerX + arcMid + arrowLead}px`, offset: p2 },
-            { offsetDistance: `${flowLen(arrowR)}px` },
+            // Keep the lead through the FINAL leg too: aim past the path end
+            // (clamped there, already off-screen) — ending exactly AT the end
+            // would shrink the gap to zero and let the heads catch the plate.
+            { offsetDistance: `${flowLen(arrowR) + arrowLead}px` },
           ],
           opts,
         ),

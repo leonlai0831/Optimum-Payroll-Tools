@@ -66,6 +66,9 @@ export function FreelancerCalculator({
   const [icNo, setIcNo] = useState(initial?.input.icNo ?? "");
   const [bankName, setBankName] = useState(initial?.input.bankName ?? "");
   const [bankAccount, setBankAccount] = useState(initial?.input.bankAccount ?? "");
+  // The month the work belongs to; "" = same as the payout period. Choosing
+  // an earlier month files a late submission (补交) inside this batch.
+  const [workPeriod, setWorkPeriod] = useState(initial?.input.workPeriod ?? "");
   const [centerRows, setCenterRows] = useState<FreelancerCenterRow[]>(
     initial?.input.centerRows ?? [],
   );
@@ -166,6 +169,7 @@ export function FreelancerCalculator({
     blackCount,
     colourCount,
     kpiName: kpiName.trim() || null,
+    workPeriod: workPeriod && workPeriod !== period ? workPeriod : null,
     extras,
   };
   const result = calcFreelancer(input, config);
@@ -195,9 +199,9 @@ export function FreelancerCalculator({
     setIcNo(c.icNo);
     setBankName(c.bankName);
     setBankAccount(c.bankAccount);
-    // Carry-over: last month's KPI binding — auto-fill this month's counts.
+    // Carry-over: last month's KPI binding — auto-fill the work month's counts.
     setKpiName(c.kpiName);
-    if (c.kpiName) void fetchKpiFor(c.kpiName, period);
+    if (c.kpiName) void fetchKpiFor(c.kpiName, workPeriod || period);
   }
 
   function updateRow(i: number, patch: Partial<FreelancerCenterRow>) {
@@ -260,11 +264,33 @@ export function FreelancerCalculator({
                   value={period}
                   onChange={(e) => {
                     setPeriod(e.target.value);
-                    if (kpiName && e.target.value) void fetchKpiFor(kpiName, e.target.value);
+                    if (kpiName && e.target.value && !workPeriod)
+                      void fetchKpiFor(kpiName, e.target.value);
                     dirty();
                   }}
                   className="mt-1"
                 />
+              )}
+            </div>
+            <div>
+              <Label htmlFor="fl-work-period">Work month</Label>
+              <Input
+                id="fl-work-period"
+                type="month"
+                value={workPeriod || period}
+                max={period}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setWorkPeriod(v === period ? "" : v);
+                  if (kpiName && v) void fetchKpiFor(kpiName, v);
+                  dirty();
+                }}
+                className="mt-1"
+              />
+              {workPeriod && workPeriod !== period && (
+                <p className="mt-1 text-[11px] text-warning">
+                  Late submission: {workPeriod} work paid in the {period} batch.
+                </p>
               )}
             </div>
             <div className="col-span-2 sm:col-span-1">
