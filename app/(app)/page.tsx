@@ -64,8 +64,8 @@ const TOOLS: Tool[] = [
   },
   {
     href: "/staff",
-    title: "Staff",
-    subtitle: "Employee directory, profiles & notes",
+    title: "Workforce",
+    subtitle: "Full-time & freelance directory, profiles & notes",
     icon: Users,
     cap: "swim_view_staff",
   },

@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
+import { rosterCoachesFor } from "@/lib/staff/roster";
 import { SectionNav } from "@/components/section-nav";
 import {
   FreelancerCalculator,
@@ -35,25 +36,16 @@ export default async function FreelancerPage({
     edit ? getFreelancerRun(Number(edit)) : Promise.resolve(undefined),
   ]);
 
-  // Freelance-type coaches first, but any active coach can be picked (a
-  // full-timer moonlighting a freelance month still gets paid).
-  const roster: FreelancerRosterCoach[] = coaches
-    .filter((c) => c.active)
-    .sort((a, b) =>
-      a.employmentType === b.employmentType
-        ? 0
-        : a.employmentType === "freelancer"
-          ? -1
-          : 1,
-    )
-    .map((c) => ({
-      id: c.id,
-      canonicalName: c.canonicalName,
-      allowanceTier: c.allowanceTier,
-      icNo: c.icNo ?? "",
-      bankName: c.bankName ?? "",
-      bankAccount: c.bankAccount ?? "",
-    }));
+  // Pay modules are exclusive by employment type: only freelancers are
+  // searchable here (full-timers are paid via Allowance / KPI instead).
+  const roster: FreelancerRosterCoach[] = rosterCoachesFor("freelancer", coaches).map((c) => ({
+    id: c.id,
+    canonicalName: c.canonicalName,
+    allowanceTier: c.allowanceTier,
+    icNo: c.icNo ?? "",
+    bankName: c.bankName ?? "",
+    bankAccount: c.bankAccount ?? "",
+  }));
 
   // ?edit=<runId> loads a saved record back into the calculator. Re-saving the
   // same freelancer + period replaces that record (upsertFreelancerRun is idempotent).

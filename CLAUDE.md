@@ -181,6 +181,13 @@ Amount + TOTAL row). Run routes gate on the `run_freelancer` capability (admin +
 supervisor by default); the section gates the "swim" category like the other swim
 surfaces.
 
+**Roster scoping (`lib/staff/roster.ts`, `rosterCoachesFor`)**: pay modules are
+exclusive by employment type — Freelancer Payment searches ONLY
+`employmentType === "freelancer"`; Allowance and KPI (links page, dashboard via
+`/api/coaches?roster=kpi`) exclude freelancers; Assessment (and Lesson Plan,
+which has no picker) sees every active INSTRUCTOR of either type, never front
+desk.
+
 ## Lesson Plan (`lib/lesson-plan`, `/lesson-plans`)
 
 Digital version of the two paper lesson-plan templates (swim group). Two types:
@@ -320,7 +327,9 @@ The three sections (Allowance / KPI / Staff) and their per-section settings page
 are intentionally stable. When a "where should X go?" question comes up, resolve it with the
 rule below rather than relocating UI:
 
-- **Staff entities live under Staff; system administration lives under System Setting.**
+- **Staff entities live under Staff (titled “Workforce” in the UI — it holds full-time
+  AND freelance people; the directory's create button is “Add member”); system
+  administration lives under System Setting.**
   The staff directory and Centers (`/staff/settings`) stay under Staff. **Users / accounts
   (`/system/users`), Audit log (`/system/audit`), and the Permissions matrix
   (`/system/permissions` — role capabilities, role-default launcher categories, AND per-user

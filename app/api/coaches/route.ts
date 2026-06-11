@@ -2,18 +2,23 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { createCoach, listCoaches, recordAudit } from "@/lib/db/queries";
+import { rosterCoachesFor } from "@/lib/staff/roster";
 import { EMPLOYMENT_TYPES, type EmploymentType } from "@/lib/performance/types";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  // Returns the full staff roster with pay-related fields — same data the Staff
+export async function GET(req: Request) {
+  // Returns the full workforce roster with pay-related fields — same data the
   // directory page gates behind `swim_view_staff`. (The KPI dashboard, gated on
   // `run_kpi`, also calls this; both admin + supervisor hold swim_view_staff.)
   const denied = await requireCapability("swim_view_staff");
   if (denied) return denied;
-  return NextResponse.json(await listCoaches());
+  const coaches = await listCoaches();
+  // ?roster=kpi → the KPI dashboard's merge/carry-over view: full-timers only
+  // (freelancers are paid via Freelancer Payment and never appear in uploads).
+  const roster = new URL(req.url).searchParams.get("roster");
+  return NextResponse.json(roster === "kpi" ? rosterCoachesFor("kpi", coaches) : coaches);
 }
 
 export async function POST(req: Request) {

@@ -85,7 +85,7 @@ const NAVS: Record<
     ],
   },
   staff: {
-    title: "Staff",
+    title: "Workforce",
     items: [
       {
         href: "/staff",

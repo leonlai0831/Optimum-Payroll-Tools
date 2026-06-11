@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { listAllCsvAccountNames, listCoaches } from "@/lib/db/queries";
+import { rosterCoachesFor } from "@/lib/staff/roster";
 import { KpiLinkManager, type LinkCoach } from "@/components/kpi-link-manager";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +17,8 @@ export default async function KpiLinksPage() {
   const [coaches, accountNames] = await Promise.all([listCoaches(), listAllCsvAccountNames()]);
   // Inactive staff must not appear in pay-operation lists — links are standing
   // rules for FUTURE uploads, so only active coaches belong here.
-  const linkCoaches: LinkCoach[] = coaches
-    .filter((c) => c.active)
-    .map((c) => ({
+  // Full-time roster only — freelancers never appear in KPI uploads.
+  const linkCoaches: LinkCoach[] = rosterCoachesFor("kpi", coaches).map((c) => ({
       id: c.id,
       canonicalName: c.canonicalName,
       aliases: c.aliases ?? [],

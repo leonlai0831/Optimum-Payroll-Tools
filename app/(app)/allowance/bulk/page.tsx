@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Layers } from "lucide-react";
 import { getAllowanceConfig, listCoaches } from "@/lib/db/queries";
+import { rosterCoachesFor } from "@/lib/staff/roster";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
@@ -15,9 +16,8 @@ export default async function AllowanceBulkPage() {
   if (!caps.has("run_allowance")) redirect("/allowance");
 
   const [config, coaches] = await Promise.all([getAllowanceConfig(), listCoaches()]);
-  const roster = coaches
-    .filter((c) => c.active)
-    .map((c) => ({
+  // Full-time roster only — freelancers are paid via Freelancer Payment.
+  const roster = rosterCoachesFor("allowance", coaches).map((c) => ({
       id: c.id,
       canonicalName: c.canonicalName,
       center: c.center,

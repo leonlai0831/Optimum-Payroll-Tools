@@ -6,6 +6,7 @@ import {
   listAllowanceRuns,
   listCoaches,
 } from "@/lib/db/queries";
+import { rosterCoachesFor } from "@/lib/staff/roster";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { SectionNav } from "@/components/section-nav";
@@ -36,9 +37,12 @@ export default async function AllowanceHistoryPage() {
   const lockedPeriods = locks.map((l) => l.periodLabel);
 
   const period = currentPeriod();
-  const roster: RosterEntry[] = coaches
-    .filter((c) => c.active)
-    .map((c) => ({ id: c.id, name: c.canonicalName, center: c.center }));
+  // Full-time roster only — freelancers are paid via Freelancer Payment.
+  const roster: RosterEntry[] = rosterCoachesFor("allowance", coaches).map((c) => ({
+    id: c.id,
+    name: c.canonicalName,
+    center: c.center,
+  }));
   const savedNames = rows.filter((r) => r.periodLabel === period).map((r) => r.canonicalName);
 
   return (
