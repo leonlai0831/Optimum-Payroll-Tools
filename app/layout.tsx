@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "Optimum People Hub",
-  description: "Allowance & KPI bonus calculators for Optimum Swim School",
+  description: "Staff-operations suite for Optimum Swim School & Optimum Fit",
 };
 
 export default function RootLayout({
