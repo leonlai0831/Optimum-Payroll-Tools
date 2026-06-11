@@ -12,6 +12,7 @@ import {
   Home,
   Inbox,
   Layers,
+  Landmark,
   LayoutDashboard,
   Link2,
   ScrollText,
@@ -92,6 +93,13 @@ const NAVS: Record<
         label: "Directory",
         icon: Users,
         exact: true,
+        requires: { cap: "swim_view_staff" },
+      },
+      {
+        // Bulk entry for freelancer bank details (feeds the monthly bank file).
+        href: "/staff/payees",
+        label: "Payees",
+        icon: Landmark,
         requires: { cap: "swim_view_staff" },
       },
       {
