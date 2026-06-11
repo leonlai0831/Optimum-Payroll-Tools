@@ -159,7 +159,14 @@ export function getGrade(
  *
  * Token matching (rather than raw substring) means "Puchong Kinrara" and
  * "Kinrara" resolve to each other, while a short code like "HQ" no longer
- * spuriously matches an unrelated key such as "PHQ".
+ * spuriously matches an unrelated key such as "PHQ". CSV center names CAN be
+ * shorter than the configured key (operator-confirmed), so the name⊆key
+ * direction stays — but when several keys match, the winner is chosen
+ * DETERMINISTICALLY by closeness instead of config insertion order: most
+ * shared tokens first (a more specific key beats a vaguer one), then fewest
+ * unmatched tokens (the smallest superset), then alphabetical as a stable
+ * final tie-break. A supervisor's group score is computed against this target
+ * (min = target, max = 2×target), so a wrong pick changes a real payout.
  */
 export function getCenterTarget(name: string, targets: CenterTargets): number {
   const key = name.toLowerCase().trim();
@@ -173,17 +180,28 @@ export function getCenterTarget(name: string, targets: CenterTargets): number {
     if (k.toLowerCase().trim() === key) return v;
   }
 
-  // 2. Whole-word/token match in both directions: the config key shares all of
-  //    its tokens with the name, or the name shares all of its tokens with the
-  //    key. Either side fully contained in the other (token-wise) is a match.
+  // 2. Token containment in either direction, best candidate wins.
+  let best: { k: string; v: number; overlap: number; extra: number } | null = null;
   for (const [k, v] of Object.entries(targets)) {
     const keyTokens = tokens(k);
     if (keyTokens.length === 0) continue;
     const keySet = new Set(keyTokens);
     const keyInName = keyTokens.every((t) => nameTokens.has(t));
     const nameInKey = [...nameTokens].every((t) => keySet.has(t));
-    if (keyInName || nameInKey) return v;
+    if (!keyInName && !nameInKey) continue;
+    const overlap = [...nameTokens].filter((t) => keySet.has(t)).length;
+    const extra = keySet.size + nameTokens.size - 2 * overlap;
+    const lower = k.toLowerCase().trim();
+    if (
+      !best ||
+      overlap > best.overlap ||
+      (overlap === best.overlap && extra < best.extra) ||
+      (overlap === best.overlap && extra === best.extra && lower < best.k)
+    ) {
+      best = { k: lower, v, overlap, extra };
+    }
   }
+  if (best) return best.v;
 
   return 140;
 }
