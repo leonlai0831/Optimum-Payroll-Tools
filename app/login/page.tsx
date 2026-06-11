@@ -82,33 +82,37 @@ export default function LoginPage() {
           (optical center) so tall screens don't read bottom-heavy. */}
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:-translate-y-[4vh] lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water".
-            Nudged down on lg so it sits clear below the stripe band above it. */}
-        <div className="max-w-xl text-center lg:mt-20 lg:flex-1 lg:text-left">
-          <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
-            Optimizing
-            <br className="hidden lg:block" />{" "}
-            <span className="relative inline-block">
-              Joy at Work
-              {/* Accent swash tying the headline to the stripes' yellow. */}
-              <svg
-                className="absolute -bottom-2 left-0 h-3 w-full sm:-bottom-3 sm:h-4"
-                viewBox="0 0 300 14"
-                fill="none"
-                preserveAspectRatio="none"
-                aria-hidden
-              >
-                <path
-                  d="M4 10 Q 150 -4 296 8"
-                  stroke="var(--color-accent)"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-          </h1>
-          <p className="enter-from-bottom mt-6 text-lg text-gray-600 sm:text-xl xl:text-2xl">
-            Powering the people behind
-          </p>
+            Pushed well down on lg so it sits clear below the stripe band; the
+            inner inline-block shrink-wraps to the headline so both headline
+            lines AND the support line center on the same axis. */}
+        <div className="max-w-xl text-center lg:mt-32 lg:flex-1 lg:text-left">
+          <div className="inline-block text-center">
+            <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
+              Optimizing
+              <br className="hidden lg:block" />{" "}
+              <span className="relative inline-block">
+                Joy at Work
+                {/* Accent swash tying the headline to the stripes' yellow. */}
+                <svg
+                  className="absolute -bottom-2 left-0 h-3 w-full sm:-bottom-3 sm:h-4"
+                  viewBox="0 0 300 14"
+                  fill="none"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M4 10 Q 150 -4 296 8"
+                    stroke="var(--color-accent)"
+                    strokeWidth="7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+            </h1>
+            <p className="enter-from-bottom mt-6 text-lg text-gray-600 sm:text-xl xl:text-2xl">
+              Powering the people behind
+            </p>
+          </div>
         </div>
         <Card className="enter-from-bottom relative w-full max-w-md shrink-0 overflow-hidden border-t-4 border-t-brand">
           <div className="bg-white px-6 pb-5 pt-8 text-center">
