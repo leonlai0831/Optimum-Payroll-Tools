@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Landmark, Save } from "lucide-react";
+import { Landmark, Save, Upload } from "lucide-react";
 import { Button, Card, Input, Select, Spinner } from "@/components/ui";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
@@ -29,6 +29,37 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
   const toast = useToast();
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function importFile(file: File) {
+    setBusy(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/coaches/payees/import", { method: "POST", body });
+      const d = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        created?: number;
+        updated?: number;
+        skipped?: { name: string; reason: string }[];
+      };
+      if (!res.ok) throw new Error(d.error || "Import failed");
+      const skippedNote = d.skipped?.length
+        ? ` · ${d.skipped.length} skipped (${d.skipped
+            .slice(0, 3)
+            .map((s) => s.name)
+            .join(", ")}${d.skipped.length > 3 ? ", …" : ""})`
+        : "";
+      toast.success(`Imported: ${d.created} new, ${d.updated} updated${skippedNote}`);
+      setDrafts({});
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   const draftFor = (r: PayeeRow): Draft =>
     drafts[r.id] ?? { icNo: r.icNo, bankName: r.bankName, bankAccount: r.bankAccount };
@@ -99,10 +130,27 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
           Bank details for the monthly transfer file — freelancers from the directory only.
         </p>
         {canEdit && (
-          <Button onClick={saveAll} disabled={busy || dirtyIds.length === 0}>
-            {busy ? <Spinner /> : <Save className="h-4 w-4" />}
-            Save{dirtyIds.length > 0 ? ` ${dirtyIds.length} change(s)` : ""}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Import the operator's monthly Payment Summary workbook: every
+                payee becomes/updates a freelancer profile incl. bank details. */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void importFile(f);
+              }}
+            />
+            <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()}>
+              <Upload className="h-4 w-4" /> Import summary file
+            </Button>
+            <Button onClick={saveAll} disabled={busy || dirtyIds.length === 0}>
+              {busy ? <Spinner /> : <Save className="h-4 w-4" />}
+              Save{dirtyIds.length > 0 ? ` ${dirtyIds.length} change(s)` : ""}
+            </Button>
+          </div>
         )}
       </div>
 
