@@ -10,7 +10,7 @@ async function login(page: Page) {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page.getByRole("heading", { name: "Optimum Payroll Suite" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Optimum People Hub" })).toBeVisible();
 }
 
 test("uploading a KPI CSV parses, merges, and renders the results view", async ({ page }) => {

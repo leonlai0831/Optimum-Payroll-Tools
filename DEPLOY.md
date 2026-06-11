@@ -1,4 +1,4 @@
-# Deploying Optimum Payroll Suite
+# Deploying Optimum People Hub
 
 A step-by-step checklist for a working production deploy on **Vercel + Postgres (Neon)**.
 The app is **per-user** (email + password, roles); there is no shared password.

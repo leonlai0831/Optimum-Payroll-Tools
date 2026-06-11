@@ -98,7 +98,7 @@ export default function LoginPage() {
               />
             </div>
             <p className="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
-              Optimum Payroll Suite
+              Optimum People Hub
             </p>
           </div>
           <form onSubmit={submit} className="space-y-4 p-6">

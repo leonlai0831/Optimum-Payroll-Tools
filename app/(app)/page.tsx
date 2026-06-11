@@ -224,7 +224,7 @@ export default async function HubPage() {
             Welcome, {user.displayName.trim() || user.email.split("@")[0]}
           </p>
         )}
-        <h1 className="text-display mt-1 text-brand">Optimum Payroll Suite</h1>
+        <h1 className="text-display mt-1 text-brand">Optimum People Hub</h1>
         <p className="mt-2 text-body text-muted">Choose a tool to get started.</p>
         <CiWave className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20" />
       </section>
