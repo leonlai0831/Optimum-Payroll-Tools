@@ -17,6 +17,10 @@ type KeyedBand = CommissionConfig["bands"][number] & { _key: string };
 type EditConfig = Omit<CommissionConfig, "bands"> & { bands: KeyedBand[] };
 let bandKeySeq = 0;
 const nextBandKey = () => `band-${bandKeySeq++}`;
+const withBandKeys = (c: CommissionConfig): EditConfig => {
+  const clone = structuredClone(c);
+  return { ...clone, bands: clone.bands.map((b) => ({ ...b, _key: nextBandKey() })) };
+};
 
 export function CommissionSettingsForm({
   initial,
@@ -27,10 +31,7 @@ export function CommissionSettingsForm({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [cfg, setCfg] = useState<EditConfig>(() => {
-    const c = structuredClone(initial);
-    return { ...c, bands: c.bands.map((b) => ({ ...b, _key: nextBandKey() })) };
-  });
+  const [cfg, setCfg] = useState<EditConfig>(() => withBandKeys(initial));
   const [saving, setSaving] = useState(false);
 
   function updateBand(i: number, patch: Partial<CommissionConfig["bands"][number]>) {
@@ -115,7 +116,7 @@ export function CommissionSettingsForm({
             </p>
           </div>
           {canEdit && (
-            <Button variant="ghost" size="sm" onClick={() => setCfg(structuredClone(DEFAULT_COMMISSION_CONFIG))}>
+            <Button variant="ghost" size="sm" onClick={() => setCfg(withBandKeys(DEFAULT_COMMISSION_CONFIG))}>
               <RotateCcw className="h-3.5 w-3.5" /> Defaults
             </Button>
           )}
