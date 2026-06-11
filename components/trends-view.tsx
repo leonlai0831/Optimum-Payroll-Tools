@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -52,6 +52,28 @@ export function TrendsView({ data }: { data: TrendData }) {
     }
   }
 
+  // Memoized: rebuilding this (nested find per period × coach) on every render
+  // re-rendered the whole chart even when only unrelated state (AI narrative
+  // toggles) changed. Recompute only when the inputs actually change. Declared
+  // before the early return so the hook order stays stable (rules-of-hooks).
+  const chartData = useMemo(
+    () =>
+      data.periods.map((p) => {
+        const row: Record<string, string | number | null> = { period: p };
+        for (const name of selected) {
+          const coach = data.coaches.find((c) => c.name === name);
+          const pt = coach?.points.find((x) => x.period === p);
+          row[name] = pt
+            ? metric === "score"
+              ? Number(pt.score.toFixed(2))
+              : Math.round(pt.payout)
+            : null;
+        }
+        return row;
+      }),
+    [data, selected, metric],
+  );
+
   if (data.periods.length === 0) {
     return (
       <EmptyState
@@ -61,16 +83,6 @@ export function TrendsView({ data }: { data: TrendData }) {
       />
     );
   }
-
-  const chartData = data.periods.map((p) => {
-    const row: Record<string, string | number | null> = { period: p };
-    for (const name of selected) {
-      const coach = data.coaches.find((c) => c.name === name);
-      const pt = coach?.points.find((x) => x.period === p);
-      row[name] = pt ? (metric === "score" ? Number(pt.score.toFixed(2)) : Math.round(pt.payout)) : null;
-    }
-    return row;
-  });
 
   function toggle(name: string) {
     setSelected((prev) =>

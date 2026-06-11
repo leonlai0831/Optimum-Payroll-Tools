@@ -38,7 +38,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `${to} is locked. Unlock it first.` }, { status: 409 });
   }
 
-  const { moved, clashes } = await moveAllowancePeriod(from, to);
+  const { moved, clashes, locked } = await moveAllowancePeriod(from, to);
+  if (locked) {
+    // A lock landed between the optimistic pre-check above and the move's locked
+    // transaction — surface the same 409.
+    const p = locked === "from" ? from : to;
+    return NextResponse.json({ error: `${p} is locked. Unlock it first.` }, { status: 409 });
+  }
   if (clashes.length > 0) {
     const names = clashes.slice(0, 8).join(", ") + (clashes.length > 8 ? "…" : "");
     return NextResponse.json(

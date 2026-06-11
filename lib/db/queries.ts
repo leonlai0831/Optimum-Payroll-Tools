@@ -2176,14 +2176,48 @@ export async function getAllowancePeriodClashes(from: string, to: string): Promi
 export async function moveAllowancePeriod(
   from: string,
   to: string,
-): Promise<{ moved: number; clashes: string[] }> {
-  const clashes = await getAllowancePeriodClashes(from, to);
-  if (clashes.length > 0) return { moved: 0, clashes };
+): Promise<{ moved: number; clashes: string[]; locked?: "from" | "to" }> {
   const db = await getDb();
-  const moved = await countAllowanceRunsForPeriod(from);
-  await db.update(allowanceRuns).set({ periodLabel: to }).where(eq(allowanceRuns.periodLabel, from));
-  invalidateSingleton("allowance-trend");
-  return { moved, clashes: [] };
+  const result = await db.transaction(async (tx) => {
+    // Lock both periods (lowest key first → no deadlock) on the same advisory key
+    // the save/lock paths use, so neither period can be locked, nor a record
+    // saved into `to`, between these checks and the relabel — the route's
+    // pre-checks are optimistic and racey on their own.
+    const [a, b] = [from, to].sort();
+    await lockPeriodAdvisory(tx, a);
+    if (b !== a) await lockPeriodAdvisory(tx, b);
+
+    // Authoritative lock re-check: refuse to move into or out of a locked month
+    // (the relabel would mutate a closed month's totals, bypassing the lock).
+    const lockedRows = await tx
+      .select({ periodLabel: allowancePeriodLocks.periodLabel })
+      .from(allowancePeriodLocks)
+      .where(inArray(allowancePeriodLocks.periodLabel, [from, to]));
+    const lockedSet = new Set(lockedRows.map((r) => r.periodLabel));
+    if (lockedSet.has(from)) return { moved: 0, clashes: [], locked: "from" as const };
+    if (lockedSet.has(to)) return { moved: 0, clashes: [], locked: "to" as const };
+
+    // Clash re-check inside the tx (no TOCTOU vs a concurrent save into `to`).
+    const fromRows = await tx
+      .select({ name: allowanceRuns.canonicalName })
+      .from(allowanceRuns)
+      .where(eq(allowanceRuns.periodLabel, from));
+    const toRows = await tx
+      .select({ name: allowanceRuns.canonicalName })
+      .from(allowanceRuns)
+      .where(eq(allowanceRuns.periodLabel, to));
+    const toNames = new Set(toRows.map((r) => r.name));
+    const clashes = [...new Set(fromRows.map((r) => r.name).filter((n) => toNames.has(n)))];
+    if (clashes.length > 0) return { moved: 0, clashes };
+
+    await tx
+      .update(allowanceRuns)
+      .set({ periodLabel: to })
+      .where(eq(allowanceRuns.periodLabel, from));
+    return { moved: fromRows.length, clashes: [] as string[] };
+  });
+  if (result.moved > 0) invalidateSingleton("allowance-trend");
+  return result;
 }
 
 /**

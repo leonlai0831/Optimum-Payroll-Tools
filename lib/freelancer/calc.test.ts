@@ -88,6 +88,33 @@ describe("commitmentFor (matrix edges)", () => {
     expect(result).toBe(0);
     expect(commitmentFor("T0", 45, result, cfg)).toBe(0.1);
   });
+
+  it("is order-independent: shuffled threshold rows still pick the right bonus", () => {
+    // The matrix is operator-editable; a row reorder (thresholds + their value
+    // rows moved together) must not change the looked-up bonus.
+    const shuffled = structuredClone(cfg);
+    shuffled.commitment = {
+      hourThresholds: [51, 0, 41, 31],
+      resultThresholds: [0, 0.7, 0.85],
+      values: [
+        [0.15, 0.2, 0.25], // 51
+        [0, 0, 0], // 0
+        [0.1, 0.15, 0.2], // 41
+        [0.05, 0.1, 0.15], // 31
+      ],
+    };
+    for (const [hours, result] of [
+      [30, 0.9],
+      [31, 0.9],
+      [40, 0.69],
+      [45, 0.85],
+      [200, 0.95],
+    ] as const) {
+      expect(commitmentFor("T1", hours, result, shuffled)).toBe(
+        commitmentFor("T1", hours, result, cfg),
+      );
+    }
+  });
 });
 
 describe("calcFreelancer (worked example from the operator's Excel)", () => {

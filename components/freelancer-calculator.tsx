@@ -44,6 +44,15 @@ const num = (v: string) => (v === "" ? 0 : Number(v) || 0);
 const isFreelancerPosition = (t: string | null): t is FreelancerPosition =>
   !!t && (FREELANCER_POSITIONS as readonly string[]).includes(t);
 
+// Center/extra rows carry a client-only stable key so React reconciles editable
+// rows by identity, not by array index — removing a middle row must not shift a
+// focused input (or its value) onto its neighbour. Stripped before the input is
+// computed/persisted (see the `input` builder). Unique-within-list is enough.
+type KeyedCenterRow = FreelancerCenterRow & { _key: string };
+type KeyedExtraItem = FreelancerExtraItem & { _key: string };
+let flRowKeySeq = 0;
+const nextFlKey = () => `fl-${flRowKeySeq++}`;
+
 export function FreelancerCalculator({
   config,
   centers,
@@ -69,8 +78,8 @@ export function FreelancerCalculator({
   // The month the work belongs to; "" = same as the payout period. Choosing
   // an earlier month files a late submission (补交) inside this batch.
   const [workPeriod, setWorkPeriod] = useState(initial?.input.workPeriod ?? "");
-  const [centerRows, setCenterRows] = useState<FreelancerCenterRow[]>(
-    initial?.input.centerRows ?? [],
+  const [centerRows, setCenterRows] = useState<KeyedCenterRow[]>(() =>
+    (initial?.input.centerRows ?? []).map((r) => ({ ...r, _key: nextFlKey() })),
   );
   const [blackCount, setBlackCount] = useState(initial?.input.blackCount ?? 0);
   const [colourCount, setColourCount] = useState(initial?.input.colourCount ?? 0);
@@ -157,7 +166,9 @@ export function FreelancerCalculator({
     setKpiNote(null);
     dirty();
   }
-  const [extras, setExtras] = useState<FreelancerExtraItem[]>(initial?.input.extras ?? []);
+  const [extras, setExtras] = useState<KeyedExtraItem[]>(() =>
+    (initial?.input.extras ?? []).map((e) => ({ ...e, _key: nextFlKey() })),
+  );
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
 
@@ -172,12 +183,23 @@ export function FreelancerCalculator({
     icNo: icNo.trim(),
     bankName: bankName.trim(),
     bankAccount: bankAccount.trim(),
-    centerRows,
+    // Strip the client-only _key so calc + persistence see plain rows (TS enforces
+    // the exact FreelancerCenterRow/FreelancerExtraItem shape here).
+    centerRows: centerRows.map(
+      (r): FreelancerCenterRow => ({
+        center: r.center,
+        replacedHours: r.replacedHours,
+        fixedHours: r.fixedHours,
+        absent: r.absent,
+      }),
+    ),
     blackCount,
     colourCount,
     kpiName: kpiName.trim() || null,
     workPeriod: workPeriod && workPeriod !== period ? workPeriod : null,
-    extras,
+    extras: extras.map(
+      (e): FreelancerExtraItem => ({ entity: e.entity, reason: e.reason, amount: e.amount }),
+    ),
   };
   const result = calcFreelancer(input, config);
   const hasResult = (RESULT_POSITIONS as readonly string[]).includes(position);
@@ -438,7 +460,7 @@ export function FreelancerCalculator({
             {centerRows.map((row, i) => {
               const payment = result.centerPayments[i];
               return (
-                <div key={i} className="grid grid-cols-12 items-center gap-2">
+                <div key={row._key} className="grid grid-cols-12 items-center gap-2">
                   <CenterSelect
                     className="col-span-6 py-1 text-xs sm:col-span-3"
                     centers={centers}
@@ -473,14 +495,15 @@ export function FreelancerCalculator({
                       {rateFor(position, row.center, config)}/h · {rm2(payment?.payment ?? 0)}
                     </span>
                     <button
-                      className="text-gray-300 hover:text-red-500"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-red-400 hover:bg-red-50 hover:text-red-500 active:bg-red-100"
                       onClick={() => {
                         setCenterRows((r) => r.filter((_, idx) => idx !== i));
                         dirty();
                       }}
-                      title="remove"
+                      title="Remove center"
+                      aria-label="Remove center"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -494,7 +517,7 @@ export function FreelancerCalculator({
           onClick={() => {
             setCenterRows((r) => [
               ...r,
-              { center: "", replacedHours: 0, fixedHours: 0, absent: false },
+              { center: "", replacedHours: 0, fixedHours: 0, absent: false, _key: nextFlKey() },
             ]);
             dirty();
           }}
@@ -612,7 +635,7 @@ export function FreelancerCalculator({
         {extras.length > 0 && (
           <div className="space-y-2">
             {extras.map((item, i) => (
-              <div key={i} className="grid grid-cols-12 items-center gap-2">
+              <div key={item._key} className="grid grid-cols-12 items-center gap-2">
                 <Select
                   className="col-span-4 py-1 text-xs sm:col-span-3"
                   value={item.entity}
@@ -639,14 +662,15 @@ export function FreelancerCalculator({
                   onChange={(e) => updateExtra(i, { amount: num(e.target.value) })}
                 />
                 <button
-                  className="col-span-2 text-gray-300 hover:text-red-500 sm:col-span-1"
+                  className="col-span-2 flex h-11 min-h-11 items-center justify-center rounded-md text-red-400 hover:bg-red-50 hover:text-red-500 active:bg-red-100 sm:col-span-1"
                   onClick={() => {
                     setExtras((r) => r.filter((_, idx) => idx !== i));
                     dirty();
                   }}
-                  title="remove"
+                  title="Remove item"
+                  aria-label="Remove item"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ))}
@@ -656,7 +680,10 @@ export function FreelancerCalculator({
           variant="outline"
           className="mt-3 px-3 py-1.5 text-xs"
           onClick={() => {
-            setExtras((r) => [...r, { entity: config.entities[0]?.key ?? "", reason: "", amount: 0 }]);
+            setExtras((r) => [
+              ...r,
+              { entity: config.entities[0]?.key ?? "", reason: "", amount: 0, _key: nextFlKey() },
+            ]);
             dirty();
           }}
         >
