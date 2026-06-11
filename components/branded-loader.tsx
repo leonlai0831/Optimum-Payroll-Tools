@@ -23,10 +23,15 @@ const FADE_MS = 300;
  * OUTSIDE Suspense: fallbacks just check in/out, and the host lets the
  * current cycle finish (sped up) before fading the overlay away.
  */
-/** `src` undefined = no explicit clip requested — the host falls back to the
- * brand of the page the navigation STARTED from (see LoaderOverlayHost). */
-type Snapshot = { active: number; src: string | undefined; label: string };
-let snapshot: Snapshot = { active: 0, src: undefined, label: DEFAULT_LABEL };
+/** `src` undefined = no explicit clip requested — the host falls back to
+ * `settledBrand`, the brand of the page the navigation STARTED from. */
+type Snapshot = {
+  active: number;
+  src: string | undefined;
+  label: string;
+  settledBrand: string;
+};
+let snapshot: Snapshot = { active: 0, src: undefined, label: DEFAULT_LABEL, settledBrand: "swim" };
 const listeners = new Set<() => void>();
 function emit(next: Partial<Snapshot>) {
   snapshot = { ...snapshot, ...next };
@@ -39,6 +44,14 @@ function subscribe(l: () => void) {
   };
 }
 const getSnapshot = () => snapshot;
+
+/** Record the brand of the page the user has settled on (no-op when
+ * unchanged). The host only calls this while idle AND fully hidden, so an
+ * unpinned fallback keeps playing the clip of the brand the navigation
+ * started from — even through the finish-the-cycle exit. */
+function recordSettledBrand(brand: string) {
+  if (snapshot.settledBrand !== brand) emit({ settledBrand: brand });
+}
 
 /**
  * The loading.tsx fallback. Visuals are drawn by LoaderOverlayHost; this just
@@ -75,16 +88,6 @@ export function LoaderOverlayHost({ brand }: { brand: string }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const active = snap.active > 0;
-  // The brand of the page the user is ON, frozen while a load is in flight so
-  // a fallback without an explicit clip shows where the navigation STARTED
-  // (gym module → Home plays the Fit clip). Read the store live: the
-  // fallback's begin() effect runs before this one in the same commit, so the
-  // origin never gets overwritten by the destination's brand.
-  const originBrandRef = useRef(brand);
-  useEffect(() => {
-    if (getSnapshot().active === 0) originBrandRef.current = brand;
-  });
-  const src = snap.src ?? (originBrandRef.current === "fit" ? FIT_SRC : DEFAULT_SRC);
   // "loading" is derived from the store; only the exit animation needs state.
   // The render-time adjustment (not an effect) arms "finishing" the moment the
   // last pending load checks out, so the overlay never flashes a stale phase.
@@ -95,6 +98,15 @@ export function LoaderOverlayHost({ brand }: { brand: string }) {
     if (!active) setExitPhase("finishing");
   }
   const phase: Phase = active ? "loading" : exitPhase;
+  // An unpinned fallback plays the clip of the brand the user navigated FROM
+  // (gym module → Home plays the Fit clip): the settled brand only advances
+  // below once the overlay is idle and fully hidden, so it still names the
+  // origin while a load is in flight or the exit animation is playing.
+  const src = snap.src ?? (snap.settledBrand === "fit" ? FIT_SRC : DEFAULT_SRC);
+
+  useEffect(() => {
+    if (getSnapshot().active === 0 && phase === "hidden") recordSettledBrand(brand);
+  });
 
   useEffect(() => {
     const video = videoRef.current;
