@@ -47,17 +47,33 @@ export default function LoginPage() {
     <div className="relative min-h-screen overflow-hidden">
       {/* The CI guide's own wave artwork anchors the page bottom (decoration only). */}
       <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
+      {/* The gym deck's racing-stripe band: full-bleed at the tagline's height;
+          the tagline block and the card sit on solid backgrounds and punch
+          through it (lg+ only — phones stack and need the room). */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-1/2 z-0 hidden -translate-y-1/2 flex-col gap-4 lg:flex"
+      >
+        <span className="h-3 bg-accent" />
+        <span className="h-3 bg-brand" />
+        <span className="h-3 bg-accent" />
+        <span className="h-3 bg-accent" />
+      </div>
       {/* Phones stack tagline-over-card; lg+ splits into tagline left, card right. */}
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
         <div className="max-w-xl text-center lg:flex-1 lg:text-left">
-          <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
-            Optimizing
-            <br className="hidden lg:block" /> Joy at Work
-          </h1>
-          <p className="enter-from-bottom mt-4 text-lg text-muted sm:text-xl xl:text-2xl">
-            Powering the people behind
-          </p>
+          {/* Shrink-wrapped solid backdrop so the text punches a clean gap in
+              the stripe band while the band stays visible on either side. */}
+          <div className="relative inline-block bg-background lg:px-6 lg:py-4">
+            <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
+              Optimizing
+              <br className="hidden lg:block" /> Joy at Work
+            </h1>
+            <p className="enter-from-bottom mt-4 text-lg text-muted sm:text-xl xl:text-2xl">
+              Powering the people behind
+            </p>
+          </div>
         </div>
         <Card className="relative w-full max-w-md shrink-0 overflow-hidden border-t-4 border-t-brand">
           <div className="bg-white px-6 pb-5 pt-8 text-center">
