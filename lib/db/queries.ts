@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
@@ -906,6 +906,7 @@ export async function deleteRun(id: number): Promise<void> {
 // ── KPI ingests (machine-pushed monthly data, staged for review) ─────────────
 
 export type KpiIngestStatus = KpiIngestRecord["status"];
+export type KpiIngestSource = KpiIngestRecord["source"];
 
 /** List-page projection: everything except the (potentially large) rows blob. */
 export interface KpiIngestSummary {
@@ -913,6 +914,7 @@ export interface KpiIngestSummary {
   periodLabel: string;
   label: string;
   status: KpiIngestStatus;
+  source: KpiIngestSource;
   rowCount: number;
   importedRunId: number | null;
   importedAt: Date | null;
@@ -955,6 +957,10 @@ export async function createKpiIngest(input: {
   periodLabel: string;
   label: string;
   rows: InstructorRow[];
+  /** How the delivery arrived; pre-source rows were all machine pushes. */
+  source?: KpiIngestSource;
+  /** Audit attribution for the supersede entries (manual uploads name the user). */
+  actor?: { id: number | null; email: string } | null;
 }): Promise<{ id: number; supersededIds: number[] }> {
   const db = await getDb();
   return db.transaction(async (tx) => {
@@ -968,7 +974,12 @@ export async function createKpiIngest(input: {
 
     const [row] = await tx
       .insert(kpiIngests)
-      .values({ periodLabel: input.periodLabel, label: input.label, rows: input.rows })
+      .values({
+        periodLabel: input.periodLabel,
+        label: input.label,
+        rows: input.rows,
+        source: input.source ?? "api",
+      })
       .returning({ id: kpiIngests.id });
 
     // Audit inside the transaction: a supersede and its trail commit (or roll
@@ -976,8 +987,8 @@ export async function createKpiIngest(input: {
     if (supersededIds.length > 0) {
       await tx.insert(auditLog).values(
         supersededIds.map((oldId) => ({
-          actorId: null,
-          actorEmail: "ingest-api",
+          actorId: input.actor?.id ?? null,
+          actorEmail: input.actor?.email ?? "ingest-api",
           action: "kpi_ingest.superseded",
           entity: "kpi_ingest",
           entityId: String(oldId),
@@ -998,6 +1009,7 @@ export async function listKpiIngests(): Promise<KpiIngestSummary[]> {
       periodLabel: kpiIngests.periodLabel,
       label: kpiIngests.label,
       status: kpiIngests.status,
+      source: kpiIngests.source,
       // Defensive: jsonb_array_length THROWS on a non-array, which would 500
       // the whole Uploads page over one malformed delivery — guard with
       // jsonb_typeof so a bad row renders as "0 rows" instead.
@@ -1026,16 +1038,19 @@ export async function getKpiIngest(id: number): Promise<KpiIngestRecord | undefi
 }
 
 /**
- * Replace a pending delivery's rows (owner edits before import). Returns false —
- * and writes nothing — once the delivery is no longer pending: an imported
- * delivery is the immutable record of what was received/used.
+ * Replace a delivery's rows (owner edits). Allowed for pending, imported AND
+ * discarded deliveries — the monthly database record stays correctable. Note an
+ * imported delivery's edits never touch the saved run (it snapshotted the rows
+ * at import time). Only a SUPERSEDED delivery is read-only: a newer push
+ * replaced it, so the newer delivery is the one to correct. Returns false —
+ * and writes nothing — for superseded (or missing) deliveries.
  */
 export async function updateKpiIngestRows(id: number, rows: InstructorRow[]): Promise<boolean> {
   const db = await getDb();
   const updated = await db
     .update(kpiIngests)
     .set({ rows, updatedAt: new Date() })
-    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+    .where(and(eq(kpiIngests.id, id), ne(kpiIngests.status, "superseded")))
     .returning({ id: kpiIngests.id });
   return updated.length > 0;
 }

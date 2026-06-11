@@ -125,28 +125,44 @@ management assessment (when that metric is enabled), or group/center hours (for 
 
 Groupings are editable in the UI (split / move accounts) before saving.
 
-## KPI ingestion (`/api/ingest/kpi`, `/kpi/ingests`)
+## Student Progress (`/progress`, `lib/ingest`)
 
-An external system can push the monthly KPI rows instead of a manual CSV upload:
-`POST /api/ingest/kpi` (`Authorization: Bearer <INGEST_API_KEY>`, constant-time compare in
-`lib/ingest/auth.ts`; 503 when the env var is unset, in-process per-IP rate limit, ~2 MB cap)
-accepts `{ periodLabel: "YYYY-MM", label?, rows }` with the **same flexible headers as the CSV
-upload** (normalized via `mapCsvRows`). The same endpoint also accepts a **raw CSV body**
-(`Content-Type: text/csv`, parsed in `lib/ingest/csv-body.ts`; `periodLabel` required + `label`
-optional as query params) with identical staging behavior. Pushed data is **STAGED** in `kpi_ingests`
-(`pending → imported | discarded | superseded` — never hard-deleted, rows stay viewable forever),
-audited as `kpi_ingest.received`; a **re-push for the same `periodLabel` atomically supersedes any
-still-pending earlier deliveries** (imported/discarded ones are never touched, each flip is audited
-as `kpi_ingest.superseded`, and the response reports `superseded: <count>`); a push for a period
-that is already **closed** — a finalized run exists for it, or a delivery for it was already
-imported — gets a `409 Conflict` before anything is staged, superseded, or audited (draft runs
-don't block; reopen the run to push a correction). Owners (`run_kpi`)
-review on `/kpi/ingests` (section tab "Uploads"):
-edit/add/delete rows while pending (PATCH `/api/kpi/ingests/[id]`, audited), discard (status
-flip), or "Load into calculator" → `/kpi?ingest=<id>` seeds the dashboard with the staged rows
-(same merge → compute → save flow; filename shows the ingest label). Saving threads `ingestId`
-through `POST /api/runs`, which marks the ingest `imported` + links `importedRunId`. The proxy
-exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route).
+The monthly student-data deliveries that feed the KPI calculator, extracted from the old KPI
+"Uploads" tab into a standalone module: launcher card "Student Progress" (swim brand), section
+tabs **Months** (`/progress`) + **Upload** (`/progress/upload`), both gated `run_kpi`; the old
+`/kpi/ingests(/:id)` paths 301-redirect to `/progress(/:id)` (`next.config.ts`). Two doors feed
+**one shared staging pipeline** (`stageKpiDelivery` in `lib/ingest/stage.ts`, locked by
+`stage.test.ts`):
+
+- **Machine push** — `POST /api/ingest/kpi` (`Authorization: Bearer <INGEST_API_KEY>`,
+  constant-time compare in `lib/ingest/auth.ts`; 503 when the env var is unset, in-process
+  per-IP rate limit, ~2 MB cap) accepts `{ periodLabel: "YYYY-MM", label?, rows }` with the
+  **same flexible headers as the CSV upload** (normalized via `mapCsvRows`). The same endpoint
+  also accepts a **raw CSV body** (`Content-Type: text/csv`, parsed in `lib/ingest/csv-body.ts`;
+  `periodLabel` required + `label` optional as query params) with identical staging behavior.
+  The proxy exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route).
+- **Manual upload** — `/progress/upload` (month picker + optional label + CSV parsed
+  client-side with PapaParse + `mapCsvRows`, preview before submit) posts
+  `{ periodLabel, label?, rows }` to `POST /api/progress/uploads`
+  (`requireCapability("run_kpi")`), which calls the same helper with source `manual`.
+
+Either way the data is **STAGED** in `kpi_ingests` (`pending → imported | discarded |
+superseded` — never hard-deleted, rows stay viewable forever) with a `source` column
+(`'api' | 'manual'`, shown as a badge), audited as `kpi_ingest.received`; a **re-delivery for
+the same `periodLabel` atomically supersedes any still-pending earlier deliveries**
+(imported/discarded ones are never touched, each flip is audited as `kpi_ingest.superseded`,
+and the response reports `superseded: <count>`); a delivery for a period that is already
+**closed** — a finalized run exists for it, or a delivery for it was already imported — gets a
+`409 Conflict` before anything is staged, superseded, or audited (draft runs don't block;
+reopen the run to push a correction). Owners (`run_kpi`) review on `/progress` (deliveries
+grouped by month, newest first, with status + source badges and row counts): edit/add/delete
+rows on **any non-superseded delivery** (PATCH `/api/kpi/ingests/[id]`, audited — pending,
+imported and discarded records stay correctable; editing an *imported* delivery shows a banner
+that the saved KPI run was computed from a snapshot and is NOT changed by these edits;
+superseded is read-only), discard (status flip, pending-only), or "Load into calculator" →
+`/kpi?ingest=<id>` seeds the dashboard with the staged rows (pending-only; same merge →
+compute → save flow; filename shows the ingest label). Saving threads `ingestId` through
+`POST /api/runs`, which marks the ingest `imported` + links `importedRunId`.
 
 ## Freelancer Payment (`lib/freelancer`, `/freelancer`)
 

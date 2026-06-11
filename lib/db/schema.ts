@@ -144,6 +144,10 @@ export const kpiIngests = pgTable("kpi_ingests", {
   /** Source filename / free-form note supplied by the sender. */
   label: text("label").default("").notNull(),
   rows: jsonb("rows").$type<InstructorRow[]>().notNull(),
+  // How the delivery arrived: "api" = bearer push to /api/ingest/kpi,
+  // "manual" = a logged-in upload on /progress/upload. Rows that predate the
+  // column were all machine pushes, so the migration backfills "api".
+  source: text("source").$type<"api" | "manual">().notNull(),
   // Plain text column with NO CHECK constraint (see migration 0029), so widening
   // this union ("superseded" was added later) is a types-only change — no migration.
   status: text("status")

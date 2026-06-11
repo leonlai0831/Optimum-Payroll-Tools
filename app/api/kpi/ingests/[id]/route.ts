@@ -12,10 +12,14 @@ import { hasInstructorHeader, mapCsvRows } from "@/lib/kpi/csv";
 export const dynamic = "force-dynamic";
 
 /**
- * Owner-side mutations on a staged KPI delivery, allowed only while it is
- * pending: PATCH replaces the rows (add/edit/delete happen client-side and the
- * full set is saved back); DELETE discards it — a status flip, never a hard
- * delete, so every delivery stays viewable forever.
+ * Owner-side mutations on a staged KPI delivery. PATCH replaces the rows
+ * (add/edit/delete happen client-side and the full set is saved back) on any
+ * NON-SUPERSEDED delivery — pending, imported and discarded records stay
+ * correctable as the monthly database of student data; a superseded delivery
+ * is read-only (a newer push replaced it — correct that one). Editing an
+ * imported delivery never changes the saved KPI run, which snapshotted the
+ * rows at import time. DELETE discards a pending delivery — a status flip,
+ * never a hard delete, so every delivery stays viewable forever.
  */
 
 export async function PATCH(req: Request, ctx: RouteContext<"/api/kpi/ingests/[id]">) {
@@ -26,9 +30,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/kpi/ingests/[i
   const ingestId = Number(id);
   const ingest = await getKpiIngest(ingestId);
   if (!ingest) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (ingest.status !== "pending") {
+  if (ingest.status === "superseded") {
     return NextResponse.json(
-      { error: `This delivery is ${ingest.status} and can no longer be edited.` },
+      { error: "This delivery was superseded by a newer push and can no longer be edited." },
       { status: 409 },
     );
   }
@@ -49,7 +53,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/kpi/ingests/[i
   const rows = mapCsvRows(body.rows as Record<string, unknown>[]);
   const updated = await updateKpiIngestRows(ingestId, rows);
   if (!updated) {
-    return NextResponse.json({ error: "This delivery is no longer pending." }, { status: 409 });
+    return NextResponse.json({ error: "This delivery can no longer be edited." }, { status: 409 });
   }
   if (actor) {
     await recordAudit({

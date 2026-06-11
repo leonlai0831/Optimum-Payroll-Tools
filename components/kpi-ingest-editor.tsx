@@ -12,9 +12,11 @@ import {
   Save,
   Search,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
-import { Badge, Button, Card, Spinner } from "@/components/ui";
+import { Button, Card, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
+import { IngestSourceBadge, IngestStatusBadge } from "@/components/ingest-badges";
 import type { InstructorRow } from "@/lib/kpi/types";
 import {
   filterGridRows,
@@ -32,6 +34,7 @@ export interface IngestDetail {
   periodLabel: string;
   label: string;
   status: "pending" | "imported" | "discarded" | "superseded";
+  source: "api" | "manual";
   rows: InstructorRow[];
   importedRunId: number | null;
   importedAt: string | null;
@@ -181,12 +184,16 @@ const GridRow = memo(function GridRow({
 });
 
 /**
- * Staged-delivery review screen as an Excel-like spreadsheet grid: ONE push per
+ * Delivery review screen as an Excel-like spreadsheet grid: ONE delivery per
  * month carries hundreds of instructor rows, so density beats cards here. Edit
  * cells in place, delete/add rows, filter and sort the view — all local until
- * "Save changes" PATCHes the full row set back. "Load into calculator"
+ * "Save changes" PATCHes the full row set back. Any NON-SUPERSEDED delivery is
+ * editable — pending, imported and discarded records stay correctable as the
+ * month's database (editing an imported one never changes the saved KPI run,
+ * which snapshotted the rows at import time — a banner says so). Loading into
+ * the calculator and discarding stay pending-only; "Load into calculator"
  * auto-saves any pending edits first, so what the calculator scores is always
- * exactly what this page shows. Read-only once the delivery is no longer pending.
+ * exactly what this page shows. Superseded deliveries render read-only.
  *
  * EXCEPTION to the repo's cards-on-mobile rule: the owner explicitly accepts a
  * horizontally scrollable grid on phones for this power surface — hundreds of
@@ -196,7 +203,8 @@ const GridRow = memo(function GridRow({
 export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
   const router = useRouter();
   const toast = useToast();
-  const editable = ingest.status === "pending";
+  const editable = ingest.status !== "superseded";
+  const pending = ingest.status === "pending";
 
   const [rows, setRows] = useState<IngestGridRow[]>(() => toGridRows(ingest.rows));
   // Mirror of `rows` for synchronous reads in event handlers (cell commits and
@@ -356,24 +364,12 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
       <Card className="p-4">
         <h1 className="flex flex-wrap items-center gap-2 text-lg font-bold text-gray-900">
           {ingest.periodLabel}
-          {ingest.status === "pending" && (
-            <Badge className="border-amber-300 bg-amber-100 text-amber-800">Pending</Badge>
-          )}
-          {ingest.status === "imported" && (
-            <Badge className="border-green-300 bg-green-100 text-green-800">Imported</Badge>
-          )}
-          {ingest.status === "discarded" && (
-            <Badge className="border-gray-300 bg-gray-100 text-gray-600">Discarded</Badge>
-          )}
-          {ingest.status === "superseded" && (
-            <Badge className="border-gray-200 bg-gray-50 text-gray-400 line-through decoration-gray-400">
-              Superseded
-            </Badge>
-          )}
+          <IngestStatusBadge status={ingest.status} />
+          <IngestSourceBadge source={ingest.source} />
         </h1>
         <p className="mt-0.5 text-xs text-gray-500">
-          {ingest.label || "API upload"} · {rows.length} rows · received{" "}
-          {new Date(ingest.receivedAt).toLocaleString()}
+          {ingest.label || (ingest.source === "manual" ? "Manual upload" : "API upload")} ·{" "}
+          {rows.length} rows · received {new Date(ingest.receivedAt).toLocaleString()}
         </p>
         {ingest.status === "imported" && (
           <p className="mt-1 text-sm text-green-700">
@@ -390,16 +386,33 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
         )}
         {ingest.status === "discarded" && (
           <p className="mt-1 text-sm text-gray-500">
-            This delivery was discarded — kept for the record, it can no longer be loaded.
+            This delivery was discarded — kept (and still correctable) for the record, it can no
+            longer be loaded into the calculator.
           </p>
         )}
         {ingest.status === "superseded" && (
           <p className="mt-1 text-sm text-gray-500">
-            This delivery was superseded by a newer push for the same month — kept for the
-            record, it can no longer be loaded.
+            This delivery was superseded by a newer push for the same month — kept read-only for
+            the record, it can no longer be edited or loaded.
           </p>
         )}
       </Card>
+
+      {/* Editing an imported month corrects the database record ONLY — the saved
+          KPI run was computed from a snapshot of these rows at import time. */}
+      {ingest.status === "imported" && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <span className="font-semibold">
+              Edits here do not change the saved KPI run for {ingest.periodLabel}.
+            </span>{" "}
+            The run was computed from a snapshot taken when this delivery was imported — saving
+            changes only corrects this stored month&apos;s student data. To recompute the bonus,
+            reopen the run in KPI History.
+          </p>
+        </div>
+      )}
 
       {/* The spreadsheet grid. */}
       <Card className="overflow-hidden">
@@ -489,7 +502,9 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
         </div>
       </Card>
 
-      {/* Sticky save bar (pending only): counts + the three actions. */}
+      {/* Sticky save bar (any editable status): counts + the actions. Load +
+          Discard stay pending-only — an imported month already became a run and
+          a discarded one was deliberately dropped. */}
       {editable && (
         <div className="sticky bottom-2 z-30">
           <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 shadow-lg">
@@ -502,12 +517,16 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
               <Button variant="outline" onClick={onSave} disabled={busy !== null || !dirty}>
                 {busy === "save" ? <Spinner /> : <Save className="h-4 w-4" />} Save changes
               </Button>
-              <Button onClick={onLoad} disabled={busy !== null}>
-                {busy === "load" ? <Spinner /> : <Calculator className="h-4 w-4" />} Load into calculator
-              </Button>
-              <Button variant="danger" onClick={onDiscard} disabled={busy !== null}>
-                {busy === "discard" ? <Spinner /> : <Trash2 className="h-4 w-4" />} Discard
-              </Button>
+              {pending && (
+                <>
+                  <Button onClick={onLoad} disabled={busy !== null}>
+                    {busy === "load" ? <Spinner /> : <Calculator className="h-4 w-4" />} Load into calculator
+                  </Button>
+                  <Button variant="danger" onClick={onDiscard} disabled={busy !== null}>
+                    {busy === "discard" ? <Spinner /> : <Trash2 className="h-4 w-4" />} Discard
+                  </Button>
+                </>
+              )}
             </div>
           </Card>
         </div>

@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Calculator,
+  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   Dumbbell,
   History,
   Home,
-  Inbox,
   Layers,
   Landmark,
   LayoutDashboard,
@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Upload,
   UserCog,
   Users,
   type LucideIcon,
@@ -38,7 +39,15 @@ type SectionItem = {
 type SectionConfig = { title: string; items: SectionItem[] };
 
 const NAVS: Record<
-  "allowance" | "freelancer" | "kpi" | "staff" | "commission" | "assessment" | "lesson" | "system",
+  | "allowance"
+  | "freelancer"
+  | "kpi"
+  | "progress"
+  | "staff"
+  | "commission"
+  | "assessment"
+  | "lesson"
+  | "system",
   SectionConfig
 > = {
   assessment: {
@@ -78,11 +87,17 @@ const NAVS: Record<
     title: "Instructor KPI Bonus",
     items: [
       { href: "/kpi", label: "Calculator", icon: LayoutDashboard, exact: true },
-      { href: "/kpi/ingests", label: "Uploads", icon: Inbox, requires: { cap: "run_kpi" } },
       { href: "/kpi/links", label: "Links", icon: Link2, requires: { cap: "swim_view_staff" } },
       { href: "/kpi/history", label: "History", icon: History },
       { href: "/kpi/trends", label: "Trends", icon: BarChart3 },
       { href: "/kpi/settings", label: "Settings", icon: Settings },
+    ],
+  },
+  progress: {
+    title: "Student Progress",
+    items: [
+      { href: "/progress", label: "Months", icon: CalendarDays, exact: true, requires: { cap: "run_kpi" } },
+      { href: "/progress/upload", label: "Upload", icon: Upload, requires: { cap: "run_kpi" } },
     ],
   },
   staff: {
