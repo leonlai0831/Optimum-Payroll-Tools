@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
+import { BrandStripes } from "@/components/brand-stripes";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,6 +41,8 @@ export default function LoginPage() {
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
         <div className="max-w-xl text-center lg:flex-1 lg:text-left">
+          {/* The gym deck's racing stripes, entering with the headline. */}
+          <BrandStripes className="enter-from-top mx-auto mb-7 w-36 sm:w-44 lg:mx-0" />
           <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
             Optimizing
             <br className="hidden lg:block" /> Joy at Work
