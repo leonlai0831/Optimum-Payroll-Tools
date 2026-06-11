@@ -1,13 +1,17 @@
 @AGENTS.md
 
-# Optimum Swim School — KPI & Bonus Dashboard
+# Optimum People Hub (formerly the KPI & Bonus Dashboard)
 
-A deployable Next.js rebuild of the original single-file `KPI_Calculator_v11.1.html`
+A multi-module staff-operations suite for Optimum Swim School / Optimum Fit —
+launcher + per-brand modules: Staff Allowance, **Freelancer Payment**, Instructor
+KPI Bonus, **Student Progress**, Workforce (directory + Payees), Instructor
+Assessment, Lesson Plan, Staff Earnings (Fit), and System administration. It grew
+out of a deployable Next.js rebuild of the original single-file `KPI_Calculator_v11.1.html`
 (vanilla JS + CDN libs). It uploads a monthly tutor-KPI CSV, AI-merges instructor account
 names that belong to the same coach, computes KPI scores + bonus payout, shows a leaderboard
 with per-coach detail, saves each month to a cloud database, and adds month-over-month trends,
-editable scoring settings, and real Claude analysis. The whole app sits behind one shared
-password.
+editable scoring settings, and real Claude analysis. Auth is per-user accounts with
+roles + a capability matrix (see "Auth"); the original shared password is long gone.
 
 > This file documents the project as built. It originated as a proposed rebuild plan; where
 > the implementation diverged from that plan, this file reflects **the code**, not the proposal
@@ -40,6 +44,11 @@ hardcoded "AI analysis" template — into a maintainable app that:
 - **Vitest** — locks the KPI engine + DB queries
 
 ## App structure
+
+> Historical sketch of the ORIGINAL core only — the suite now also has
+> `/allowance`, `/freelancer`, `/progress`, `/staff`, `/assessment`,
+> `/lesson-plans`, `/commission`, `/marketing` and `/system` sections, each
+> documented in its own chapter below.
 
 ```
 app/
@@ -203,6 +212,25 @@ records merge, late submissions keep their own Month-labelled row). Run routes g
 supervisor by default); the section gates the "swim" category like the other swim
 surfaces.
 
+**Student result ← KPI data**: the calculator binds a freelancer's black/colour
+counts to an instructor account in the WORK month's KPI data (`input.kpiName`;
+`GET /api/freelancer/kpi-result?period=&q=|&name=` reads the period's saved KPI
+run, falling back to the latest pending ingest, aggregated by `getCleanName`).
+The binding carries over via the latest run; counts stay editable; month P's
+data arrives on the 1st of P+1 (the UI says so when empty). **CC bonus
+semantics are an assumption awaiting the operator's confirmation**: hours-based
+commitment applies, student result does not (like PA/T0).
+
+**Payees (`/staff/payees`, Workforce tab)**: bulk entry of freelancer payee
+details (IC / bank from `MALAYSIAN_BANKS` with live bank-code / account) with
+search + sortable columns; one Save bulk-writes changed rows
+(`PUT /api/coaches/payees`, freelancers only). **"Import summary file"** uploads
+the operator's monthly Payment Summary xlsx (`lib/freelancer/import.ts`,
+`POST /api/coaches/payees/import`): every payee across the entity sections
+becomes/updates a freelancer profile — deduped, idempotent, non-freelancer name
+collisions skipped + reported; the parser normalizes the file's real quirks
+(swapped bank/account cells, MBB/RHB/ABMB shorthand, account junk, footers).
+
 **Roster scoping (`lib/staff/roster.ts`, `rosterCoachesFor`)**: pay modules are
 exclusive by employment type — Freelancer Payment searches ONLY
 `employmentType === "freelancer"`; Allowance and KPI (links page, dashboard via
@@ -236,6 +264,23 @@ anti-zoom). The CI guide's footer wave is traced 1:1 into
 `components/ci-wave.tsx` (launcher hero + login). Brand skins still come from
 `data-brand` CSS variables. Every legacy side-scroll table has been converted to
 `MobileCards`/`DesktopTable` — new data views must ship both layouts.
+
+**Racing-stripe system (lg+ only; phones never render it)**: the gym deck's
+four-bar motif (yellow/yellow/BLUE/yellow, blue third) runs as SVG dash-snakes
+along paths with deck-style concentric corners. Login
+(`components/login-stripe-band.tsx`): band enters from the left on the hero's
+beat, rests pointing at the sign-in card behind a chevron arrow
+(`components/stripe-arrow.tsx`), and on success EXTENDS — under the card, bend
+up, out the top — while the screen camera-pans (login drops away,
+`ArrivalSlide` descends the launcher). Launcher
+(`components/hub-stripe-band.tsx`): a PERMANENT ribbon behind the content
+(-z-10) draws itself in on every visit after the loading overlay clears. Both
+bands share `stripeLegsMidX` so the cut is continuous, and their runs use the
+**Web Animations API** with keyframe offsets computed from real segment lengths
+(constant speed through bends — CSS keyframes' static percentages stutter);
+reduced-motion is handled explicitly (WAAPI ignores the global CSS kill rule).
+The login→launcher handshake lives in `lib/arrival.ts` (sessionStorage; also
+stands the loading clip down for that navigation).
 
 ## Data model (Drizzle / Postgres)
 
