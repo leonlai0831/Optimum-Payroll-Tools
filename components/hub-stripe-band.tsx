@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { clearArrival, hasArrival } from "@/lib/arrival";
+import { useLoaderOverlayUp } from "@/components/branded-loader";
 import {
   STRIPE_ARROW_W,
   StripeArrowPlate,
@@ -51,6 +52,10 @@ type Geom = {
 export function HubStripeBand() {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<{ geom: Geom; animate: boolean } | null>(null);
+  // Returning from another module, the loading overlay plays its
+  // finish-the-cycle exit ON TOP of this page — hold the draw-in (paths
+  // parked undrawn) until the overlay is fully gone, then run it.
+  const overlayUp = useLoaderOverlayUp();
 
   useEffect(() => {
     let raf = 0;
@@ -97,6 +102,7 @@ export function HubStripeBand() {
 
   let body = null;
   if (state) {
+    const running = state.animate && !overlayUp;
     const { w, h, heroMid, legMidX, exitX } = state.geom;
     const rMid = INNER_R + 1.5 * STEP;
     // Shared arc center (concentric corner): legs at cx + r, runs at cy - r.
@@ -125,7 +131,7 @@ export function HubStripeBand() {
               d={s.d}
               stroke={s.color}
               strokeWidth={BAR_H}
-              className={state.animate ? "hub-flow-run" : undefined}
+              className={running ? "hub-flow-run" : undefined}
               style={
                 state.animate
                   ? ({
@@ -134,7 +140,10 @@ export function HubStripeBand() {
                       // bottom anchor; the filled end state IS the ribbon.
                       // The intermediate stops (segment boundaries) keep all
                       // four heads level outside the bend — see globals.css.
+                      // The inline offset parks the path UNDRAWN while the
+                      // run class is withheld (loading overlay still up).
                       strokeDasharray: `${s.len}`,
+                      strokeDashoffset: s.len,
                       "--dash-from": `${s.len}px`,
                       "--dash-leg": `${s.len - legLen}px`, // head at the corner
                       "--dash-arc": `${run}px`, // head out of the bend
@@ -145,7 +154,7 @@ export function HubStripeBand() {
             />
           ))}
         </svg>
-        {state.animate && (
+        {running && (
           <div
             className="hub-arrow-run absolute left-0 top-0"
             style={
