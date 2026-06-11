@@ -68,9 +68,9 @@ export function BrandedLoader({
   src?: string;
 }) {
   useEffect(() => {
-    // During the login → dashboard handoff the ArrivalCurtain already covers
-    // the screen — stand down so the logo clip doesn't play underneath it
-    // and then linger over the reveal (lib/arrival.ts).
+    // During the login → dashboard handoff, stand down: the launcher's
+    // stripe ribbon draw-in is the arrival moment, and the logo clip's
+    // finish-the-cycle exit would linger over it (lib/arrival.ts).
     if (hasArrival()) return;
     emit({ active: snapshot.active + 1, src, label });
     return () => emit({ active: Math.max(0, snapshot.active - 1) });

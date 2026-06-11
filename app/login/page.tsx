@@ -9,9 +9,8 @@ import { LoginStripeBand } from "@/components/login-stripe-band";
 import { markArrival } from "@/lib/arrival";
 
 /** The stripe-band exit (1.1s: under the card, around the bend, out the top)
- * and the curtain rising behind it (0.75s delay + 0.5s) must both finish
- * inside this before the swap. */
-const NAVIGATE_AFTER_MS = 1300;
+ * must finish inside this before the swap. */
+const NAVIGATE_AFTER_MS = 1150;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,10 +36,10 @@ export default function LoginPage() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      // Success flourish first: the stripes run out the top, the curtain
-      // rises after them, THEN we navigate — the dashboard side picks the
-      // sequence up via the arrival mark (curtain reveal + arrival band).
-      // Loading stays on so the form can't be re-submitted.
+      // Success flourish first: the stripes run out the top, THEN we
+      // navigate — the dashboard picks the sequence up via the arrival mark
+      // (its permanent ribbon draws itself in). Loading stays on so the form
+      // can't be re-submitted.
       markArrival();
       setSweeping(true);
       setTimeout(() => {
@@ -196,12 +195,6 @@ export default function LoginPage() {
           </form>
         </Card>
       </div>
-      {/* Sign-in success: a paper curtain rises behind the departing stripes
-          and covers the screen before the router swaps; the dashboard's
-          ArrivalCurtain holds it up and lifts it once the launcher paints. */}
-      {sweeping && (
-        <div aria-hidden className="curtain-cover pointer-events-none fixed inset-0 z-50 bg-background" />
-      )}
     </div>
   );
 }

@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Nav } from "@/components/nav";
 import { LoaderOverlayHost } from "@/components/branded-loader";
-import { ArrivalCurtain } from "@/components/arrival-curtain";
 import type { Role, ToolCategory } from "@/lib/auth/types";
 
 /**
@@ -47,9 +46,6 @@ export function BrandShell({
           Inside the data-brand scope so the label adopts the brand color; the
           brand prop lets origin-based fallbacks pick the right clip. */}
       <LoaderOverlayHost brand={brand} />
-      {/* Covers the first frames after the login → dashboard handoff until
-          the launcher signals it has painted (lib/arrival.ts). */}
-      <ArrivalCurtain />
     </div>
   );
 }
