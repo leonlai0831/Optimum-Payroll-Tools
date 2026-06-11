@@ -13,12 +13,12 @@ export const STRIPE_ARROW_TIP = 76;
 /**
  * Shared x (viewport coords) for the band's upward legs' MIDDLE line, used by
  * BOTH the login exit and the dashboard ribbon so the two halves of the
- * login → dashboard handoff line up and the cut reads continuous. Tracks the
- * login card's right side on width-bound viewports, hugs the right edge on
- * very wide ones, and never pushes the outermost leg off-screen.
+ * login → dashboard handoff line up and the cut reads continuous. Hugs the
+ * viewport's right side (outermost leg edge lands ~88px in from the edge);
+ * on narrower lg screens the login bend simply starts under the card.
  */
 export function stripeLegsMidX(vw: number): number {
-  return Math.min(Math.max(vw / 2 + 602, vw - 220), vw - 86);
+  return vw - 150;
 }
 
 export function StripeArrowPlate({ className }: { className?: string }) {

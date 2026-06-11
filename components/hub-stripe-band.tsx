@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { clearArrival, hasArrival } from "@/lib/arrival";
 import { useLoaderOverlayUp } from "@/components/branded-loader";
-import {
-  STRIPE_ARROW_W,
-  StripeArrowPlate,
-  stripeLegsMidX,
-} from "@/components/stripe-arrow";
+import { StripeArrowPlate, stripeLegsMidX } from "@/components/stripe-arrow";
 
 /**
  * The launcher's PERMANENT racing-stripe ribbon: rises from the page's bottom
@@ -39,11 +35,14 @@ const STRIPE_COLORS = [
 const INNER_R = 64; // innermost corner radius
 const EXIT_PAD = 240; // horizontal runs end this far past the viewport's left edge
 const BOTTOM_PAD = 140; // paths start this far below the page bottom (hides the arrow's start)
-const ARROW_LEAD = 96; // arrow anchor rides this far ahead of the band's heads
+/** Arrow anchor rides this far ahead of the band's heads — tight, so plate
+ * and heads turn the bend as one unit instead of the plate floating alone. */
+const ARROW_LEAD = 56;
 
 type Geom = {
-  w: number; // page-root width
-  h: number; // legs run to here: the content's bottom or the viewport's, whichever is lower
+  w: number; // page-root width (the svg viewBox MUST match the element box 1:1,
+  h: number; // or the browser scales the artwork — paths may overdraw it freely)
+  bottom: number; // legs start here: content bottom or viewport bottom, whichever is lower
   heroMid: number; // hero card's vertical middle, in page-root coords
   legMidX: number; // legs' middle line (shared with the login band), page-root coords
   exitX: number; // past the viewport's left edge, in page-root coords
@@ -72,10 +71,12 @@ export function HubStripeBand() {
         animate,
         geom: {
           w: b.width,
-          // The ribbon runs the FULL height: down to the content's bottom
-          // (it lengthens with the page as the launcher grows / scrolls),
-          // and at least to the viewport's bottom on short pages.
-          h: Math.max(b.height, window.innerHeight - b.top),
+          h: b.height,
+          // The ribbon runs the FULL height: to the content's bottom (it
+          // lengthens with the page as the launcher grows), and at least to
+          // the viewport's bottom on short pages. Drawn as path overdraw, NOT
+          // baked into the viewBox — the viewBox must equal the element box.
+          bottom: Math.max(b.height, window.innerHeight - b.top),
           heroMid: hr.top + hr.height / 2 - b.top,
           // Same middle line as the login band's exit legs, so the
           // login → dashboard cut reads continuous.
@@ -103,12 +104,12 @@ export function HubStripeBand() {
   let body = null;
   if (state) {
     const running = state.animate && !overlayUp;
-    const { w, h, heroMid, legMidX, exitX } = state.geom;
+    const { w, h, bottom, heroMid, legMidX, exitX } = state.geom;
     const rMid = INNER_R + 1.5 * STEP;
     // Shared arc center (concentric corner): legs at cx + r, runs at cy - r.
     const cx = legMidX - rMid;
     const cy = heroMid + rMid;
-    const startY = h + BOTTOM_PAD;
+    const startY = bottom + BOTTOM_PAD;
     const legLen = startY - cy; // identical for every stripe
     const run = cx - exitX; // identical for every stripe
     const flowPath = (r: number) =>
@@ -180,7 +181,10 @@ export function HubStripeBand() {
     <div
       ref={boxRef}
       aria-hidden
-      className="pointer-events-none absolute inset-0 hidden lg:block"
+      // -z-10: the PERMANENT ribbon lives BEHIND the page content — tool
+      // cards and the hero paint over it (the hero still hides the bend);
+      // it shows in the margins, grid gaps and page bottom, deck-style.
+      className="pointer-events-none absolute inset-0 -z-10 hidden lg:block"
     >
       {body}
     </div>
