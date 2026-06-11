@@ -5,6 +5,7 @@ import { listAuditLog } from "@/lib/db/queries";
 import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
+import { formatDateTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export default async function AuditPage() {
                       {e.actorEmail || "—"}
                     </span>
                     <span className="shrink-0 text-xs text-gray-400">
-                      {new Date(e.createdAt).toLocaleString()}
+                      {formatDateTime(e.createdAt)}
                     </span>
                   </div>
                   <div>
@@ -67,7 +68,7 @@ export default async function AuditPage() {
                 {entries.map((e) => (
                   <tr key={e.id}>
                     <td className="whitespace-nowrap px-4 py-2 text-gray-500">
-                      {new Date(e.createdAt).toLocaleString()}
+                      {formatDateTime(e.createdAt)}
                     </td>
                     <td className="px-4 py-2 font-medium text-gray-800">
                       {e.actorEmail || "—"}

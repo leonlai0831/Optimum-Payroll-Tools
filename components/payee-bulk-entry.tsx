@@ -133,6 +133,9 @@ export function PayeeBulkEntry({ rows, canEdit }: { rows: PayeeRow[]; canEdit: b
       className={className}
       value={draftFor(r).bankName}
       disabled={!canEdit || busy}
+      // The mobile card wraps this in a <label>; the desktop table cell doesn't,
+      // so screen readers need an explicit name there.
+      aria-label={`Bank for ${r.canonicalName}`}
       onChange={(e) => setField(r, "bankName", e.target.value)}
     >
       <option value="">—</option>

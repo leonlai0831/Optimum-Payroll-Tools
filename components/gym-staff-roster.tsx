@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, Save, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { EmptyState } from "@/components/empty-state";
 import { SortTh, TableToolbar, includesText, useTableSort } from "@/components/table-controls";
@@ -60,6 +61,8 @@ export function GymStaffRoster({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState<number | null>(null);
+  // Pending delete awaiting confirmation (accessible ConfirmModal, not window.confirm).
+  const [confirmRemove, setConfirmRemove] = useState<GymStaffRecord | null>(null);
 
   // Let an unmatched-earner row pre-fill the *add* form (same scroll-to-top + focus as edit).
   useImperativeHandle(ref, () => ({
@@ -150,7 +153,7 @@ export function GymStaffRoster({
   }
 
   async function remove(m: GymStaffRecord) {
-    if (!confirm(`Delete ${m.name}? This cannot be undone.`)) return;
+    setConfirmRemove(null);
     setRemoving(m.id);
     try {
       const res = await fetch(`/api/gym/staff/${m.id}`, { method: "DELETE" });
@@ -330,7 +333,7 @@ export function GymStaffRoster({
                           <Pencil className="h-4 w-4" /> Edit
                         </button>
                         <button
-                          onClick={() => remove(m)}
+                          onClick={() => setConfirmRemove(m)}
                           disabled={removing === m.id}
                           className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 text-sm font-medium text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-50"
                         >
@@ -394,7 +397,7 @@ export function GymStaffRoster({
                               <button onClick={() => startEdit(m)} title="Edit" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-brand">
                                 <Pencil className="h-4 w-4" />
                               </button>
-                              <button onClick={() => remove(m)} disabled={removing === m.id} title="Delete" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50">
+                              <button onClick={() => setConfirmRemove(m)} disabled={removing === m.id} title="Delete" className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50">
                                 {removing === m.id ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                               </button>
                             </div>
@@ -409,6 +412,16 @@ export function GymStaffRoster({
           </>
         )}
       </Card>
+
+      <ConfirmModal
+        open={confirmRemove != null}
+        onClose={() => setConfirmRemove(null)}
+        onConfirm={() => confirmRemove && remove(confirmRemove)}
+        title={`Delete ${confirmRemove?.name ?? "this staff member"}?`}
+        message="This permanently removes the staff record. This cannot be undone."
+        confirmLabel="Delete"
+        busy={removing != null}
+      />
     </div>
   );
 }

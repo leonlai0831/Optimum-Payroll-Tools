@@ -8,7 +8,7 @@ import { SectionNav } from "@/components/section-nav";
 import { DeleteAllowanceRunButton } from "@/components/delete-allowance-run-button";
 import { ChangeRunMonthButton } from "@/components/change-run-month-button";
 import { Card } from "@/components/ui";
-import { rm } from "@/lib/utils";
+import { formatDateTime, rm } from "@/lib/utils";
 import type { TeachingHoursRow } from "@/lib/allowance/types";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export default async function AllowanceRunDetailPage({
           <h1 className="mt-1 text-lg font-bold text-gray-900">{run.canonicalName}</h1>
           <p className="text-xs text-gray-500">
             {run.periodLabel} · {run.tier} · {run.center || "—"} · saved{" "}
-            {new Date(run.createdAt).toLocaleString()}
+            {formatDateTime(run.createdAt)}
             {editedBy ? ` by ${editedBy}` : ""}
           </p>
         </div>

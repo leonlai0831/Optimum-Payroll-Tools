@@ -23,7 +23,7 @@ import {
 import { DeleteRunButton } from "@/components/delete-run-button";
 import type { RunSummary } from "@/lib/db/queries";
 import { makeCenterNormalizer } from "@/lib/allowance/centers";
-import { cn, rm } from "@/lib/utils";
+import { cn, formatDate, rm } from "@/lib/utils";
 
 /** Sortable fields for the saved-month rows (toolbar dropdown — the accordion has no column headers). */
 const ACCESSORS = {
@@ -180,7 +180,7 @@ export function KpiHistoryView({
                     {r.coachCount} coach(es) · total {rm(r.totalPayout)} · {r.filename}
                   </span>
                   <span className="text-[11px] text-gray-400">
-                    saved {new Date(r.createdAt).toLocaleDateString()}
+                    saved {formatDate(r.createdAt)}
                     {savers && <> · by {savers[r.id] ?? "—"}</>}
                   </span>
                 </button>
@@ -223,8 +223,8 @@ export function KpiHistoryView({
                     <MobileCards>
                       <div className="p-4">
                         <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 bg-gray-50/60">
-                          {r.coaches.map((c) => (
-                            <div key={c.canonicalName} className="px-3 py-2.5">
+                          {r.coaches.map((c, ci) => (
+                            <div key={`${c.canonicalName}|${ci}`} className="px-3 py-2.5">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="truncate text-sm font-medium text-gray-900">
                                   {c.canonicalName}
@@ -277,8 +277,8 @@ export function KpiHistoryView({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {r.coaches.map((c) => (
-                            <tr key={c.canonicalName}>
+                          {r.coaches.map((c, ci) => (
+                            <tr key={`${c.canonicalName}|${ci}`}>
                               <td className="px-2 py-1 font-medium text-gray-900">
                                 {c.canonicalName}
                                 {!c.isComplete && (

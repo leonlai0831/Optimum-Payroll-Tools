@@ -3,6 +3,7 @@ import Image from "next/image";
 import { CheckCircle2, XCircle, AlertTriangle, Info } from "lucide-react";
 import { Card } from "@/components/ui";
 import { getHealthReport, type HealthCheck } from "@/lib/health";
+import { formatDateTime } from "@/lib/utils";
 
 // Reflect live env + DB state on every request, never a build-time snapshot.
 export const dynamic = "force-dynamic";
@@ -88,7 +89,7 @@ export default async function SetupPage() {
               ← Back to sign in
             </Link>
             <span className="text-gray-400">
-              Checked {new Date(report.generatedAt).toLocaleString()}
+              Checked {formatDateTime(report.generatedAt)}
             </span>
           </div>
         </div>

@@ -7,6 +7,7 @@ import { Badge, Card } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { GRADE_LABEL } from "@/lib/assessment/types";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export default async function RecentAssessmentsPage() {
                     {a.coachName}
                   </Link>
                   <div className="mt-0.5 text-[11px] text-gray-400">
-                    {new Date(a.observedOn).toLocaleDateString()}
+                    {formatDate(a.observedOn)}
                     {a.assessor && <span> · {a.assessor}</span>}
                   </div>
                   <div className="text-[11px] text-gray-400">
@@ -90,7 +91,7 @@ export default async function RecentAssessmentsPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-2 text-gray-700">
-                    {new Date(a.observedOn).toLocaleDateString()}
+                    {formatDate(a.observedOn)}
                   </td>
                   <td className="px-4 py-2 text-gray-500">{a.assessor || "—"}</td>
                   <td className="px-4 py-2 text-gray-500">

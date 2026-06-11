@@ -11,7 +11,7 @@ import { Badge, Button, Card, Input, Label, Select, Spinner } from "@/components
 import { CenterSelect } from "@/components/center-select";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
-import { rm, splitCenters } from "@/lib/utils";
+import { formatDate, rm, splitCenters } from "@/lib/utils";
 import { nextPeriod } from "@/lib/allowance/period";
 import { MALAYSIAN_BANKS } from "@/lib/freelancer/banks";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
@@ -145,7 +145,7 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
           <div key={a.id} className="flex items-start justify-between gap-3 p-4">
             <div className="min-w-0">
               <div className="font-medium text-gray-900">
-                {new Date(a.observedOn).toLocaleDateString()}
+                {formatDate(a.observedOn)}
                 {i === 0 && (
                   <span className="ml-2 text-[10px] font-semibold uppercase text-indigo-500">
                     latest → KPI
@@ -191,7 +191,7 @@ function AssessmentsCard({ assessments }: { assessments: AssessmentView[] }) {
             {assessments.map((a, i) => (
               <tr key={a.id}>
                 <td className="px-4 py-2 text-gray-700">
-                  {new Date(a.observedOn).toLocaleDateString()}
+                  {formatDate(a.observedOn)}
                   {i === 0 && (
                     <span className="ml-2 text-[10px] font-semibold uppercase text-indigo-500">
                       latest → KPI

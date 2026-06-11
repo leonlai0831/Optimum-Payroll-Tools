@@ -4,7 +4,7 @@ import { ArrowLeft, Download } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCommissionRun } from "@/lib/db/queries";
 import { CommissionReport } from "@/components/commission-report";
-import { Button } from "@/components/ui";
+import { ButtonLink } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +26,9 @@ export default async function CommissionRunDetailPage({ params }: { params: Prom
           </Link>
           <h1 className="mt-0.5 text-lg font-bold text-gray-900">{run.periodLabel}</h1>
         </div>
-        <a href={`/api/commission/runs/${run.id}/export`}>
-          <Button variant="outline">
-            <Download className="h-4 w-4" /> Download Excel
-          </Button>
-        </a>
+        <ButtonLink variant="outline" href={`/api/commission/runs/${run.id}/export`}>
+          <Download className="h-4 w-4" /> Download Excel
+        </ButtonLink>
       </div>
       <CommissionReport monthLabel={run.periodLabel} summary={run.summary} />
     </>

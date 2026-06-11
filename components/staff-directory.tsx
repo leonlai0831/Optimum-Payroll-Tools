@@ -593,8 +593,9 @@ function AddEmployee({ centers }: { centers: string[] }) {
             reset();
             setOpen(false);
           }}
-          className="text-gray-400 hover:text-gray-600"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           title="Cancel"
+          aria-label="Cancel adding member"
         >
           <X className="h-4 w-4" />
         </button>

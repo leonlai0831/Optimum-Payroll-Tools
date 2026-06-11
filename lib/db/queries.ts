@@ -420,6 +420,47 @@ export async function updateCoach(
     .where(eq(coaches.id, id));
 }
 
+/**
+ * Bulk payee-details save (Workforce → Payees): one transaction, one SELECT for
+ * all target rows + one UPDATE per changed row — instead of the previous
+ * per-row getCoach/updateCoach pairs (2N sequential round-trips on Neon) with
+ * no atomicity (a mid-loop failure left a partially-applied save and skipped
+ * the audit). Field semantics mirror the single-profile PATCH: a string value
+ * is trimmed, "" clears; a missing field keeps the stored value. Freelancers
+ * only. Returns the canonical names actually updated.
+ */
+export async function bulkUpdatePayeeDetails(
+  rows: { id: number; icNo?: string; bankName?: string; bankAccount?: string }[],
+): Promise<string[]> {
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) return [];
+    const existing = await tx.select().from(coaches).where(inArray(coaches.id, ids));
+    const byId = new Map(existing.map((c) => [c.id, c]));
+    const saved: string[] = [];
+    for (const row of rows) {
+      const coach = byId.get(row.id);
+      // This surface manages freelancer payout details only.
+      if (!coach || coach.employmentType !== "freelancer") continue;
+      await tx
+        .update(coaches)
+        .set({
+          icNo: typeof row.icNo === "string" ? row.icNo.trim() || null : coach.icNo,
+          bankName: typeof row.bankName === "string" ? row.bankName.trim() || null : coach.bankName,
+          bankAccount:
+            typeof row.bankAccount === "string"
+              ? row.bankAccount.trim() || null
+              : coach.bankAccount,
+          updatedAt: new Date(),
+        })
+        .where(eq(coaches.id, coach.id));
+      saved.push(coach.canonicalName);
+    }
+    return saved;
+  });
+}
+
 /** Replace a coach's account aliases (used by the KPI link manager). */
 export async function updateCoachAliases(id: number, aliases: string[]): Promise<void> {
   const db = await getDb();

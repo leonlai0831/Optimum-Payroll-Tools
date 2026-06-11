@@ -11,7 +11,7 @@ import { RunReview } from "@/components/run-review";
 import { RunCoachTable } from "@/components/run-coach-table";
 import { RunDigest } from "@/components/run-digest";
 import { RunAudit } from "@/components/run-audit";
-import { rm } from "@/lib/utils";
+import { formatDateTime, rm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +55,7 @@ export default async function RunDetailPage({
           )}
         </h1>
         <p className="text-xs text-gray-500">
-          {run.filename} · saved {new Date(run.createdAt).toLocaleString()} · total{" "}
+          {run.filename} · saved {formatDateTime(run.createdAt)} · total{" "}
           {rm(totalPayout)}
         </p>
       </div>

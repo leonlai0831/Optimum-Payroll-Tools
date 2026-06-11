@@ -62,8 +62,8 @@ export function RunCoachTable({
     <Card className="overflow-hidden">
       {/* Mobile (< lg): card stack with an explicit "View breakdown" tap target. */}
       <MobileCards>
-        {coaches.map((c) => (
-          <div key={c.canonicalName} className="p-4">
+        {coaches.map((c, ci) => (
+          <div key={`${c.canonicalName}|${ci}`} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-semibold text-gray-900">
@@ -126,9 +126,9 @@ export function RunCoachTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {coaches.map((c) => (
+            {coaches.map((c, ci) => (
               <tr
-                key={c.canonicalName}
+                key={`${c.canonicalName}|${ci}`}
                 className="cursor-pointer hover:bg-indigo-50/40"
                 onClick={() => setActive(c)}
                 tabIndex={0}

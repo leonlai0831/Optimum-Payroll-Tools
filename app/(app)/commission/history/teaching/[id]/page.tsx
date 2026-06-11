@@ -4,7 +4,7 @@ import { ArrowLeft, Download } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getTeachingRun } from "@/lib/db/queries";
 import { TeachingReport } from "@/components/teaching-report";
-import { Button } from "@/components/ui";
+import { ButtonLink } from "@/components/ui";
 import { rm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +31,9 @@ export default async function TeachingRunDetailPage({ params }: { params: Promis
             {rm(run.configSnapshot.ptRate)}/attendee · group {rm(run.configSnapshot.groupRate)}/session
           </p>
         </div>
-        <a href={`/api/teaching/runs/${run.id}/export`}>
-          <Button variant="outline">
-            <Download className="h-4 w-4" /> Download Excel
-          </Button>
-        </a>
+        <ButtonLink variant="outline" href={`/api/teaching/runs/${run.id}/export`}>
+          <Download className="h-4 w-4" /> Download Excel
+        </ButtonLink>
       </div>
       <TeachingReport summary={run.summary} />
     </div>

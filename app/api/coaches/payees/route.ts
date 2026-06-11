@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
-import { getCoach, recordAudit, updateCoach } from "@/lib/db/queries";
+import { bulkUpdatePayeeDetails, recordAudit } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -26,21 +26,12 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Too many rows." }, { status: 400 });
   }
 
-  const savedNames: string[] = [];
-  for (const row of body.rows) {
-    const id = Number(row.id);
-    if (!Number.isInteger(id)) continue;
-    const coach = await getCoach(id);
-    // This surface manages freelancer payout details only.
-    if (!coach || coach.employmentType !== "freelancer") continue;
-    await updateCoach(id, {
-      icNo: typeof row.icNo === "string" ? row.icNo.trim() || null : coach.icNo,
-      bankName: typeof row.bankName === "string" ? row.bankName.trim() || null : coach.bankName,
-      bankAccount:
-        typeof row.bankAccount === "string" ? row.bankAccount.trim() || null : coach.bankAccount,
-    });
-    savedNames.push(coach.canonicalName);
-  }
+  // One transaction for the whole batch (atomic; no per-row round-trip pairs).
+  const savedNames = await bulkUpdatePayeeDetails(
+    body.rows
+      .map((row) => ({ ...row, id: Number(row.id) }))
+      .filter((row) => Number.isInteger(row.id)),
+  );
 
   await recordAudit({
     actorId: actor.id,

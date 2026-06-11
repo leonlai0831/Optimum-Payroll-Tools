@@ -8,7 +8,7 @@ import { SectionNav } from "@/components/section-nav";
 import { DeleteFreelancerRunButton } from "@/components/freelancer-history-view";
 import { Card } from "@/components/ui";
 import { bankCode } from "@/lib/freelancer/banks";
-import { rm2 } from "@/lib/utils";
+import { formatDateTime, rm2 } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export default async function FreelancerRunDetailPage({
           </Link>
           <h1 className="mt-1 text-lg font-bold text-gray-900">{run.canonicalName}</h1>
           <p className="text-xs text-gray-500">
-            {run.periodLabel} · {input.position} · saved {new Date(run.createdAt).toLocaleString()}
+            {run.periodLabel} · {input.position} · saved {formatDateTime(run.createdAt)}
           </p>
         </div>
         {canEdit && (

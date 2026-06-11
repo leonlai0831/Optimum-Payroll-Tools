@@ -43,6 +43,7 @@ export function TrendsView({ data }: { data: TrendData }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: coach.name, points: coach.points }),
       });
+      if (!res.ok) throw new Error(`trend-analysis ${res.status}`);
       const d = (await res.json()) as { text?: string };
       setTrendText(d.text ?? "");
     } catch {

@@ -16,6 +16,39 @@ export function rm2(n: number): string {
 }
 
 /**
+ * Deterministic date formatting for UI labels: a FIXED locale (en-MY, the
+ * operator's) and FIXED timezone (Asia/Kuala_Lumpur — Vercel functions are
+ * pinned to sin1 but their clock is UTC). Bare `toLocaleDateString()` picks the
+ * runtime's locale/TZ, so a server render and the client hydration could
+ * disagree (hydration warnings; dates flipping near midnight UTC). Accepts the
+ * Date | string | number that DB rows and serialized props actually carry.
+ */
+const DATE_FMT = new Intl.DateTimeFormat("en-MY", {
+  timeZone: "Asia/Kuala_Lumpur",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+const DATE_TIME_FMT = new Intl.DateTimeFormat("en-MY", {
+  timeZone: "Asia/Kuala_Lumpur",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** "11/06/2026" — hydration-safe date label. */
+export function formatDate(d: Date | string | number): string {
+  return DATE_FMT.format(new Date(d));
+}
+
+/** "11/06/2026, 09:30 pm" — hydration-safe date-time label. */
+export function formatDateTime(d: Date | string | number): string {
+  return DATE_TIME_FMT.format(new Date(d));
+}
+
+/**
  * Neutralize spreadsheet/CSV formula injection in user-derived TEXT values.
  * If a string starts with a character a spreadsheet would treat as a formula
  * (`=`, `+`, `-`, `@`) or a control character (tab, CR, LF) that can break out
