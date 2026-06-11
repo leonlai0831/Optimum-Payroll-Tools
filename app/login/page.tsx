@@ -65,7 +65,7 @@ export default function LoginPage() {
       <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
       {/* Quiet brand anchor in the page's top-left, the way the deck slides
           corner their logo. */}
-      <div className="absolute left-5 top-5 z-10 flex items-center gap-2.5 sm:left-8 sm:top-7">
+      <div className="absolute left-5 top-5 z-10 hidden items-center gap-2.5 sm:left-8 sm:top-7 lg:flex">
         <Image
           src="/logo-full.png"
           alt="Optimum Swim School"
@@ -90,7 +90,7 @@ export default function LoginPage() {
       {/* Phones stack tagline-over-card; lg+ splits into tagline left, card
           right — the whole cluster sits slightly above geometric center
           (optical center) so tall screens don't read bottom-heavy. */}
-      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:-translate-y-[4vh] lg:justify-between lg:gap-16 lg:px-12">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 px-4 py-10 pb-32 sm:pb-44 lg:flex-row lg:-translate-y-[4vh] lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water".
             Pushed well down on lg so it sits clear below the stripe band; the
             inner inline-block shrink-wraps to the headline so both headline
@@ -126,23 +126,23 @@ export default function LoginPage() {
         </div>
         <Card className="enter-from-bottom relative w-full max-w-md shrink-0 overflow-hidden border-t-4 border-t-brand">
           <div className="bg-white px-6 pb-5 pt-8 text-center">
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-2.5 sm:gap-3">
               <Image
                 src="/logo-full.png"
                 alt="Optimum Swim School"
                 width={1080}
                 height={350}
                 priority
-                className="h-16 w-auto"
+                className="h-12 w-auto sm:h-16"
               />
-              <span className="h-8 w-px bg-gray-200" aria-hidden />
+              <span className="h-6 w-px bg-gray-200 sm:h-8" aria-hidden />
               <Image
                 src="/logo-fit.png"
                 alt="Optimum Fit"
                 width={1600}
                 height={355}
                 priority
-                className="h-7 w-auto"
+                className="h-5 w-auto sm:h-7"
               />
             </div>
             <p className="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
