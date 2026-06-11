@@ -8,7 +8,7 @@ How to bring a second developer onto this repo to build a **bounded module**
 You own the **Marketing KPI** module. To get going:
 
 1. **Accept the GitHub invite** — check your email or github.com/notifications and
-   accept the collaborator invite to `leonlai0831/Optimum-Payroll-Tools`.
+   accept the collaborator invite to `leonlai0831/optimum-people-hub`.
 2. **Have a Claude plan** — Claude Pro or Max (Claude Code needs it).
 3. **Connect Claude Code** — open https://claude.ai/code → sign in → authorize the
    GitHub App → pick this repo. (Or the local CLI:

@@ -1,7 +1,9 @@
 # Optimum People Hub
 
-Optimum Swim School's payroll calculators. The post-login hub lists the tools — **Staff
-Allowance** and **Instructor KPI Bonus** today, with **Admin KPI Bonus** planned.
+Optimum Swim School & Optimum Fit's staff-operations suite. A post-login launcher fronts
+per-brand modules — **Staff Allowance**, **Freelancer Payment**, **Instructor KPI Bonus**,
+**Student Progress**, **Workforce** (directory + Payees), **Instructor Assessment**,
+**Lesson Plan**, **Staff Earnings** (Fit), and **System** administration.
 
 The **Instructor KPI Bonus** tool (documented below) is a rebuild of the original single-file
 `KPI_Calculator_v11.1.html` as a deployable Next.js app with cloud-saved monthly history,
