@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/empty-state";
 import { SectionNav } from "@/components/section-nav";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { IngestSourceBadge, IngestStatusBadge } from "@/components/ingest-badges";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export default async function ProgressMonthsPage() {
                           {i.label || `Delivery #${i.id}`}
                         </div>
                         <div className="mt-0.5 text-[11px] text-gray-400">
-                          received {new Date(i.receivedAt).toLocaleDateString()}
+                          received {formatDate(i.receivedAt)}
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -147,7 +148,7 @@ export default async function ProgressMonthsPage() {
                           <IngestStatusBadge status={i.status} />
                         </td>
                         <td className="px-4 py-2 text-gray-500">
-                          {new Date(i.receivedAt).toLocaleDateString()}
+                          {formatDate(i.receivedAt)}
                         </td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex items-center justify-end gap-3">

@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { getGymStaffEarnings, getGymStaffMember, listGymNotes } from "@/lib/db/queries";
 import { gymEmploymentLabel, gymPositionLabel } from "@/lib/gym/types";
-import { Button, Card } from "@/components/ui";
+import { ButtonLink, Card } from "@/components/ui";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { GymStaffDetailsCard } from "@/components/gym-staff-details-card";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
@@ -88,11 +88,13 @@ export default async function GymStaffProfilePage({ params }: { params: Promise<
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
           <span className="text-sm font-bold text-gray-900">Earnings</span>
           {report.months.length > 0 && (
-            <a href={`/api/commission/staff/${member.id}/export`}>
-              <Button variant="outline" className="px-2 py-1 text-xs">
-                <Download className="h-3.5 w-3.5" /> Excel
-              </Button>
-            </a>
+            <ButtonLink
+              variant="outline"
+              className="px-2 py-1 text-xs"
+              href={`/api/commission/staff/${member.id}/export`}
+            >
+              <Download className="h-3.5 w-3.5" /> Excel
+            </ButtonLink>
           )}
         </div>
 

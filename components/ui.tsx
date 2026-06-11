@@ -46,6 +46,45 @@ export function Button({
   );
 }
 
+/**
+ * An anchor styled exactly like a Button — for downloads/navigation that LOOK
+ * like buttons. Nesting a <button> inside <a>/<Link> is invalid HTML (interactive
+ * inside interactive) with inconsistent keyboard/AT activation; use this instead.
+ * For client-side navigation pass the className to <Link> directly or wrap with
+ * legacyBehavior-free <Link href=... className={...}> — this component renders a
+ * plain <a> (fine for API downloads and full-page loads).
+ */
+export function ButtonLink({
+  variant = "primary",
+  size = "md",
+  className,
+  ...props
+}: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}) {
+  return (
+    <a
+      className={cn(
+        "inline-flex cursor-pointer items-center justify-center font-semibold transition-colors duration-150",
+        buttonSizes[size],
+        buttonVariants[variant],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** Button classes for styling a next/link as a button (client-side navigation). */
+export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md") {
+  return cn(
+    "inline-flex cursor-pointer items-center justify-center font-semibold transition-colors duration-150",
+    buttonSizes[size],
+    buttonVariants[variant],
+  );
+}
+
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   // Hairline-defined surface on the warm canvas; elevation is barely-there.
   return (

@@ -32,6 +32,7 @@ export function AskData() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text }),
       });
+      if (!res.ok) throw new Error(`ask ${res.status}`);
       const d = (await res.json()) as { text?: string };
       setAnswer(d.text ?? "");
     } catch {

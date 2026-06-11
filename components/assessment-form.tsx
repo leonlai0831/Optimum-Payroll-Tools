@@ -7,7 +7,7 @@ import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/compone
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import {
   ASSESSMENT_FORM,
   CLASS_TYPES,
@@ -47,7 +47,7 @@ interface PlanOption {
 /** "6/10/2026 · Replacement · Medium · QSM (Approved)" */
 function planOptionLabel(p: PlanOption): string {
   const parts = [
-    new Date(p.lessonDate).toLocaleDateString("en-US"),
+    formatDate(p.lessonDate),
     LESSON_PLAN_TYPE_LABELS[p.type],
     ...(p.levelType ? [LEVEL_TYPE_LABELS[p.levelType]] : []),
     ...(p.center ? [p.center] : []),
@@ -280,7 +280,10 @@ export function AssessmentForm({ instructors }: { instructors: InstructorOption[
 
       {/* Parts */}
       {ASSESSMENT_FORM.map((part) => {
-        const p = result.parts.find((x) => x.key === part.key)!;
+        // Guard instead of a non-null assertion: a form/result key divergence
+        // (e.g. a future ASSESSMENT_FORM edit) must not crash the whole page.
+        const p = result.parts.find((x) => x.key === part.key);
+        if (!p) return null;
         return (
           <div key={part.key} className="mt-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-200 pb-1">

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, FileDown, MessageSquareWarning, Pencil, Send, Trash2 } from "lucide-react";
-import { Button, Spinner, Textarea } from "@/components/ui";
+import { Button, ButtonLink, Spinner, Textarea, buttonClasses } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import type { LessonPlanStatus } from "@/lib/lesson-plan/types";
@@ -93,17 +93,13 @@ export function LessonPlanActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <a href={`/api/lesson-plans/${id}/pdf`} download>
-        <Button variant="outline" disabled={busy}>
-          <FileDown className="h-4 w-4" /> PDF
-        </Button>
-      </a>
+      <ButtonLink variant="outline" href={`/api/lesson-plans/${id}/pdf`} download>
+        <FileDown className="h-4 w-4" /> PDF
+      </ButtonLink>
       {isOwner && (
         <>
-          <Link href={`/lesson-plans/${id}/edit`}>
-            <Button variant="outline" disabled={busy}>
-              <Pencil className="h-4 w-4" /> Edit
-            </Button>
+          <Link href={`/lesson-plans/${id}/edit`} className={buttonClasses("outline")}>
+            <Pencil className="h-4 w-4" /> Edit
           </Link>
           {(status === "draft" || status === "changes_requested") && (
             <Button onClick={submit} disabled={busy}>

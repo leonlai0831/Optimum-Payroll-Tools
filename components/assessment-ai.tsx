@@ -59,7 +59,7 @@ export function AssessmentAi({ instructors }: { instructors: InstructorOption[] 
             setText(null);
           }}
         />
-        <Button onClick={analyze} disabled={loading}>
+        <Button onClick={analyze} disabled={loading || coachId == null}>
           <Sparkles className="h-4 w-4" /> Analyze
         </Button>
       </div>

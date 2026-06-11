@@ -7,7 +7,7 @@ import { Download, Eye, Trash2 } from "lucide-react";
 import { Card, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
-import { rm } from "@/lib/utils";
+import { formatDate, rm } from "@/lib/utils";
 
 /** One saved month, pre-mapped by the caller into the shared shape. */
 export type RunHistoryRow = {
@@ -82,7 +82,7 @@ export function RunHistoryShell({
                   {r.periodLabel}
                 </Link>
                 <div className="mt-0.5 text-[11px] text-gray-400">
-                  saved {new Date(r.createdAt).toLocaleDateString()}
+                  saved {formatDate(r.createdAt)}
                 </div>
               </div>
               <div className="shrink-0 text-right">
@@ -146,7 +146,7 @@ export function RunHistoryShell({
                     {r.periodLabel}
                   </Link>
                 </td>
-                <td className="px-3 py-2 text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</td>
+                <td className="px-3 py-2 text-gray-500">{formatDate(r.createdAt)}</td>
                 {r.stats.map((s) => (
                   <td key={s.label} className="px-3 py-2 text-right text-gray-600">
                     {s.value}

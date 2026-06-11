@@ -8,6 +8,7 @@ import {
 } from "@/lib/db/queries";
 import { Badge, Card } from "@/components/ui";
 import { Dashboard, type IngestSeed } from "@/components/dashboard";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +79,7 @@ export default async function KpiDashboardPage({
                   <span className="ml-2 text-xs text-gray-500">{i.label || "—"}</span>
                 </span>
                 <span className="nums shrink-0 text-xs text-gray-500">
-                  {i.rowCount} rows · received {new Date(i.receivedAt).toLocaleDateString()}
+                  {i.rowCount} rows · received {formatDate(i.receivedAt)}
                 </span>
               </Link>
             ))}

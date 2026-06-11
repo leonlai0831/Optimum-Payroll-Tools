@@ -121,9 +121,17 @@ export function AllowanceBulkEntry({
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch, dirty: true } : l)));
   }
 
-  function lineTotal(l: Line): number {
-    return calcAllowance(mergeBulkRow(l, existing[l.name] ?? null), config).grandTotal;
-  }
+  // Memoized per-line totals: both layouts (mobile cards + desktop table) are
+  // mounted, so an inline calcAllowance ran TWICE per line on every render —
+  // including renders where no line changed. One pass per data change instead.
+  const lineTotals = useMemo(() => {
+    const totals = new Map<Line, number>();
+    for (const l of lines) {
+      totals.set(l, calcAllowance(mergeBulkRow(l, existing[l.name] ?? null), config).grandTotal);
+    }
+    return totals;
+  }, [lines, existing, config]);
+  const lineTotal = (l: Line): number => lineTotals.get(l) ?? 0;
 
   const dirtyLines = lines.filter((l) => l.dirty);
 

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardList, History, Trash2 } from "lucide-react";
-import { Button, Card, Select } from "@/components/ui";
+import { Card, Select, buttonClasses } from "@/components/ui";
 import { ConfirmModal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
@@ -25,6 +25,7 @@ import {
   type LevelType,
 } from "@/lib/lesson-plan/types";
 import { LEVEL_TYPE_LABELS } from "@/lib/lesson-plan/templates";
+import { formatDate } from "@/lib/utils";
 
 /** A serialized `LessonPlanListRow` (dates as ISO strings across the RSC boundary). */
 export interface LessonPlanHistoryRow {
@@ -158,8 +159,8 @@ export function LessonPlanHistory({
           }
           action={
             rows.length === 0 ? (
-              <Link href="/lesson-plans">
-                <Button variant="secondary">New plan</Button>
+              <Link href="/lesson-plans" className={buttonClasses("secondary")}>
+                New plan
               </Link>
             ) : undefined
           }
@@ -173,7 +174,7 @@ export function LessonPlanHistory({
                   <div className="min-w-0">
                     <div className="font-semibold text-gray-900">{r.instructorName}</div>
                     <div className="mt-0.5 text-[11px] text-gray-400">
-                      {new Date(r.lessonDate).toLocaleDateString()}
+                      {formatDate(r.lessonDate)}
                       {r.timeLabel && <span> · {r.timeLabel}</span>}
                       {r.center && <span> · {r.center}</span>}
                     </div>
@@ -226,7 +227,7 @@ export function LessonPlanHistory({
                 {filtered.map((r) => (
                   <tr key={r.id}>
                     <td className="px-4 py-2 tabular-nums text-gray-700">
-                      {new Date(r.lessonDate).toLocaleDateString()}
+                      {formatDate(r.lessonDate)}
                       {r.timeLabel && <span className="text-gray-400"> · {r.timeLabel}</span>}
                     </td>
                     <td className="px-4 py-2">
@@ -284,7 +285,7 @@ export function LessonPlanHistory({
         title="Delete this lesson plan?"
         message={
           pendingDelete
-            ? `${pendingDelete.instructorName} · ${new Date(pendingDelete.lessonDate).toLocaleDateString()} — this cannot be undone.`
+            ? `${pendingDelete.instructorName} · ${formatDate(pendingDelete.lessonDate)} — this cannot be undone.`
             : ""
         }
         confirmLabel="Delete plan"

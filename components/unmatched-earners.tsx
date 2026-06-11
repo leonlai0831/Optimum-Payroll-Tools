@@ -47,8 +47,8 @@ export function UnmatchedEarners({
         </span>
       </div>
       <MobileCards>
-        {earners.map((e) => (
-          <div key={e.name + e.staffCode} className="p-4">
+        {earners.map((e, i) => (
+          <div key={`${e.name}|${e.staffCode}|${i}`} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-semibold text-gray-900">{e.name}</div>
@@ -107,8 +107,8 @@ export function UnmatchedEarners({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {earners.map((e) => (
-              <tr key={e.name + e.staffCode} className="tabular-nums">
+            {earners.map((e, i) => (
+              <tr key={`${e.name}|${e.staffCode}|${i}`} className="tabular-nums">
                 <td className="px-3 py-2 font-medium text-gray-900">{e.name}</td>
                 <td className="px-3 py-2 font-mono text-xs text-gray-500">{e.staffCode || "—"}</td>
                 <td className="px-3 py-2">

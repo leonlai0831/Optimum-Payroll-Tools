@@ -14,6 +14,7 @@ import {
   OBJECTIVE_HELPER,
   REPLACEMENT_SECTIONS,
 } from "@/lib/lesson-plan/templates";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function LessonPlanDetailPage({
   const d = plan.data;
   const dateLabel = plan.lessonDate.toISOString().slice(0, 10);
   const reviewedStamp = plan.reviewedAt
-    ? `${plan.reviewedByEmail} · ${new Date(plan.reviewedAt).toLocaleDateString()}`
+    ? `${plan.reviewedByEmail} · ${formatDate(plan.reviewedAt)}`
     : "";
 
   return (
@@ -143,7 +144,7 @@ export default async function LessonPlanDetailPage({
             <div key={a.id} className="flex items-start gap-2">
               <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
-                Assessed on {a.observedOn.toLocaleDateString("en-US")} —{" "}
+                Assessed on {formatDate(a.observedOn)} —{" "}
                 <Link href={`/staff/${a.coachId}`} className="font-semibold underline">
                   view assessment
                 </Link>

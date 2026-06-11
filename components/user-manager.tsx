@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
@@ -41,6 +41,33 @@ function parseLinkToken(token: string): EmployeeLink {
   if (token.startsWith("coach:")) return { coachId: Number(token.slice(6)), gymStaffId: null };
   if (token.startsWith("gym:")) return { coachId: null, gymStaffId: Number(token.slice(4)) };
   return { coachId: null, gymStaffId: null };
+}
+
+/**
+ * Admin-set password field: masked by default (shoulder-surf safe) with a reveal
+ * toggle, since the admin usually needs to read the temp password back to the
+ * user. Shared by the create form and the reset-password modal.
+ */
+function PasswordInput({
+  className,
+  ...props
+}: Omit<React.ComponentProps<typeof Input>, "type">) {
+  const [show, setShow] = useState(false);
+  // Layout classes (mt-1 etc.) go on the wrapper so the toggle stays aligned.
+  return (
+    <div className={cn("relative", className)}>
+      <Input {...props} type={show ? "text" : "password"} className="pr-11" />
+      <button
+        type="button"
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-gray-400 hover:text-gray-600"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? "Hide password" : "Show password"}
+        title={show ? "Hide password" : "Show password"}
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
 }
 
 /** Grouped <option>s shared by the add form and each row's link picker. */
@@ -275,9 +302,8 @@ function ResetPasswordModal({
         </p>
         <div>
           <Label htmlFor="reset-pw">New password</Label>
-          <Input
+          <PasswordInput
             id="reset-pw"
-            type="text"
             className="mt-1"
             value={pw}
             disabled={busy}
@@ -593,9 +619,8 @@ function AddUser({
         </div>
         <div>
           <Label htmlFor="u-pw">Initial password</Label>
-          <Input
+          <PasswordInput
             id="u-pw"
-            type="text"
             className="mt-1"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

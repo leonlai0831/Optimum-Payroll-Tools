@@ -14,7 +14,7 @@ import {
   type NoteSeverity,
   type NoteType,
 } from "@/lib/performance/types";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export interface NoteView {
   id: number;
@@ -279,7 +279,7 @@ function NoteCard({ note, canEdit, deleteBase }: { note: NoteView; canEdit: bool
             <span className="font-semibold text-gray-900">{note.title}</span>
           </div>
           <p className="mt-0.5 text-xs text-gray-500">
-            {new Date(note.noteDate).toLocaleDateString()}
+            {formatDate(note.noteDate)}
             {note.authoredBy ? ` · by ${note.authoredBy}` : ""}
           </p>
         </div>

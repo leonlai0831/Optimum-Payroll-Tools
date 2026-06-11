@@ -15,6 +15,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
+import { ConfirmModal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { IngestSourceBadge, IngestStatusBadge } from "@/components/ingest-badges";
 import type { InstructorRow } from "@/lib/kpi/types";
@@ -26,7 +27,7 @@ import {
   type IngestGridRow,
   type SortDir,
 } from "@/lib/kpi/ingest-grid";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, formatDateTime } from "@/lib/utils";
 
 /** Serializable projection of a kpi_ingests row (dates as ISO strings for the client). */
 export interface IngestDetail {
@@ -222,6 +223,8 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
   const [query, setQuery] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>(null);
   const [busy, setBusy] = useState<"save" | "load" | "discard" | null>(null);
+  // Discard awaits confirmation in the accessible ConfirmModal (not window.confirm).
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollToEndRef = useRef(false);
@@ -340,9 +343,7 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
   }
 
   async function onDiscard() {
-    if (!window.confirm("Discard this delivery? It stays viewable here but can no longer be loaded.")) {
-      return;
-    }
+    setConfirmDiscard(false);
     setBusy("discard");
     try {
       const res = await fetch(`/api/kpi/ingests/${ingest.id}`, { method: "DELETE" });
@@ -369,11 +370,11 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
         </h1>
         <p className="mt-0.5 text-xs text-gray-500">
           {ingest.label || (ingest.source === "manual" ? "Manual upload" : "API upload")} ·{" "}
-          {rows.length} rows · received {new Date(ingest.receivedAt).toLocaleString()}
+          {rows.length} rows · received {formatDateTime(ingest.receivedAt)}
         </p>
         {ingest.status === "imported" && (
           <p className="mt-1 text-sm text-green-700">
-            Imported{ingest.importedAt ? ` on ${new Date(ingest.importedAt).toLocaleDateString()}` : ""}
+            Imported{ingest.importedAt ? ` on ${formatDate(ingest.importedAt)}` : ""}
             {ingest.importedRunId != null && (
               <>
                 {" — "}
@@ -522,7 +523,7 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
                   <Button onClick={onLoad} disabled={busy !== null}>
                     {busy === "load" ? <Spinner /> : <Calculator className="h-4 w-4" />} Load into calculator
                   </Button>
-                  <Button variant="danger" onClick={onDiscard} disabled={busy !== null}>
+                  <Button variant="danger" onClick={() => setConfirmDiscard(true)} disabled={busy !== null}>
                     {busy === "discard" ? <Spinner /> : <Trash2 className="h-4 w-4" />} Discard
                   </Button>
                 </>
@@ -531,6 +532,16 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
           </Card>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        onConfirm={onDiscard}
+        title="Discard this delivery?"
+        message="It stays viewable here but can no longer be loaded into the calculator."
+        confirmLabel="Discard"
+        busy={busy === "discard"}
+      />
     </div>
   );
 }

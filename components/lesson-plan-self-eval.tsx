@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ClipboardCheck, Pencil, Save } from "lucide-react";
 import { Button, Card, Label, Spinner, Textarea } from "@/components/ui";
 import { useToast } from "@/components/toast";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { SelfEvalAnswer } from "@/lib/lesson-plan/types";
 import { SELF_EVAL_GROUPS } from "@/lib/lesson-plan/templates";
 
@@ -77,7 +77,7 @@ export function LessonPlanSelfEval({
         {filled && !editing && (
           <span className="flex items-center gap-1 text-xs font-medium text-green-700">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Completed {new Date(selfEvalAt!).toLocaleDateString()}
+            Completed {formatDate(selfEvalAt!)}
           </span>
         )}
       </div>

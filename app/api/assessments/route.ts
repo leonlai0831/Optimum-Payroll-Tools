@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   createAssessment,
+  getCoach,
   recordAudit,
   validateAssessmentLessonPlanLink,
 } from "@/lib/db/queries";
@@ -27,8 +28,13 @@ export async function POST(req: Request) {
     comments?: string;
     lessonPlanId?: number | null;
   };
-  if (typeof body.coachId !== "number") {
+  if (typeof body.coachId !== "number" || !Number.isInteger(body.coachId)) {
     return NextResponse.json({ error: "coachId is required" }, { status: 400 });
+  }
+  // Existence gate: an assessment must point at a real instructor profile
+  // (there's no DB-level FK enforcing it).
+  if (!(await getCoach(body.coachId))) {
+    return NextResponse.json({ error: "coach not found" }, { status: 404 });
   }
 
   // Optional link to the observed class's lesson plan — must exist and belong
