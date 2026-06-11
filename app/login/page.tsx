@@ -57,9 +57,9 @@ export default function LoginPage() {
                 width={1080}
                 height={350}
                 priority
-                className="h-12 w-auto"
+                className="h-16 w-auto"
               />
-              <span className="h-7 w-px bg-gray-200" aria-hidden />
+              <span className="h-8 w-px bg-gray-200" aria-hidden />
               <Image
                 src="/logo-fit.png"
                 alt="Optimum Fit"
@@ -69,7 +69,7 @@ export default function LoginPage() {
                 className="h-7 w-auto"
               />
             </div>
-            <p className="mt-4 text-lg font-bold tracking-tight text-gray-800">
+            <p className="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
               Optimum Payroll Tools
             </p>
           </div>
