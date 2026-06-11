@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
 import { LoginStripeBand } from "@/components/login-stripe-band";
+import { markArrival } from "@/lib/arrival";
 
 /** The stripe-band exit (1.1s: under the card, around the bend, out the top)
- * must finish inside this before the swap. */
-const NAVIGATE_AFTER_MS = 1250;
+ * plus the screen drop chasing it (1.05s delay + 0.55s) must finish inside
+ * this before the swap. */
+const NAVIGATE_AFTER_MS = 1650;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,8 +37,11 @@ export default function LoginPage() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      // Success flourish first: the racing stripes sweep across the page,
-      // then we navigate. Loading stays on so the form can't be re-submitted.
+      // Success flourish first: the stripes run out the top, THEN we
+      // navigate — the dashboard picks the sequence up via the arrival mark
+      // (its permanent ribbon draws itself in). Loading stays on so the form
+      // can't be re-submitted.
+      markArrival();
       setSweeping(true);
       setTimeout(() => {
         router.replace("/");
@@ -50,7 +55,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    // On success the whole screen (band included) drops away downward chasing
+    // the departing arrow — the camera pans up; the dashboard then descends
+    // into place from above (components/arrival-slide.tsx).
+    <div
+      className={`relative min-h-screen overflow-hidden ${sweeping ? "screen-exit-down" : ""}`}
+    >
       {/* The CI guide's own wave artwork anchors the page bottom (decoration only). */}
       <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
       {/* Quiet brand anchor in the page's top-left, the way the deck slides
@@ -179,8 +189,13 @@ export default function LoginPage() {
             </Button>
             <p className="text-center text-xs text-gray-400">
               Trouble signing in?{" "}
-              <a href="/setup" className="font-medium text-gray-500 hover:text-brand hover:underline">
-                Check setup status
+              <a
+                href="https://wa.me/60143611383"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-gray-500 hover:text-brand hover:underline"
+              >
+                Please contact support here
               </a>
             </p>
           </form>

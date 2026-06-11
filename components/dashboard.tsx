@@ -204,7 +204,7 @@ export function Dashboard({
 
     const [cfg, coachList, allowanceCfg] = await Promise.all([
       fetchJson<AppConfig>("/api/config"),
-      fetchJson<CoachProfile[]>("/api/coaches"),
+      fetchJson<CoachProfile[]>("/api/coaches?roster=kpi"),
       fetchJson<AllowanceConfig>("/api/allowance/config"),
     ]);
     // Normalize raw CSV center labels (a mix of codes + full names) onto the

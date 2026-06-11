@@ -1,6 +1,12 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  STRIPE_ARROW_TIP,
+  STRIPE_ARROW_W,
+  StripeArrowPlate,
+  stripeLegsMidX,
+} from "@/components/stripe-arrow";
 
 /**
  * The login page's racing-stripe band, built as SVG so it can FLOW like the
@@ -34,26 +40,25 @@ import { useSyncExternalStore } from "react";
 const BAR_H = 16; // stripe thickness
 const BAR_GAP = 20; // gap between stripes
 const STRIPE_STEP = BAR_H + BAR_GAP; // center-to-center, preserved through the arc
-/** Deck order, top to bottom: yellow / blue / yellow / yellow. */
+/** Top to bottom: yellow / yellow / BLUE / yellow — blue third, and the
+ * upward legs exit in the same left→right order, matching the dashboard
+ * ribbon's legs for a continuous cut. */
 const STRIPE_COLORS = [
+  "var(--color-accent)",
   "var(--color-accent)",
   "var(--color-brand)",
   "var(--color-accent)",
-  "var(--color-accent)",
 ];
-const CARD_W = 448; // the sign-in card (max-w-md)
 const CARD_TOP_OFFSET = 219.2; // 13.7rem — card top above the centerline
 const BAND_RAISE = 56; // band floats this far above the card's top edge
-const BAND_H = BAR_H * 4 + BAR_GAP * 3; // 124px
 const INNER_R = 64; // innermost corner radius
-const LEG_NUDGE = 20; // innermost upward leg this far right of the card edge
 const EXIT_Y = -160; // path end above the viewport (arrow fully clears it)
 /** Bars stop this far short of the card; the chevron arrow floats in the gap. */
 const BAR_INSET = 110;
-/** Chevron arrow plate: two `>` strokes (yellow behind blue), full band height. */
-const ARROW_W = 84;
-const ARROW_TIP = 76; // x of the chevron tips inside the plate
 const ARROW_TIP_GAP = 18; // resting clearance between the blue tip and the card
+const EXIT_MS = 1100;
+/** Gentle start whose END slope is 1, handing over to linear seamlessly. */
+const EASE_IN_UNIT = "cubic-bezier(0.45, 0, 0.67, 0.67)";
 
 function subscribeResize(cb: () => void) {
   window.addEventListener("resize", cb);
@@ -63,18 +68,17 @@ const getSize = () => `${window.innerWidth}x${window.innerHeight}`;
 const getServerSize = () => "0x0";
 
 export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
   const [vw, vh] = useSyncExternalStore(subscribeResize, getSize, getServerSize)
     .split("x")
     .map(Number);
-  // The stacked phone layout has no band (and 0x0 covers SSR/first paint).
-  if (vw < 1024) return null;
 
   const cardLeft = vw - Math.max(496, vw / 2 - 80); // 31rem | 50% - 5rem
-  const cardRight = cardLeft + CARD_W;
   const bandTop = vh / 2 - CARD_TOP_OFFSET - 0.04 * vh - BAND_RAISE;
-  // Arc start: the innermost leg lands LEG_NUDGE right of the card, so the
-  // bend begins under the card's right edge and surfaces already turning.
-  const cornerX = cardRight + LEG_NUDGE - INNER_R;
+  // The upward legs sit on the SHARED middle line (stripeLegsMidX) so they
+  // exit exactly where the dashboard ribbon's legs stand — the cut between
+  // the two screens reads continuous. legs x = cornerX + r, mid r = 64+54.
+  const cornerX = stripeLegsMidX(vw) - INNER_R - 1.5 * STRIPE_STEP;
   // Shared arc center (concentric corner): directly above the top stripe.
   const arcCy = bandTop + BAR_H / 2 - INNER_R;
   const snakeLen = cardLeft - BAR_INSET; // resting bar: viewport left → arrow gap
@@ -82,7 +86,10 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   const flowPath = (y: number, r: number) =>
     // Right along y, quarter-turn up (sweep 0 = the left turn), out the top.
     `M ${-vw} ${y} H ${cornerX} A ${r} ${r} 0 0 0 ${cornerX + r} ${arcCy} V ${EXIT_Y}`;
-  const flowLen = (r: number) => cornerX + vw + (Math.PI / 2) * r + (arcCy - EXIT_Y);
+  const arc = (r: number) => (Math.PI / 2) * r;
+  const flowLen = (r: number) => cornerX + vw + arc(r) + (arcCy - EXIT_Y);
+  // How far the heads travel before the bend during the exit (same for all).
+  const runExt = cornerX - (cardLeft - BAR_INSET);
   // Far larger than any path so exactly one dash is ever visible. Shared by
   // the rest and exit dash arrays so only the dash LENGTH interpolates.
   const dashGap = flowLen(INNER_R + 3 * STRIPE_STEP) + vw;
@@ -90,17 +97,76 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   const stripes = STRIPE_COLORS.map((color, i) => {
     const y = bandTop + BAR_H / 2 + i * STRIPE_STEP;
     const r = INNER_R + i * STRIPE_STEP;
-    return { color, d: flowPath(y, r), len: flowLen(r) };
+    return { color, d: flowPath(y, r), len: flowLen(r), arc: arc(r) };
   });
 
   // The arrow rides the band's middle line (between stripes 2 and 3).
   const arrowR = INNER_R + 1.5 * STRIPE_STEP;
   const arrowD = flowPath(bandTop + BAR_H / 2 + 1.5 * STRIPE_STEP, arrowR);
   // Anchor = plate center; the blue tip leads it by (ARROW_TIP - ARROW_W/2).
-  const arrowRest = vw + cardLeft - ARROW_TIP_GAP - (ARROW_TIP - ARROW_W / 2);
+  const arrowRest = vw + cardLeft - ARROW_TIP_GAP - (STRIPE_ARROW_TIP - STRIPE_ARROW_W / 2);
+  // The anchor's resting lead over the bars' heads, held constant on exit.
+  const arrowLead = arrowRest - (vw + cardLeft - BAR_INSET);
+
+  // Exit on the Web Animations API: per-stripe keyframe offsets computed from
+  // the REAL segment lengths (run extension / arc / upward leg), so speed is
+  // constant through the bend — CSS keyframes' static percentages braked into
+  // the corner and lurched out of it. Heads stay level outside the bend; the
+  // arrow shares the offsets and keeps its lead.
+  useEffect(() => {
+    if (!sweeping || vw < 1024) return;
+    const box = boxRef.current;
+    if (!box) return;
+    const legUp = arcCy - EXIT_Y;
+    const arcMid = arc(arrowR);
+    const travelMid = runExt + arcMid + legUp;
+    const p1 = runExt / travelMid;
+    const p2 = (runExt + arcMid) / travelMid;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const opts: KeyframeAnimationOptions = {
+      duration: reduced ? 0 : EXIT_MS,
+      easing: "linear",
+      fill: "both",
+    };
+    const anims: Animation[] = [];
+    box.querySelectorAll<SVGPathElement>("path").forEach((el, i) => {
+      const s = stripes[i];
+      if (!s) return;
+      anims.push(
+        el.animate(
+          [
+            { strokeDasharray: `${snakeLen} ${dashGap}`, easing: EASE_IN_UNIT },
+            { strokeDasharray: `${snakeLen + runExt} ${dashGap}`, offset: p1 },
+            { strokeDasharray: `${snakeLen + runExt + s.arc} ${dashGap}`, offset: p2 },
+            { strokeDasharray: `${s.len - vw} ${dashGap}` },
+          ],
+          opts,
+        ),
+      );
+    });
+    const arrowEl = box.querySelector<HTMLElement>("[data-arrow]");
+    if (arrowEl) {
+      anims.push(
+        arrowEl.animate(
+          [
+            { offsetDistance: `${arrowRest}px`, easing: EASE_IN_UNIT },
+            { offsetDistance: `${vw + cornerX + arrowLead}px`, offset: p1 },
+            { offsetDistance: `${vw + cornerX + arcMid + arrowLead}px`, offset: p2 },
+            { offsetDistance: `${flowLen(arrowR)}px` },
+          ],
+          opts,
+        ),
+      );
+    }
+    return () => anims.forEach((a) => a.cancel());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- geometry is pure in (vw, vh)
+  }, [sweeping]);
+
+  // The stacked phone layout has no band (and 0x0 covers SSR/first paint).
+  if (vw < 1024) return null;
 
   return (
-    <div aria-hidden className="absolute inset-0 z-0 hidden lg:block">
+    <div ref={boxRef} aria-hidden className="absolute inset-0 z-0 hidden lg:block">
       <svg className="h-full w-full" viewBox={`0 0 ${vw} ${vh}`} fill="none">
         {stripes.map((s, i) => (
           <path
@@ -108,7 +174,7 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
             d={s.d}
             stroke={s.color}
             strokeWidth={BAR_H}
-            className={sweeping ? "stripe-flow-exit" : "stripe-flow-enter"}
+            className="stripe-flow-enter"
             style={
               {
                 // Dash head at x: offset = snakeLen - (distance to head).
@@ -118,8 +184,6 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
                 strokeDasharray: `${snakeLen} ${dashGap}`,
                 "--dash-from": `${cardLeft - vw}px`, // head just off-screen left
                 "--dash-rest": `${-vw}px`,
-                "--dasharray-rest": `${snakeLen} ${dashGap}`,
-                "--dasharray-exit": `${s.len - vw} ${dashGap}`, // head at path end
               } as React.CSSProperties
             }
           />
@@ -129,39 +193,19 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
           pre-offset box to the container origin so the motion path's px
           coordinates line up in every engine. */}
       <div
-        className={`absolute left-0 top-0 ${sweeping ? "stripe-arrow-exit" : "stripe-arrow-enter"}`}
+        data-arrow
+        className="stripe-arrow-enter absolute left-0 top-0"
         style={
           {
             offsetPath: `path("${arrowD}")`,
             offsetRotate: "auto",
             offsetDistance: `${arrowRest}px`,
-            "--arrow-from": `${vw - ARROW_W / 2}px`, // tips at the viewport's left edge
+            "--arrow-from": `${vw - STRIPE_ARROW_W / 2}px`, // tips at the viewport's left edge
             "--arrow-rest": `${arrowRest}px`,
-            "--arrow-exit": `${flowLen(arrowR)}px`, // path end, above the viewport
           } as React.CSSProperties
         }
       >
-        <svg
-          width={ARROW_W}
-          height={BAND_H}
-          viewBox={`0 0 ${ARROW_W} ${BAND_H}`}
-          fill="none"
-        >
-          <path
-            d={`M 10 10 L 42 ${BAND_H / 2} L 10 ${BAND_H - 10}`}
-            stroke="var(--color-accent)"
-            strokeWidth={BAR_H}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d={`M 44 10 L ${ARROW_TIP} ${BAND_H / 2} L 44 ${BAND_H - 10}`}
-            stroke="var(--color-brand)"
-            strokeWidth={BAR_H}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <StripeArrowPlate />
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { NotesTimeline, type NoteView } from "@/components/notes-timeline";
 import { rm, splitCenters } from "@/lib/utils";
 import { nextPeriod } from "@/lib/allowance/period";
+import { MALAYSIAN_BANKS } from "@/lib/freelancer/banks";
 import { ALLOWANCE_TIERS, type AllowanceTier } from "@/lib/allowance/types";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { GRADE_LABEL, type GradeKey } from "@/lib/assessment/types";
@@ -45,6 +46,10 @@ export interface CoachProfile {
   center: string;
   active: boolean;
   allowanceTier: AllowanceTier | null;
+  // Payee details for the freelancer bank-transfer file.
+  icNo: string;
+  bankName: string;
+  bankAccount: string;
 }
 
 export interface KpiPoint {
@@ -112,7 +117,7 @@ export function CoachProfileView({
       </div>
 
       <DetailsCard
-        key={`${coach.id}-${coach.name}-${coach.center}-${coach.jobRole}-${coach.employmentType}-${coach.allowanceTier ?? ""}-${coach.active}`}
+        key={`${coach.id}-${coach.name}-${coach.center}-${coach.jobRole}-${coach.employmentType}-${coach.allowanceTier ?? ""}-${coach.icNo}-${coach.bankName}-${coach.bankAccount}-${coach.active}`}
         coach={coach}
         centers={centers}
         canEdit={canEdit}
@@ -405,6 +410,9 @@ function DetailsCard({
     initialCenters[2] ?? "",
   ]);
   const [tier, setTier] = useState<AllowanceTier | "">(coach.allowanceTier ?? "");
+  const [icNo, setIcNo] = useState(coach.icNo);
+  const [bankName, setBankName] = useState(coach.bankName);
+  const [bankAccount, setBankAccount] = useState(coach.bankAccount);
   const [active, setActive] = useState(coach.active);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -424,6 +432,9 @@ function DetailsCard({
     employmentType !== coach.employmentType ||
     joinedCenters !== normalizedOriginal ||
     (tier || null) !== (coach.allowanceTier ?? null) ||
+    icNo.trim() !== coach.icNo ||
+    bankName !== coach.bankName ||
+    bankAccount.trim() !== coach.bankAccount ||
     active !== coach.active;
 
   function setCenter(i: number, value: string) {
@@ -445,6 +456,9 @@ function DetailsCard({
           employmentType,
           center: joinedCenters,
           allowanceTier: tier || null,
+          icNo: icNo.trim(),
+          bankName,
+          bankAccount: bankAccount.trim(),
           active,
         }),
       });
@@ -562,6 +576,46 @@ function DetailsCard({
                 </option>
               ))}
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="p-ic">IC No</Label>
+            <Input
+              id="p-ic"
+              className="mt-1"
+              placeholder="e.g. 900101-14-5678"
+              value={icNo}
+              onChange={(e) => setIcNo(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="p-bank">Bank</Label>
+            <Select
+              id="p-bank"
+              className="mt-1"
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+            >
+              <option value="">—</option>
+              {MALAYSIAN_BANKS.map((b) => (
+                <option key={b.code} value={b.name}>
+                  {b.name}
+                </option>
+              ))}
+              {/* Preserve a legacy/free-form value so it isn't silently dropped on edit. */}
+              {bankName && !MALAYSIAN_BANKS.some((b) => b.name === bankName) && (
+                <option value={bankName}>{bankName}</option>
+              )}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="p-bank-account">Bank account</Label>
+            <Input
+              id="p-bank-account"
+              className="mt-1"
+              inputMode="numeric"
+              value={bankAccount}
+              onChange={(e) => setBankAccount(e.target.value)}
+            />
           </div>
           <div className="flex items-end">
             <label className="flex items-center gap-2 text-sm text-gray-700">

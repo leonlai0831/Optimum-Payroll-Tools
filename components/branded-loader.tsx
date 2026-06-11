@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { hasArrival } from "@/lib/arrival";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SRC = "/logo-animation.mp4";
@@ -30,8 +31,17 @@ type Snapshot = {
   src: string | undefined;
   label: string;
   settledBrand: string;
+  /** True while the overlay is on screen — INCLUDING its finish-the-cycle
+   * exit after the page resolved (the host mirrors its phase here). */
+  overlayUp: boolean;
 };
-let snapshot: Snapshot = { active: 0, src: undefined, label: DEFAULT_LABEL, settledBrand: "swim" };
+let snapshot: Snapshot = {
+  active: 0,
+  src: undefined,
+  label: DEFAULT_LABEL,
+  settledBrand: "swim",
+  overlayUp: false,
+};
 const listeners = new Set<() => void>();
 function emit(next: Partial<Snapshot>) {
   snapshot = { ...snapshot, ...next };
@@ -53,6 +63,17 @@ function recordSettledBrand(brand: string) {
   if (snapshot.settledBrand !== brand) emit({ settledBrand: brand });
 }
 
+/** Whether the loading overlay is currently showing (any phase before fully
+ * hidden). The launcher's stripe ribbon waits for this to clear so its
+ * draw-in isn't spent invisibly underneath the clip's finish-the-cycle exit. */
+export function useLoaderOverlayUp(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => snapshot.overlayUp,
+    () => false,
+  );
+}
+
 /**
  * The loading.tsx fallback. Visuals are drawn by LoaderOverlayHost; this just
  * registers the pending load and holds the page area open behind the overlay.
@@ -67,6 +88,10 @@ export function BrandedLoader({
   src?: string;
 }) {
   useEffect(() => {
+    // During the login → dashboard handoff, stand down: the launcher's
+    // stripe ribbon draw-in is the arrival moment, and the logo clip's
+    // finish-the-cycle exit would linger over it (lib/arrival.ts).
+    if (hasArrival()) return;
     emit({ active: snapshot.active + 1, src, label });
     return () => emit({ active: Math.max(0, snapshot.active - 1) });
   }, [src, label]);
@@ -107,6 +132,13 @@ export function LoaderOverlayHost({ brand }: { brand: string }) {
   useEffect(() => {
     if (getSnapshot().active === 0 && phase === "hidden") recordSettledBrand(brand);
   });
+
+  // Mirror the overlay's visibility into the store for downstream listeners
+  // (equality-guarded so this can't loop).
+  useEffect(() => {
+    const up = phase !== "hidden";
+    if (snapshot.overlayUp !== up) emit({ overlayUp: up });
+  }, [phase]);
 
   useEffect(() => {
     const video = videoRef.current;

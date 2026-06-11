@@ -60,6 +60,9 @@ export default async function CoachProfilePage({ params }: { params: Promise<{ i
     center: coach.center,
     active: coach.active,
     allowanceTier: coach.allowanceTier,
+    icNo: coach.icNo ?? "",
+    bankName: coach.bankName ?? "",
+    bankAccount: coach.bankAccount ?? "",
   };
   const assessmentViews: AssessmentView[] = assessmentRecords.map((a) => ({
     id: a.id,

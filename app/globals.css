@@ -235,17 +235,47 @@ body {
    Per-path distances arrive as custom properties; `both` parks everything
    off-screen during the entrance delay. Stilled by the global
    prefers-reduced-motion rule. */
+/* The launcher's permanent stripe ribbon (components/hub-stripe-band.tsx):
+   arriving from sign-in plays a one-time draw-in — the ribbon EXTENDS from
+   its bottom anchor (line-draw dash, offset len -> 0), chevron arrow leading
+   through the bend and off the left edge; the filled end state is the
+   permanent ribbon, identical to what every later visit renders statically.
+   Stilled by the global prefers-reduced-motion rule (ribbon appears
+   finished). */
+
+/* The login → dashboard "camera pan": the arrow flies up, the camera chases
+   it — the whole login screen drops away downward (delayed until the band's
+   exit reaches the top), and on the other side the launcher descends into
+   place from above (components/arrival-slide.tsx) while its ribbon draw-in
+   starts. Stilled by the global prefers-reduced-motion rule. */
+.screen-exit-down {
+  animation: screenExitDown 0.55s cubic-bezier(0.5, 0, 0.8, 0.5) 1.05s both;
+}
+.screen-enter-down {
+  animation: screenEnterDown 0.55s cubic-bezier(0.2, 0.6, 0.3, 1) both;
+}
+@keyframes screenExitDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100vh);
+  }
+}
+@keyframes screenEnterDown {
+  from {
+    transform: translateY(-100vh);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 .stripe-flow-enter {
   animation: stripeFlowIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1s both;
 }
-.stripe-flow-exit {
-  animation: stripeFlowOut 1.1s cubic-bezier(0.45, 0, 0.8, 0.4) both;
-}
 .stripe-arrow-enter {
   animation: stripeArrowIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1s both;
-}
-.stripe-arrow-exit {
-  animation: stripeArrowOut 1.1s cubic-bezier(0.45, 0, 0.8, 0.4) both;
 }
 @keyframes stripeFlowIn {
   from {
@@ -255,28 +285,12 @@ body {
     stroke-dashoffset: var(--dash-rest);
   }
 }
-@keyframes stripeFlowOut {
-  from {
-    stroke-dasharray: var(--dasharray-rest);
-  }
-  to {
-    stroke-dasharray: var(--dasharray-exit);
-  }
-}
 @keyframes stripeArrowIn {
   from {
     offset-distance: var(--arrow-from);
   }
   to {
     offset-distance: var(--arrow-rest);
-  }
-}
-@keyframes stripeArrowOut {
-  from {
-    offset-distance: var(--arrow-rest);
-  }
-  to {
-    offset-distance: var(--arrow-exit);
   }
 }
 
@@ -343,7 +357,6 @@ table {
     0 2px 7.8px rgba(33, 29, 27, 0.027),
     0 4px 18px rgba(33, 29, 27, 0.04);
 }
-
 
 /* Clear, brand-tinted keyboard focus for interactive chrome (links, buttons,
    tabs). :where() keeps specificity 0 so component styles still win; form fields

@@ -6,6 +6,7 @@ import {
   listAllowancePeriods,
   listCoaches,
 } from "@/lib/db/queries";
+import { rosterCoachesFor } from "@/lib/staff/roster";
 import { SectionNav } from "@/components/section-nav";
 import { AllowanceCalculator, type AllowanceEditTarget } from "@/components/allowance-calculator";
 
@@ -24,14 +25,13 @@ export default async function AllowancePage({
     listAllowancePeriods(),
     edit ? getAllowanceRun(Number(edit)) : Promise.resolve(undefined),
   ]);
-  const roster = coaches
-    .filter((c) => c.active)
-    .map((c) => ({
+  // Full-time roster only — freelancers are paid via Freelancer Payment.
+  const roster = rosterCoachesFor("allowance", coaches).map((c) => ({
       id: c.id,
       canonicalName: c.canonicalName,
       center: c.center,
       allowanceTier: c.allowanceTier,
-    }));
+  }));
 
   // ?edit=<runId> loads a saved record back into the calculator. Re-saving the
   // same staff + period replaces that record (createAllowanceRun is idempotent),

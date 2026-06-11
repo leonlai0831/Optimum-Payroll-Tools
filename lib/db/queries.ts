@@ -7,6 +7,8 @@ import {
   allowancePeriodLocks,
   allowanceRuns,
   assessments,
+  freelancerConfig,
+  freelancerRuns,
   auditLog,
   coaches,
   commissionConfig,
@@ -28,6 +30,7 @@ import {
   type AuditLogRecord,
   type CoachRecord,
   type CommissionRunRecord,
+  type FreelancerRunRecord,
   type GymNoteRecord,
   type GymStaffRecord,
   type KpiIngestRecord,
@@ -38,6 +41,7 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
+import { getCleanName } from "@/lib/kpi/csv";
 import {
   ALL_TOOL_CATEGORIES,
   CAPABILITIES,
@@ -101,6 +105,13 @@ import {
   type OtherAllowanceItem,
 } from "@/lib/allowance/types";
 import { previousPeriod } from "@/lib/allowance/period";
+import { DEFAULT_FREELANCER_CONFIG } from "@/lib/freelancer/defaults";
+import type {
+  FreelancerConfig,
+  FreelancerInput,
+  FreelancerPosition,
+  FreelancerResult,
+} from "@/lib/freelancer/types";
 import { jobRoleForTier } from "@/lib/allowance/tier-rules";
 import { calcAllowance } from "@/lib/allowance/calc";
 import { extractCenterHours, mergeBulkRow } from "@/lib/allowance/bulk";
@@ -379,7 +390,15 @@ export async function updateCoach(
   patch: Partial<
     Pick<
       CoachRecord,
-      "canonicalName" | "center" | "allowanceTier" | "active" | "jobRole" | "employmentType"
+      | "canonicalName"
+      | "center"
+      | "allowanceTier"
+      | "active"
+      | "jobRole"
+      | "employmentType"
+      | "icNo"
+      | "bankName"
+      | "bankAccount"
     >
   >,
 ): Promise<void> {
@@ -978,7 +997,13 @@ export async function listKpiIngests(): Promise<KpiIngestSummary[]> {
       periodLabel: kpiIngests.periodLabel,
       label: kpiIngests.label,
       status: kpiIngests.status,
-      rowCount: sql<number>`jsonb_array_length(${kpiIngests.rows})`.mapWith(Number),
+      // Defensive: jsonb_array_length THROWS on a non-array, which would 500
+      // the whole Uploads page over one malformed delivery — guard with
+      // jsonb_typeof so a bad row renders as "0 rows" instead.
+      rowCount:
+        sql<number>`case when jsonb_typeof(${kpiIngests.rows}) = 'array' then jsonb_array_length(${kpiIngests.rows}) else 0 end`.mapWith(
+          Number,
+        ),
       importedRunId: kpiIngests.importedRunId,
       importedAt: kpiIngests.importedAt,
       receivedAt: kpiIngests.receivedAt,
@@ -2107,6 +2132,207 @@ export async function unlockPeriod(period: string): Promise<void> {
   await db.delete(allowancePeriodLocks).where(eq(allowancePeriodLocks.periodLabel, period));
 }
 
+// ── Freelancer payments ─────────────────────────────────────────────────────────
+
+/** Read the singleton freelancer config, seeding defaults on first use. */
+export const getFreelancerConfig = memoizedSingleton(
+  "freelancer-config",
+  async (): Promise<FreelancerConfig> => {
+    const db = await getDb();
+    const rows = await db
+      .select()
+      .from(freelancerConfig)
+      .where(eq(freelancerConfig.id, 1))
+      .limit(1);
+    // Backfill-safe: keys added after a row was first written (e.g. a new
+    // position's rate) gain their defaults; stored arrays/values win wholesale.
+    if (rows[0]) return deepMerge(structuredClone(DEFAULT_FREELANCER_CONFIG), rows[0].data);
+    const data = structuredClone(DEFAULT_FREELANCER_CONFIG);
+    await db.insert(freelancerConfig).values({ id: 1, data }).onConflictDoNothing();
+    return data;
+  },
+);
+
+export async function saveFreelancerConfig(data: FreelancerConfig): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(freelancerConfig)
+    .values({ id: 1, data })
+    .onConflictDoUpdate({ target: freelancerConfig.id, set: { data, updatedAt: new Date() } });
+  invalidateSingleton("freelancer-config");
+}
+
+/**
+ * Fresh (cache-bypassing) read of the freelancer config — the SAVE/snapshot path
+ * must recompute and snapshot from the live rates, mirroring
+ * `getAllowanceConfigFresh`. View/read pages keep the cached getter.
+ */
+export function getFreelancerConfigFresh(): Promise<FreelancerConfig> {
+  invalidateSingleton("freelancer-config");
+  return getFreelancerConfig();
+}
+
+interface FreelancerRunData {
+  periodLabel: string;
+  input: FreelancerInput;
+  result: FreelancerResult;
+  configSnapshot: FreelancerConfig;
+}
+
+/**
+ * Resolve (or create) the coach profile a freelancer record belongs to, and
+ * carry the position + payee details onto the profile for next month. The
+ * freelancer position IS the allowance tier (`coaches.allowanceTier`); blank
+ * payee fields never wipe a previously stored value. Runs on the caller's
+ * transaction so resolve-or-create is atomic.
+ */
+async function ensureCoachForFreelancerWith(
+  exec: DbOrTx,
+  input: FreelancerInput,
+): Promise<number> {
+  const payee = {
+    ...(input.icNo.trim() ? { icNo: input.icNo.trim() } : {}),
+    ...(input.bankName.trim() ? { bankName: input.bankName.trim() } : {}),
+    ...(input.bankAccount.trim() ? { bankAccount: input.bankAccount.trim() } : {}),
+  };
+
+  const existing = await listCoachesWith(exec);
+  const match =
+    (input.coachId ? existing.find((c) => c.id === input.coachId) : undefined) ||
+    existing.find((c) => c.canonicalName === input.name);
+
+  if (match) {
+    await exec
+      .update(coaches)
+      .set({ allowanceTier: input.position, ...payee, updatedAt: new Date() })
+      .where(eq(coaches.id, match.id));
+    return match.id;
+  }
+
+  const [row] = await exec
+    .insert(coaches)
+    .values({
+      canonicalName: input.name,
+      employmentType: "freelancer",
+      jobRole: jobRoleForTier(input.position),
+      allowanceTier: input.position,
+      ...payee,
+    })
+    .returning({ id: coaches.id });
+  return row.id;
+}
+
+/**
+ * Save one freelancer's month. Idempotent on (periodLabel, canonicalName) via the
+ * unique index — re-saving replaces the record atomically — and the coach's
+ * payee details carry over to the profile in the same transaction.
+ */
+export async function upsertFreelancerRun(data: FreelancerRunData): Promise<number> {
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    const coachId = await ensureCoachForFreelancerWith(tx, data.input);
+    const values = {
+      periodLabel: data.periodLabel,
+      coachId,
+      canonicalName: data.input.name,
+      input: { ...data.input, coachId },
+      result: data.result,
+      configSnapshot: data.configSnapshot,
+    };
+    const [row] = await tx
+      .insert(freelancerRuns)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [freelancerRuns.periodLabel, freelancerRuns.canonicalName],
+        set: {
+          coachId: values.coachId,
+          input: values.input,
+          result: values.result,
+          configSnapshot: values.configSnapshot,
+          // Keep `created_at` advancing on re-save: History orders by it.
+          createdAt: new Date(),
+        },
+      })
+      .returning({ id: freelancerRuns.id });
+    return row.id;
+  });
+}
+
+export interface FreelancerRunSummary {
+  id: number;
+  periodLabel: string;
+  coachId: number | null;
+  canonicalName: string;
+  position: FreelancerPosition;
+  totalServiceHours: number;
+  commitment: number;
+  attendance: number;
+  entityTotals: { entity: string; label: string; amount: number }[];
+  grandTotal: number;
+  createdAt: Date;
+}
+
+/** List freelancer records (optionally one month), newest first. */
+export async function listFreelancerRuns(period?: string): Promise<FreelancerRunSummary[]> {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: freelancerRuns.id,
+      periodLabel: freelancerRuns.periodLabel,
+      coachId: freelancerRuns.coachId,
+      canonicalName: freelancerRuns.canonicalName,
+      input: freelancerRuns.input,
+      result: freelancerRuns.result,
+      createdAt: freelancerRuns.createdAt,
+    })
+    .from(freelancerRuns)
+    .where(period ? eq(freelancerRuns.periodLabel, period) : undefined)
+    .orderBy(desc(freelancerRuns.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    periodLabel: r.periodLabel,
+    coachId: r.coachId,
+    canonicalName: r.canonicalName,
+    position: r.input.position,
+    totalServiceHours: r.result.totalServiceHours,
+    commitment: r.result.commitment,
+    attendance: r.result.attendance,
+    entityTotals: r.result.entityTotals,
+    grandTotal: r.result.grandTotal,
+    createdAt: r.createdAt,
+  }));
+}
+
+/** Full saved records for one month — the bank-transfer export needs input + result. */
+export async function getFreelancerRunsForPeriod(period: string): Promise<FreelancerRunRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(freelancerRuns)
+    .where(eq(freelancerRuns.periodLabel, period))
+    .orderBy(freelancerRuns.canonicalName);
+}
+
+export async function getFreelancerRun(id: number): Promise<FreelancerRunRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(freelancerRuns).where(eq(freelancerRuns.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function deleteFreelancerRun(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(freelancerRuns).where(eq(freelancerRuns.id, id));
+}
+
+/** Distinct months that already have at least one freelancer entry. */
+export async function listFreelancerPeriods(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db
+    .selectDistinct({ periodLabel: freelancerRuns.periodLabel })
+    .from(freelancerRuns);
+  return rows.map((r) => r.periodLabel).sort();
+}
+
 /**
  * Map of audit entityId → the name of whoever last did `action` on it, resolving
  * the actor to their current display name (falling back to the snapshotted
@@ -2744,4 +2970,73 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
 export async function listAuditLog(limit = 200): Promise<AuditLogRecord[]> {
   const db = await getDb();
   return db.select().from(auditLog).orderBy(desc(auditLog.createdAt), desc(auditLog.id)).limit(limit);
+}
+
+/* ── Freelancer ↔ KPI result binding ───────────────────────────────────────── */
+
+export interface KpiResultCandidate {
+  /** Clean instructor account name (getCleanName) from the month's KPI data. */
+  name: string;
+  black: number;
+  colour: number;
+}
+
+/**
+ * Black/colour totals per instructor account in a period's KPI data — the
+ * source for the Freelancer Payment "student result" binding. Reads the
+ * latest SAVED KPI run for the period, falling back to the latest pending
+ * ingest (data is pushed on the 1st of the FOLLOWING month, so early in that
+ * window only the staged delivery may exist). Empty when neither exists yet.
+ */
+export async function getKpiResultCandidates(periodLabel: string): Promise<KpiResultCandidate[]> {
+  const db = await getDb();
+  const [run] = await db
+    .select({ csvRows: runs.csvRows })
+    .from(runs)
+    .where(eq(runs.periodLabel, periodLabel))
+    .orderBy(desc(runs.createdAt))
+    .limit(1);
+  let rows = run?.csvRows;
+  if (!rows?.length) {
+    const [ingest] = await db
+      .select({ rows: kpiIngests.rows })
+      .from(kpiIngests)
+      .where(and(eq(kpiIngests.periodLabel, periodLabel), eq(kpiIngests.status, "pending")))
+      .orderBy(desc(kpiIngests.receivedAt))
+      .limit(1);
+    rows = ingest?.rows;
+  }
+  if (!rows?.length) return [];
+  const byName = new Map<string, { black: number; colour: number }>();
+  for (const r of rows) {
+    const name = getCleanName(r.Instructor);
+    if (!name) continue;
+    const cur = byName.get(name) ?? { black: 0, colour: 0 };
+    cur.black += Number(r.Black) || 0;
+    cur.colour += Number(r.TotalColor) || 0;
+    byName.set(name, cur);
+  }
+  return [...byName.entries()]
+    .map(([name, v]) => ({ name, ...v }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Each freelancer's most recent KPI binding (latest run's input.kpiName),
+ * keyed by canonical name — the calculator's carry-over: picking the coach
+ * next month auto-fetches that month's numbers for the bound account.
+ */
+export async function getLatestFreelancerKpiNames(): Promise<Record<string, string>> {
+  const db = await getDb();
+  const rows = await db
+    .select({ canonicalName: freelancerRuns.canonicalName, input: freelancerRuns.input })
+    .from(freelancerRuns)
+    .orderBy(desc(freelancerRuns.createdAt), desc(freelancerRuns.id));
+  const out: Record<string, string> = {};
+  for (const r of rows) {
+    if (out[r.canonicalName] !== undefined) continue;
+    const bound = (r.input as { kpiName?: string | null }).kpiName;
+    if (typeof bound === "string" && bound.trim()) out[r.canonicalName] = bound.trim();
+  }
+  return out;
 }

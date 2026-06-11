@@ -184,7 +184,7 @@ export function StaffDirectory({
             bare
             icon={Users}
             title="No employees yet"
-            body={canEdit ? "Use “Add employee” above to create one." : undefined}
+            body={canEdit ? "Use “Add member” above to create one." : undefined}
           />
         ) : (
           <>
@@ -577,7 +577,7 @@ function AddEmployee({ centers }: { centers: string[] }) {
   if (!open) {
     return (
       <Button variant="outline" onClick={() => setOpen(true)}>
-        <UserPlus className="h-4 w-4" /> Add employee
+        <UserPlus className="h-4 w-4" /> Add member
       </Button>
     );
   }
@@ -586,7 +586,7 @@ function AddEmployee({ centers }: { centers: string[] }) {
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
-          <UserPlus className="h-4 w-4 text-indigo-500" /> Add employee
+          <UserPlus className="h-4 w-4 text-indigo-500" /> Add member
         </h3>
         <button
           onClick={() => {
