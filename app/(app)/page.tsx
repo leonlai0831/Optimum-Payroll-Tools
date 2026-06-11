@@ -7,6 +7,7 @@ import {
   HandCoins,
   ScrollText,
   ShieldCheck,
+  TrendingUp,
   Trophy,
   UserCircle,
   UserCog,
@@ -60,6 +61,13 @@ const TOOLS: Tool[] = [
     title: "Instructor KPI Bonus",
     subtitle: "Instructor KPI score & bonus · ~mid-month",
     icon: Trophy,
+    cap: "run_kpi",
+  },
+  {
+    href: "/progress",
+    title: "Student Progress",
+    subtitle: "Monthly student data · API push or manual upload",
+    icon: TrendingUp,
     cap: "run_kpi",
   },
   {

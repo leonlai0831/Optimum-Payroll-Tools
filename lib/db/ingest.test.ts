@@ -78,7 +78,7 @@ describe("KPI ingests (PGlite in-memory)", () => {
     expect((await queries.listPendingKpiIngests()).some((i) => i.id === id)).toBe(true);
   });
 
-  it("lets the owner edit rows while pending, but never after import", async () => {
+  it("lets the owner edit rows while pending AND after import — only superseded is read-only", async () => {
     const { id } = await queries.createKpiIngest({
       periodLabel: "2026-06",
       label: "june.csv",
@@ -90,7 +90,8 @@ describe("KPI ingests (PGlite in-memory)", () => {
     expect(await queries.updateKpiIngestRows(id, edited)).toBe(true);
     expect((await queries.getKpiIngest(id))?.rows).toEqual(edited);
 
-    // Import it, then editing must refuse and write nothing.
+    // Import it: the delivery stays correctable as the month's database record
+    // (the saved run snapshotted the rows at import time and is NOT affected).
     const runId = await queries.createRun({
       periodLabel: "2026-06",
       filename: "june.csv",
@@ -99,8 +100,15 @@ describe("KPI ingests (PGlite in-memory)", () => {
       coachResults: [],
     });
     expect(await queries.importKpiIngest(id, runId)).toBe(true);
-    expect(await queries.updateKpiIngestRows(id, [row({ TotalStudent: 999 })])).toBe(false);
-    expect((await queries.getKpiIngest(id))?.rows).toEqual(edited);
+    const corrected = [row({ TotalStudent: 999 })];
+    expect(await queries.updateKpiIngestRows(id, corrected)).toBe(true);
+    const after = await queries.getKpiIngest(id);
+    expect(after?.rows).toEqual(corrected);
+    // …without disturbing the import linkage.
+    expect(after?.status).toBe("imported");
+    expect(after?.importedRunId).toBe(runId);
+    // The run's snapshot is untouched by the ingest edit.
+    expect((await queries.getRun(runId))?.csvRows).toEqual(edited);
   });
 
   it("import marks status + run linkage, and the rows stay readable forever", async () => {
@@ -146,6 +154,28 @@ describe("KPI ingests (PGlite in-memory)", () => {
     // Already discarded → no-op; and a discarded delivery can't be imported.
     expect(await queries.discardKpiIngest(id)).toBe(false);
     expect(await queries.importKpiIngest(id, 1)).toBe(false);
+    // …but it stays correctable (only superseded is read-only).
+    const corrected = [row({ TotalStudent: 123 })];
+    expect(await queries.updateKpiIngestRows(id, corrected)).toBe(true);
+    expect((await queries.getKpiIngest(id))?.rows).toEqual(corrected);
+  });
+
+  it("records the delivery source — 'api' by default, 'manual' when passed", async () => {
+    const api = await queries.createKpiIngest({
+      periodLabel: "2027-02",
+      label: "machine",
+      rows: [row()],
+    });
+    expect((await queries.getKpiIngest(api.id))?.source).toBe("api");
+
+    const manual = await queries.createKpiIngest({
+      periodLabel: "2027-03",
+      label: "by-hand.csv",
+      rows: [row()],
+      source: "manual",
+    });
+    expect((await queries.getKpiIngest(manual.id))?.source).toBe("manual");
+    expect((await queries.listKpiIngests()).find((i) => i.id === manual.id)?.source).toBe("manual");
   });
 
   it("a re-push for the same period supersedes the pending delivery — audited, rows kept", async () => {
@@ -172,7 +202,7 @@ describe("KPI ingests (PGlite in-memory)", () => {
     const pending = (await queries.listPendingKpiIngests()).filter((i) => i.periodLabel === "2026-09");
     expect(pending.map((i) => i.id)).toEqual([second.id]);
 
-    // Superseded behaves like discarded: no edits, no discard, no import.
+    // Superseded is the one fully read-only status: no edits, no discard, no import.
     expect(await queries.updateKpiIngestRows(first.id, [row({ TotalStudent: 999 })])).toBe(false);
     expect(await queries.discardKpiIngest(first.id)).toBe(false);
     expect(await queries.importKpiIngest(first.id, 1)).toBe(false);

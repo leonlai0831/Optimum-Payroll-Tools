@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
       { source: "/staff/audit", destination: "/system/audit", permanent: true },
       { source: "/staff/permissions", destination: "/system/permissions", permanent: true },
       { source: "/system/categories", destination: "/system/permissions", permanent: true },
+      // The KPI "Uploads" surface became the standalone Student Progress module.
+      { source: "/kpi/ingests", destination: "/progress", permanent: true },
+      { source: "/kpi/ingests/:id", destination: "/progress/:id", permanent: true },
     ];
   },
 };

@@ -25,8 +25,8 @@ export default async function KpiDashboardPage({
   let seed: IngestSeed | null = null;
   if (Number.isInteger(ingestParam)) {
     const ingest = await getKpiIngest(ingestParam);
-    if (!ingest) redirect("/kpi/ingests");
-    if (ingest.status !== "pending") redirect(`/kpi/ingests/${ingest.id}`);
+    if (!ingest) redirect("/progress");
+    if (ingest.status !== "pending") redirect(`/progress/${ingest.id}`);
     seed = {
       ingestId: ingest.id,
       label: ingest.label || `API upload #${ingest.id}`,
@@ -57,7 +57,7 @@ export default async function KpiDashboardPage({
               </Badge>
             </h2>
             <Link
-              href="/kpi/ingests"
+              href="/progress"
               className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
             >
               View all →
@@ -70,7 +70,7 @@ export default async function KpiDashboardPage({
             {pending.map((i) => (
               <Link
                 key={i.id}
-                href={`/kpi/ingests/${i.id}`}
+                href={`/progress/${i.id}`}
                 className="flex min-h-11 flex-col justify-center gap-0.5 py-2.5 hover:bg-indigo-50/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
                 <span className="min-w-0 truncate">
