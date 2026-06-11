@@ -248,19 +248,62 @@ body {
 .hub-arrow-run {
   animation: hubArrow 2s cubic-bezier(0.55, 0, 0.3, 1) 0.3s both;
 }
-@keyframes hubFlow {
+
+/* The login → dashboard "camera pan": the arrow flies up, the camera chases
+   it — the whole login screen drops away downward (delayed until the band's
+   exit reaches the top), and on the other side the launcher descends into
+   place from above (components/arrival-slide.tsx) while its ribbon draw-in
+   starts. Stilled by the global prefers-reduced-motion rule. */
+.screen-exit-down {
+  animation: screenExitDown 0.55s cubic-bezier(0.5, 0, 0.8, 0.5) 1.05s both;
+}
+.screen-enter-down {
+  animation: screenEnterDown 0.55s cubic-bezier(0.2, 0.6, 0.3, 1) both;
+}
+@keyframes screenExitDown {
   from {
-    stroke-dashoffset: var(--dash-from);
+    transform: translateY(0);
   }
   to {
+    transform: translateY(100vh);
+  }
+}
+@keyframes screenEnterDown {
+  from {
+    transform: translateY(-100vh);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+/* Same piecewise-sync idea as the login exit: heads level up the leg (45%),
+   arcs finish together (60%, outer stripes accelerate through the bend), and
+   the arrow shares the stops so its lead over the heads stays constant. */
+@keyframes hubFlow {
+  0% {
+    stroke-dashoffset: var(--dash-from);
+  }
+  45% {
+    stroke-dashoffset: var(--dash-leg);
+  }
+  60% {
+    stroke-dashoffset: var(--dash-arc);
+  }
+  100% {
     stroke-dashoffset: var(--dash-to);
   }
 }
 @keyframes hubArrow {
-  from {
+  0% {
     offset-distance: var(--arrow-from);
   }
-  to {
+  45% {
+    offset-distance: var(--arrow-leg);
+  }
+  60% {
+    offset-distance: var(--arrow-arc);
+  }
+  100% {
     offset-distance: var(--arrow-to);
   }
 }
@@ -285,11 +328,22 @@ body {
     stroke-dashoffset: var(--dash-rest);
   }
 }
+/* Piecewise stops keep the four heads LEVEL on the straights: every stripe
+   reaches the corner (50%) and finishes its arc (72%) at the same moment, so
+   the outer stripes simply run faster through their longer arcs and catch
+   up — and the arrow keyframes share the stops, holding a constant gap ahead
+   of the heads. */
 @keyframes stripeFlowOut {
-  from {
+  0% {
     stroke-dasharray: var(--dasharray-rest);
   }
-  to {
+  50% {
+    stroke-dasharray: var(--da-corner);
+  }
+  72% {
+    stroke-dasharray: var(--da-arc);
+  }
+  100% {
     stroke-dasharray: var(--dasharray-exit);
   }
 }
@@ -302,10 +356,16 @@ body {
   }
 }
 @keyframes stripeArrowOut {
-  from {
+  0% {
     offset-distance: var(--arrow-rest);
   }
-  to {
+  50% {
+    offset-distance: var(--arrow-corner);
+  }
+  72% {
+    offset-distance: var(--arrow-arc);
+  }
+  100% {
     offset-distance: var(--arrow-exit);
   }
 }

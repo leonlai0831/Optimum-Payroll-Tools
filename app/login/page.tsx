@@ -9,8 +9,9 @@ import { LoginStripeBand } from "@/components/login-stripe-band";
 import { markArrival } from "@/lib/arrival";
 
 /** The stripe-band exit (1.1s: under the card, around the bend, out the top)
- * must finish inside this before the swap. */
-const NAVIGATE_AFTER_MS = 1150;
+ * plus the screen drop chasing it (1.05s delay + 0.55s) must finish inside
+ * this before the swap. */
+const NAVIGATE_AFTER_MS = 1650;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,7 +55,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    // On success the whole screen (band included) drops away downward chasing
+    // the departing arrow — the camera pans up; the dashboard then descends
+    // into place from above (components/arrival-slide.tsx).
+    <div
+      className={`relative min-h-screen overflow-hidden ${sweeping ? "screen-exit-down" : ""}`}
+    >
       {/* The CI guide's own wave artwork anchors the page bottom (decoration only). */}
       <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
       {/* Quiet brand anchor in the page's top-left, the way the deck slides

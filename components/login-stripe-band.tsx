@@ -5,6 +5,7 @@ import {
   STRIPE_ARROW_TIP,
   STRIPE_ARROW_W,
   StripeArrowPlate,
+  stripeLegsMidX,
 } from "@/components/stripe-arrow";
 
 /**
@@ -46,11 +47,9 @@ const STRIPE_COLORS = [
   "var(--color-accent)",
   "var(--color-accent)",
 ];
-const CARD_W = 448; // the sign-in card (max-w-md)
 const CARD_TOP_OFFSET = 219.2; // 13.7rem — card top above the centerline
 const BAND_RAISE = 56; // band floats this far above the card's top edge
 const INNER_R = 64; // innermost corner radius
-const LEG_NUDGE = 20; // innermost upward leg this far right of the card edge
 const EXIT_Y = -160; // path end above the viewport (arrow fully clears it)
 /** Bars stop this far short of the card; the chevron arrow floats in the gap. */
 const BAR_INSET = 110;
@@ -71,11 +70,11 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   if (vw < 1024) return null;
 
   const cardLeft = vw - Math.max(496, vw / 2 - 80); // 31rem | 50% - 5rem
-  const cardRight = cardLeft + CARD_W;
   const bandTop = vh / 2 - CARD_TOP_OFFSET - 0.04 * vh - BAND_RAISE;
-  // Arc start: the innermost leg lands LEG_NUDGE right of the card, so the
-  // bend begins under the card's right edge and surfaces already turning.
-  const cornerX = cardRight + LEG_NUDGE - INNER_R;
+  // The upward legs sit on the SHARED middle line (stripeLegsMidX) so they
+  // exit exactly where the dashboard ribbon's legs stand — the cut between
+  // the two screens reads continuous. legs x = cornerX + r, mid r = 64+54.
+  const cornerX = stripeLegsMidX(vw) - INNER_R - 1.5 * STRIPE_STEP;
   // Shared arc center (concentric corner): directly above the top stripe.
   const arcCy = bandTop + BAR_H / 2 - INNER_R;
   const snakeLen = cardLeft - BAR_INSET; // resting bar: viewport left → arrow gap
@@ -83,7 +82,10 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   const flowPath = (y: number, r: number) =>
     // Right along y, quarter-turn up (sweep 0 = the left turn), out the top.
     `M ${-vw} ${y} H ${cornerX} A ${r} ${r} 0 0 0 ${cornerX + r} ${arcCy} V ${EXIT_Y}`;
-  const flowLen = (r: number) => cornerX + vw + (Math.PI / 2) * r + (arcCy - EXIT_Y);
+  const arc = (r: number) => (Math.PI / 2) * r;
+  const flowLen = (r: number) => cornerX + vw + arc(r) + (arcCy - EXIT_Y);
+  // How far the heads travel before the bend during the exit (same for all).
+  const runExt = cornerX - (cardLeft - BAR_INSET);
   // Far larger than any path so exactly one dash is ever visible. Shared by
   // the rest and exit dash arrays so only the dash LENGTH interpolates.
   const dashGap = flowLen(INNER_R + 3 * STRIPE_STEP) + vw;
@@ -91,7 +93,7 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   const stripes = STRIPE_COLORS.map((color, i) => {
     const y = bandTop + BAR_H / 2 + i * STRIPE_STEP;
     const r = INNER_R + i * STRIPE_STEP;
-    return { color, d: flowPath(y, r), len: flowLen(r) };
+    return { color, d: flowPath(y, r), len: flowLen(r), arc: arc(r) };
   });
 
   // The arrow rides the band's middle line (between stripes 2 and 3).
@@ -99,6 +101,8 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
   const arrowD = flowPath(bandTop + BAR_H / 2 + 1.5 * STRIPE_STEP, arrowR);
   // Anchor = plate center; the blue tip leads it by (ARROW_TIP - ARROW_W/2).
   const arrowRest = vw + cardLeft - ARROW_TIP_GAP - (STRIPE_ARROW_TIP - STRIPE_ARROW_W / 2);
+  // The anchor's resting lead over the bars' heads, held constant on exit.
+  const arrowLead = arrowRest - (vw + cardLeft - BAR_INSET);
 
   return (
     <div aria-hidden className="absolute inset-0 z-0 hidden lg:block">
@@ -120,6 +124,10 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
                 "--dash-from": `${cardLeft - vw}px`, // head just off-screen left
                 "--dash-rest": `${-vw}px`,
                 "--dasharray-rest": `${snakeLen} ${dashGap}`,
+                // Piecewise exit stops (globals.css): heads level until the
+                // corner, arcs finish together, then level again up the legs.
+                "--da-corner": `${snakeLen + runExt} ${dashGap}`,
+                "--da-arc": `${snakeLen + runExt + s.arc} ${dashGap}`,
                 "--dasharray-exit": `${s.len - vw} ${dashGap}`, // head at path end
               } as React.CSSProperties
             }
@@ -138,6 +146,10 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
             offsetDistance: `${arrowRest}px`,
             "--arrow-from": `${vw - STRIPE_ARROW_W / 2}px`, // tips at the viewport's left edge
             "--arrow-rest": `${arrowRest}px`,
+            // Exit stops share the band's timing; arrowLead keeps the plate a
+            // constant distance ahead of the heads through the bend.
+            "--arrow-corner": `${vw + cornerX + arrowLead}px`,
+            "--arrow-arc": `${vw + cornerX + arc(arrowR) + arrowLead}px`,
             "--arrow-exit": `${flowLen(arrowR)}px`, // path end, above the viewport
           } as React.CSSProperties
         }

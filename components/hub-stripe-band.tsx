@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { clearArrival, hasArrival } from "@/lib/arrival";
-import { STRIPE_ARROW_W, StripeArrowPlate } from "@/components/stripe-arrow";
+import {
+  STRIPE_ARROW_W,
+  StripeArrowPlate,
+  stripeLegsMidX,
+} from "@/components/stripe-arrow";
 
 /**
  * The launcher's PERMANENT racing-stripe ribbon: rises from the page's bottom
@@ -21,22 +25,26 @@ import { STRIPE_ARROW_W, StripeArrowPlate } from "@/components/stripe-arrow";
 
 const BAR_H = 16;
 const STEP = 36; // center-to-center stripe spacing, preserved through the arc
-/** Top run → bottom run: yellow / blue / yellow / yellow (deck order). */
+/** Top run → bottom run. Chosen so the upward LEGS read yellow/blue/yellow/
+ * yellow left→right — the same order the login band's legs exit with — so
+ * the login → dashboard cut keeps each stripe's color in place. (Radii map
+ * top run → outermost leg, which reverses the order through the bend.) */
 const STRIPE_COLORS = [
+  "var(--color-accent)",
   "var(--color-accent)",
   "var(--color-brand)",
   "var(--color-accent)",
-  "var(--color-accent)",
 ];
 const INNER_R = 64; // innermost corner radius
-const LEG_MID_X = 140; // the legs' middle line, this far in from the viewport's right
 const EXIT_PAD = 240; // horizontal runs end this far past the viewport's left edge
+const BOTTOM_PAD = 140; // paths start this far below the page bottom (hides the arrow's start)
+const ARROW_LEAD = 96; // arrow anchor rides this far ahead of the band's heads
 
 type Geom = {
   w: number; // page-root width
-  h: number; // page-root height (legs run to the content's bottom)
+  h: number; // legs run to here: the content's bottom or the viewport's, whichever is lower
   heroMid: number; // hero card's vertical middle, in page-root coords
-  legMidX: number; // legs' middle line, in page-root coords
+  legMidX: number; // legs' middle line (shared with the login band), page-root coords
   exitX: number; // past the viewport's left edge, in page-root coords
 };
 
@@ -59,9 +67,14 @@ export function HubStripeBand() {
         animate,
         geom: {
           w: b.width,
-          h: b.height,
+          // The ribbon runs the FULL height: down to the content's bottom
+          // (it lengthens with the page as the launcher grows / scrolls),
+          // and at least to the viewport's bottom on short pages.
+          h: Math.max(b.height, window.innerHeight - b.top),
           heroMid: hr.top + hr.height / 2 - b.top,
-          legMidX: window.innerWidth - LEG_MID_X - b.left,
+          // Same middle line as the login band's exit legs, so the
+          // login → dashboard cut reads continuous.
+          legMidX: stripeLegsMidX(window.innerWidth) - b.left,
           exitX: -b.left - EXIT_PAD,
         },
       });
@@ -89,14 +102,18 @@ export function HubStripeBand() {
     // Shared arc center (concentric corner): legs at cx + r, runs at cy - r.
     const cx = legMidX - rMid;
     const cy = heroMid + rMid;
+    const startY = h + BOTTOM_PAD;
+    const legLen = startY - cy; // identical for every stripe
+    const run = cx - exitX; // identical for every stripe
     const flowPath = (r: number) =>
-      // Up from the page bottom, quarter-turn left (sweep 0), out the left.
-      `M ${cx + r} ${h} V ${cy} A ${r} ${r} 0 0 0 ${cx} ${cy - r} H ${exitX}`;
-    const flowLen = (r: number) => h - cy + (Math.PI / 2) * r + (cx - exitX);
+      // Up from below the page bottom, quarter-turn left (sweep 0), out the left.
+      `M ${cx + r} ${startY} V ${cy} A ${r} ${r} 0 0 0 ${cx} ${cy - r} H ${exitX}`;
+    const arc = (r: number) => (Math.PI / 2) * r;
+    const flowLen = (r: number) => legLen + arc(r) + run;
     const stripes = STRIPE_COLORS.map((color, i) => {
       // Wider arcs end higher: the TOP run needs the LARGEST radius.
       const r = INNER_R + (3 - i) * STEP;
-      return { color, d: flowPath(r), len: flowLen(r) };
+      return { color, d: flowPath(r), len: flowLen(r), arc: arc(r) };
     });
 
     body = (
@@ -115,8 +132,12 @@ export function HubStripeBand() {
                       // Classic line-draw: one dash the length of the path,
                       // offset slides len -> 0 so the ribbon extends from its
                       // bottom anchor; the filled end state IS the ribbon.
+                      // The intermediate stops (segment boundaries) keep all
+                      // four heads level outside the bend — see globals.css.
                       strokeDasharray: `${s.len}`,
                       "--dash-from": `${s.len}px`,
+                      "--dash-leg": `${s.len - legLen}px`, // head at the corner
+                      "--dash-arc": `${run}px`, // head out of the bend
                       "--dash-to": "0px",
                     } as React.CSSProperties)
                   : undefined
@@ -131,8 +152,11 @@ export function HubStripeBand() {
               {
                 offsetPath: `path("${flowPath(rMid)}")`,
                 offsetRotate: "auto",
-                "--arrow-from": `${STRIPE_ARROW_W / 2}px`,
-                "--arrow-to": `${flowLen(rMid)}px`, // path end, past the left edge
+                // Constant ARROW_LEAD ahead of the heads at every shared stop.
+                "--arrow-from": `${ARROW_LEAD}px`,
+                "--arrow-leg": `${legLen + ARROW_LEAD}px`,
+                "--arrow-arc": `${legLen + arc(rMid) + ARROW_LEAD}px`,
+                "--arrow-to": `${flowLen(rMid) + ARROW_LEAD}px`, // clamps at the path end, off-screen
               } as React.CSSProperties
             }
           >
