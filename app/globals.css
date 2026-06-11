@@ -224,17 +224,29 @@ body {
   }
 }
 
-/* Login success: the racing stripes sweep from off-screen left across the
-   tagline + card and exit right (app/login/page.tsx), then the router
-   navigates. Each bar starts slightly after the previous one for a
-   trailing-speed feel; `both` keeps a delayed bar parked off-screen until
-   its turn. Stilled by the global prefers-reduced-motion rule. */
-.stripe-sweep-bar {
-  animation: stripeSweep 0.8s cubic-bezier(0.5, 0, 0.15, 1) both;
+/* Login racing-stripe band (app/login/page.tsx): enters from off-screen left
+   as ONE unit (all four bars together, on the same 1s beat as the headline),
+   rests pointing at the card, and on a successful sign-in exits right —
+   sliding under the card and off the viewport before the router navigates.
+   `both` parks it off-screen during the entrance delay. Stilled by the
+   global prefers-reduced-motion rule. */
+.stripe-band-enter {
+  animation: stripeBandIn 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1s both;
 }
-@keyframes stripeSweep {
+.stripe-band-exit {
+  animation: stripeBandOut 0.8s cubic-bezier(0.5, 0, 0.15, 1) both;
+}
+@keyframes stripeBandIn {
   from {
     transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes stripeBandOut {
+  from {
+    transform: translateX(0);
   }
   to {
     transform: translateX(100vw);

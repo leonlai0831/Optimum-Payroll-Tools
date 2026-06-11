@@ -6,9 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
 
-/** Stagger between sweep bars; the last bar's delay + the 0.8s sweep must
- * finish inside NAVIGATE_AFTER_MS so the flourish completes before the swap. */
-const SWEEP_STAGGER_MS = 60;
+/** The stripe-band exit (0.8s) must finish inside this before the swap. */
 const NAVIGATE_AFTER_MS = 1050;
 
 export default function LoginPage() {
@@ -47,12 +45,16 @@ export default function LoginPage() {
     <div className="relative min-h-screen overflow-hidden">
       {/* The CI guide's own wave artwork anchors the page bottom (decoration only). */}
       <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
-      {/* The gym deck's racing-stripe band: full-bleed at the tagline's height;
-          the tagline block and the card sit on solid backgrounds and punch
-          through it (lg+ only — phones stack and need the room). */}
+      {/* The gym deck's racing-stripe band (lg+): runs from the viewport's left
+          edge to the card's left side, resting just below the tagline so the
+          two never overlap. right-[max(...)] = the card's left edge whether the
+          max-w-6xl container is viewport-bound or max-width-bound. Enters from
+          the left as one unit on the headline's beat; exits right on success. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 top-1/2 z-0 hidden -translate-y-1/2 flex-col gap-4 lg:flex"
+        className={`absolute left-0 right-[max(31rem,calc(50%-5rem))] top-[calc(50%+7.5rem)] z-0 hidden flex-col gap-4 lg:flex ${
+          sweeping ? "stripe-band-exit" : "stripe-band-enter"
+        }`}
       >
         <span className="h-3 bg-accent" />
         <span className="h-3 bg-brand" />
@@ -63,17 +65,13 @@ export default function LoginPage() {
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
         <div className="max-w-xl text-center lg:flex-1 lg:text-left">
-          {/* Shrink-wrapped solid backdrop so the text punches a clean gap in
-              the stripe band while the band stays visible on either side. */}
-          <div className="relative inline-block bg-background lg:px-6 lg:py-4">
-            <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
-              Optimizing
-              <br className="hidden lg:block" /> Joy at Work
-            </h1>
-            <p className="enter-from-bottom mt-4 text-lg text-muted sm:text-xl xl:text-2xl">
-              Powering the people behind
-            </p>
-          </div>
+          <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
+            Optimizing
+            <br className="hidden lg:block" /> Joy at Work
+          </h1>
+          <p className="enter-from-bottom mt-4 text-lg text-muted sm:text-xl xl:text-2xl">
+            Powering the people behind
+          </p>
         </div>
         <Card className="relative w-full max-w-md shrink-0 overflow-hidden border-t-4 border-t-brand">
           <div className="bg-white px-6 pb-5 pt-8 text-center">
@@ -147,23 +145,6 @@ export default function LoginPage() {
           </form>
         </Card>
       </div>
-      {/* Login-success flourish: the gym deck's racing stripes (yellow / blue /
-          yellow / yellow) sweep from off-screen left across the tagline and the
-          card, exiting right before the router navigates. */}
-      {sweeping && (
-        <div
-          className="pointer-events-none fixed inset-y-0 left-0 z-50 flex w-full flex-col items-start justify-center gap-3"
-          aria-hidden
-        >
-          {(["bg-accent", "bg-brand", "bg-accent", "bg-accent"] as const).map((bg, i) => (
-            <span
-              key={i}
-              className={`stripe-sweep-bar h-2.5 w-[26rem] max-w-[75vw] sm:h-3 ${bg}`}
-              style={{ animationDelay: `${i * SWEEP_STAGGER_MS}ms` }}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
