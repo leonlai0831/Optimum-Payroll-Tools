@@ -11,7 +11,7 @@ const nunito = Nunito({
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Optimum Payroll Tools",
+  title: "Optimum People Hub",
   description: "Allowance & KPI bonus calculators for Optimum Swim School",
 };
 

@@ -52,7 +52,7 @@ export async function buildCoachResultPdf({
 }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`KPI Result — ${coach.canonicalName} — ${periodLabel}`);
-  doc.setProducer("Optimum Payroll Tools");
+  doc.setProducer("Optimum People Hub");
 
   const page = doc.addPage([595.28, 841.89]); // A4 portrait, points
   const { width, height } = page.getSize();

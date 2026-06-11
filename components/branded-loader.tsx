@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SRC = "/logo-animation.mp4";
+const FIT_SRC = "/logo-fit-animation.mp4";
 const DEFAULT_LABEL = "Loading…";
 
 /** Acceleration applied to the clip once the page is ready, so a fast load
@@ -22,8 +23,15 @@ const FADE_MS = 300;
  * OUTSIDE Suspense: fallbacks just check in/out, and the host lets the
  * current cycle finish (sped up) before fading the overlay away.
  */
-type Snapshot = { active: number; src: string; label: string };
-let snapshot: Snapshot = { active: 0, src: DEFAULT_SRC, label: DEFAULT_LABEL };
+/** `src` undefined = no explicit clip requested — the host falls back to
+ * `settledBrand`, the brand of the page the navigation STARTED from. */
+type Snapshot = {
+  active: number;
+  src: string | undefined;
+  label: string;
+  settledBrand: string;
+};
+let snapshot: Snapshot = { active: 0, src: undefined, label: DEFAULT_LABEL, settledBrand: "swim" };
 const listeners = new Set<() => void>();
 function emit(next: Partial<Snapshot>) {
   snapshot = { ...snapshot, ...next };
@@ -37,13 +45,23 @@ function subscribe(l: () => void) {
 }
 const getSnapshot = () => snapshot;
 
+/** Record the brand of the page the user has settled on (no-op when
+ * unchanged). The host only calls this while idle AND fully hidden, so an
+ * unpinned fallback keeps playing the clip of the brand the navigation
+ * started from — even through the finish-the-cycle exit. */
+function recordSettledBrand(brand: string) {
+  if (snapshot.settledBrand !== brand) emit({ settledBrand: brand });
+}
+
 /**
  * The loading.tsx fallback. Visuals are drawn by LoaderOverlayHost; this just
  * registers the pending load and holds the page area open behind the overlay.
+ * Omit `src` to follow the brand the user navigated FROM (e.g. the brand-
+ * neutral Home); pass one to pin a destination clip (commission → Fit).
  */
 export function BrandedLoader({
   label = DEFAULT_LABEL,
-  src = DEFAULT_SRC,
+  src,
 }: {
   label?: string;
   src?: string;
@@ -65,7 +83,7 @@ type Phase = "loading" | ExitPhase;
  * hidden. A navigation that starts mid-finish/fade rewinds straight back to
  * loading. Reduced-motion users skip the finish-the-cycle delay entirely.
  */
-export function LoaderOverlayHost() {
+export function LoaderOverlayHost({ brand }: { brand: string }) {
   const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -80,6 +98,15 @@ export function LoaderOverlayHost() {
     if (!active) setExitPhase("finishing");
   }
   const phase: Phase = active ? "loading" : exitPhase;
+  // An unpinned fallback plays the clip of the brand the user navigated FROM
+  // (gym module → Home plays the Fit clip): the settled brand only advances
+  // below once the overlay is idle and fully hidden, so it still names the
+  // origin while a load is in flight or the exit animation is playing.
+  const src = snap.src ?? (snap.settledBrand === "fit" ? FIT_SRC : DEFAULT_SRC);
+
+  useEffect(() => {
+    if (getSnapshot().active === 0 && phase === "hidden") recordSettledBrand(brand);
+  });
 
   useEffect(() => {
     const video = videoRef.current;
@@ -127,7 +154,7 @@ export function LoaderOverlayHost() {
       }, FADE_MS);
       return () => clearTimeout(t);
     }
-  }, [phase, snap.src]);
+  }, [phase, src]);
 
   return (
     <div
@@ -143,7 +170,7 @@ export function LoaderOverlayHost() {
       {/* Keyed by src so switching brand sections (swim ↔ fit clip) remounts
           cleanly; the effect above restarts playback after the swap. */}
       <video
-        key={snap.src}
+        key={src}
         ref={videoRef}
         className="w-44 max-w-[70vw] rounded-2xl shadow-sm sm:w-52"
         loop
@@ -152,7 +179,7 @@ export function LoaderOverlayHost() {
         preload="auto"
         aria-label="Loading animation"
       >
-        <source src={snap.src} type="video/mp4" />
+        <source src={src} type="video/mp4" />
       </video>
       <p className="text-sm font-semibold tracking-wide text-brand">{snap.label}</p>
     </div>

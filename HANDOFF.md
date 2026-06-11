@@ -1,4 +1,4 @@
-# Session Handoff — Optimum Payroll Tools
+# Session Handoff — Optimum People Hub
 
 Snapshot for the next session. Everything below is **merged to `main`** unless
 stated otherwise. Read `CLAUDE.md` for the architecture and the frozen Settings
