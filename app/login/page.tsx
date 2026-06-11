@@ -46,13 +46,15 @@ export default function LoginPage() {
       {/* The CI guide's own wave artwork anchors the page bottom (decoration only). */}
       <CiWave className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full sm:h-40" />
       {/* The gym deck's racing-stripe band (lg+): runs from the viewport's left
-          edge to the card's left side, resting just below the tagline so the
-          two never overlap. right-[max(...)] = the card's left edge whether the
-          max-w-6xl container is viewport-bound or max-width-bound. Enters from
-          the left as one unit on the headline's beat; exits right on success. */}
+          edge to the card's left side, its top flush with the card's top edge
+          (the card is ~27.4rem tall and vertically centered, so its top sits
+          at 50% - 13.7rem); the tagline shifts down out of its way. Enters
+          from the left as one unit on the headline's beat; exits right on
+          success. right-[max(...)] = the card's left edge whether the
+          max-w-6xl container is viewport-bound or max-width-bound. */}
       <div
         aria-hidden
-        className={`absolute left-0 right-[max(31rem,calc(50%-5rem))] top-[calc(50%+7.5rem)] z-0 hidden flex-col gap-4 lg:flex ${
+        className={`absolute left-0 right-[max(31rem,calc(50%-5rem))] top-[calc(50%-13.7rem)] z-0 hidden flex-col gap-4 lg:flex ${
           sweeping ? "stripe-band-exit" : "stripe-band-enter"
         }`}
       >
@@ -63,8 +65,9 @@ export default function LoginPage() {
       </div>
       {/* Phones stack tagline-over-card; lg+ splits into tagline left, card right. */}
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:justify-between lg:gap-16 lg:px-12">
-        {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
-        <div className="max-w-xl text-center lg:flex-1 lg:text-left">
+        {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water".
+            Nudged down on lg so it sits clear below the stripe band above it. */}
+        <div className="max-w-xl text-center lg:mt-20 lg:flex-1 lg:text-left">
           <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
             Optimizing
             <br className="hidden lg:block" /> Joy at Work
