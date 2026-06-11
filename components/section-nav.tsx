@@ -37,7 +37,7 @@ type SectionItem = {
 type SectionConfig = { title: string; items: SectionItem[] };
 
 const NAVS: Record<
-  "allowance" | "kpi" | "staff" | "commission" | "assessment" | "lesson" | "system",
+  "allowance" | "freelancer" | "kpi" | "staff" | "commission" | "assessment" | "lesson" | "system",
   SectionConfig
 > = {
   assessment: {
@@ -63,6 +63,14 @@ const NAVS: Record<
       { href: "/allowance/history", label: "History", icon: History },
       { href: "/allowance/trends", label: "Trends", icon: BarChart3 },
       { href: "/allowance/settings", label: "Settings", icon: SlidersHorizontal },
+    ],
+  },
+  freelancer: {
+    title: "Freelancer Payment",
+    items: [
+      { href: "/freelancer", label: "Calculator", icon: Calculator, exact: true },
+      { href: "/freelancer/history", label: "History", icon: History },
+      { href: "/freelancer/settings", label: "Settings", icon: SlidersHorizontal },
     ],
   },
   kpi: {

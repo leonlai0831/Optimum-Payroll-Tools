@@ -148,6 +148,39 @@ flip), or "Load into calculator" → `/kpi?ingest=<id>` seeds the dashboard with
 through `POST /api/runs`, which marks the ingest `imported` + links `importedRunId`. The proxy
 exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route).
 
+## Freelancer Payment (`lib/freelancer`, `/freelancer`)
+
+Monthly pay for freelance swim instructors, faithful to the operator's
+FREELANCER_CALCULATOR.xlsx. Positions REUSE the allowance tiers
+(`coaches.allowanceTier` IS the freelancer position; subset A1–A3, PA, T0–T4, I1 —
+`FREELANCER_POSITIONS`). Pure engine in `lib/freelancer/calc.ts` (locked by
+`calc.test.ts`): **hourly rate** = `rates[position]` × center group (groupA =
+HQ/BK/BT, groupB = the rest); **student result** = `1 − black/colour` (T1–T4 + I1
+only, others forced 0); **commitment bonus** = matrix lookup with VLOOKUP-style
+approximate match on BOTH axes (hours rows 0/31/41/51 × result columns 0/0.7/0.85,
+0 for A1–A3); **attendance bonus** (default +0.2, fixed hours only) unless ANY
+center row is marked absent. Per-center pay =
+`rate × (replaced×(1+commit) + fixed×(1+commit+attend))`; payouts group per paying
+company (OT = HQ/BK/BT/PK, OTG = KK/USJ, PJ, QSM, KM) plus free-form per-entity
+extras; money rounds to 2dp at the end only. Defaults in
+`lib/freelancer/defaults.ts`; numbers editable on `/freelancer/settings`
+(swim_view/edit_settings; entities + center groups read-only for now).
+
+Mirrors the Allowance module: singleton `freelancer_config` + `freelancer_runs`
+(UNIQUE (period, canonicalName) upsert, config snapshot per run; no period locks
+in v1). Saving recomputes server-side from a FRESH config read, audits
+`freelancer.save`, and carries the position + **payee details** (icNo / bankName /
+bankAccount — nullable `coaches` columns, also editable on the staff profile)
+back onto the coach profile; blank payee fields never wipe stored values. Pages:
+`/freelancer` (calculator, `?edit=<runId>`), `/freelancer/history` (grouped by
+month; edit/delete/export), `/freelancer/settings`. `GET
+/api/freelancer/export?period=` builds the **bank-transfer XLSX**
+(`Freelancer-Payments-<period>.xlsx`, one worksheet per paying entity with a
+payout: No / Name / IC / Bank / Bank Code (`lib/freelancer/banks.ts`) / Account /
+Amount + TOTAL row). Run routes gate on the `run_freelancer` capability (admin +
+supervisor by default); the section gates the "swim" category like the other swim
+surfaces.
+
 ## Lesson Plan (`lib/lesson-plan`, `/lesson-plans`)
 
 Digital version of the two paper lesson-plan templates (swim group). Two types:

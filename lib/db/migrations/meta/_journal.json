@@ -211,6 +211,13 @@
       "when": 1781100892736,
       "tag": "0029_worthless_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1781163453326,
+      "tag": "0030_bumpy_tusk",
+      "breakpoints": true
     }
   ]
 }

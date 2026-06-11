@@ -35,6 +35,11 @@ import type {
   AllowanceResult,
   AllowanceTier,
 } from "@/lib/allowance/types";
+import type {
+  FreelancerConfig,
+  FreelancerInput,
+  FreelancerResult,
+} from "@/lib/freelancer/types";
 
 /** Singleton active configuration (one row, id = 1). */
 export const config = pgTable("config", {
@@ -62,6 +67,11 @@ export const coaches = pgTable("coaches", {
   // coach if they later move up to a teaching tier.
   kpiLinkNa: boolean("kpi_link_na").default(false).notNull(),
   kpiLinkNaTier: text("kpi_link_na_tier").$type<AllowanceTier>(),
+  // Payee details for the freelancer bank-transfer file. Carried over from the
+  // last saved freelancer run and prefilled into the next one.
+  icNo: text("ic_no"),
+  bankName: text("bank_name"),
+  bankAccount: text("bank_account"),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -176,6 +186,30 @@ export const allowanceRuns = pgTable("allowance_runs", {
   // lookups, so the separate `allowance_runs_period_idx` was dropped as redundant.
   uniqueIndex("allowance_runs_period_name_idx").on(t.periodLabel, t.canonicalName),
   index("allowance_runs_coach_idx").on(t.coachId),
+]);
+
+/** Singleton freelancer payment rates + bonus matrix (one row, id = 1). */
+export const freelancerConfig = pgTable("freelancer_config", {
+  id: integer("id").primaryKey().default(1),
+  data: jsonb("data").$type<FreelancerConfig>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** A saved freelancer payment calculation for one coach in one month. */
+export const freelancerRuns = pgTable("freelancer_runs", {
+  id: serial("id").primaryKey(),
+  periodLabel: text("period_label").notNull(),
+  coachId: integer("coach_id"),
+  canonicalName: text("canonical_name").notNull(),
+  input: jsonb("input").$type<FreelancerInput>().notNull(),
+  result: jsonb("result").$type<FreelancerResult>().notNull(),
+  configSnapshot: jsonb("config_snapshot").$type<FreelancerConfig>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // One payment record per (period, freelancer): upsertFreelancerRun does a
+  // single atomic onConflictDoUpdate on this index, mirroring allowance_runs.
+  uniqueIndex("freelancer_runs_period_name_idx").on(t.periodLabel, t.canonicalName),
+  index("freelancer_runs_coach_idx").on(t.coachId),
 ]);
 
 /** Singleton Optimum Fit commission rate bands (one row, id = 1). */
@@ -394,6 +428,8 @@ export type KpiIngestRecord = typeof kpiIngests.$inferSelect;
 export type ConfigRecord = typeof config.$inferSelect;
 export type AllowanceConfigRecord = typeof allowanceConfig.$inferSelect;
 export type AllowanceRunRecord = typeof allowanceRuns.$inferSelect;
+export type FreelancerConfigRecord = typeof freelancerConfig.$inferSelect;
+export type FreelancerRunRecord = typeof freelancerRuns.$inferSelect;
 export type CommissionConfigRecord = typeof commissionConfig.$inferSelect;
 export type CommissionRunRecord = typeof commissionRuns.$inferSelect;
 export type TeachingConfigRecord = typeof teachingConfig.$inferSelect;

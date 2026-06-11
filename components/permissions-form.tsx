@@ -37,6 +37,7 @@ const GROUPS: CapGroup[] = [
       "run_kpi",
       "finalize_kpi",
       "run_allowance",
+      "run_freelancer",
       "swim_view_settings",
       "swim_edit_settings",
     ],

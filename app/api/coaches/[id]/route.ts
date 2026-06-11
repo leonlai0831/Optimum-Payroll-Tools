@@ -16,6 +16,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
     allowanceTier?: string | null;
     active?: boolean;
     employmentType?: string;
+    icNo?: string;
+    bankName?: string;
+    bankAccount?: string;
   };
 
   const patch: Parameters<typeof updateCoach>[1] = {};
@@ -35,6 +38,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
   if ((EMPLOYMENT_TYPES as readonly string[]).includes(body.employmentType ?? "")) {
     patch.employmentType = body.employmentType as EmploymentType;
   }
+  // Payee details (freelancer bank file). Trim; an explicit empty string clears.
+  if (typeof body.icNo === "string") patch.icNo = body.icNo.trim() || null;
+  if (typeof body.bankName === "string") patch.bankName = body.bankName.trim() || null;
+  if (typeof body.bankAccount === "string") patch.bankAccount = body.bankAccount.trim() || null;
 
   const before = await getCoach(Number(id));
   // Rule: the job role is derived from the pay tier (A1/A2/A3 → front desk, else
@@ -55,6 +62,13 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/coaches/[id]">
       patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
       patch.jobRole !== undefined && `role→${patch.jobRole}`,
       patch.employmentType !== undefined && `type→${patch.employmentType}`,
+      patch.icNo !== undefined && (!before || patch.icNo !== before.icNo) && "IC no updated",
+      patch.bankName !== undefined &&
+        (!before || patch.bankName !== before.bankName) &&
+        `bank→${patch.bankName ?? "none"}`,
+      patch.bankAccount !== undefined &&
+        (!before || patch.bankAccount !== before.bankAccount) &&
+        "bank account updated",
     ].filter(Boolean);
     await recordAudit({
       actorId: actor.id,

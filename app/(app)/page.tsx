@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Dumbbell,
+  HandCoins,
   ScrollText,
   ShieldCheck,
   Trophy,
@@ -16,6 +17,7 @@ import {
 import { Card } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
 import { HubStripeBand } from "@/components/hub-stripe-band";
+import { ArrivalSlide } from "@/components/arrival-slide";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
@@ -44,6 +46,14 @@ const TOOLS: Tool[] = [
     subtitle: "Full-time staff monthly allowance · start of month",
     icon: Wallet,
     cap: "run_allowance",
+  },
+  {
+    // Land on History first; the Calculator stays a tab inside the module.
+    href: "/freelancer/history",
+    title: "Freelancer Payment",
+    subtitle: "Freelance instructor pay · hourly + bonuses",
+    icon: HandCoins,
+    cap: "run_freelancer",
   },
   {
     href: "/kpi/history",
@@ -211,11 +221,14 @@ export default async function HubPage() {
       : null;
 
   return (
-    <div className="fade-in relative space-y-6">
+    // ArrivalSlide is the page root: it descends from above when coming from
+    // sign-in (the second half of the login camera-pan), plain fade-in
+    // otherwise.
+    <ArrivalSlide>
       {/* The permanent racing-stripe ribbon (bottom-right → up → behind the
           hero → out the left edge). Rendered BEFORE the hero so its bend
-          hides behind the opaque card (id="hub-hero" below); arriving from
-          sign-in plays its draw-in once. */}
+          hides behind the opaque card (id="hub-hero" below); every visit
+          plays its draw-in. */}
       <HubStripeBand />
       {/* The one brand "splash" moment, photocopied from a CI guide page:
           white sheet, Brand Blue heading, the guide's own footer wave (traced
@@ -266,6 +279,6 @@ export default async function HubPage() {
           )}
         </>
       )}
-    </div>
+    </ArrivalSlide>
   );
 }
