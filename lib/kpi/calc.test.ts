@@ -90,6 +90,31 @@ describe("getCenterTarget", () => {
     expect(getCenterTarget("Puchong Kinrara", DEFAULT_CENTER_TARGETS)).toBe(750);
     expect(getCenterTarget("Nowhere", DEFAULT_CENTER_TARGETS)).toBe(140);
   });
+
+  it("matches an abbreviated CSV center name to its longer configured key (operator-confirmed)", () => {
+    // The monthly CSV can carry a shorter spelling than the Settings key.
+    expect(getCenterTarget("Kinrara", DEFAULT_CENTER_TARGETS)).toBe(750);
+    expect(getCenterTarget("USJ", DEFAULT_CENTER_TARGETS)).toBe(750);
+  });
+
+  it("prefers the most specific key when several keys match", () => {
+    const targets = { USJ: 500, "Subang USJ": 750 };
+    // Two shared tokens with "Subang USJ" beat one with "USJ".
+    expect(getCenterTarget("USJ Subang Branch", targets)).toBe(750);
+    // The smaller superset wins when overlap ties: "Subang USJ" (1 extra token)
+    // over a hypothetical wordier key (2 extra tokens).
+    const wordy = { "Subang USJ Damansara": 999, "Subang USJ": 750 };
+    expect(getCenterTarget("Subang", wordy)).toBe(750);
+  });
+
+  it("breaks exact-closeness ties deterministically, independent of config key order", () => {
+    // "Puchong" is a strict subset of both keys with identical closeness; the
+    // alphabetical key must win no matter the object's insertion order.
+    const ab = { "Puchong Kinrara": 750, "Puchong Utama": 600 };
+    const ba = { "Puchong Utama": 600, "Puchong Kinrara": 750 };
+    expect(getCenterTarget("Puchong", ab)).toBe(750);
+    expect(getCenterTarget("Puchong", ba)).toBe(750);
+  });
 });
 
 describe("merge grouping", () => {
