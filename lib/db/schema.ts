@@ -204,11 +204,23 @@ export const freelancerRuns = pgTable("freelancer_runs", {
   input: jsonb("input").$type<FreelancerInput>().notNull(),
   result: jsonb("result").$type<FreelancerResult>().notNull(),
   configSnapshot: jsonb("config_snapshot").$type<FreelancerConfig>().notNull(),
+  // Position family (admin / teaching / cc) — see POSITION_GROUPS.
+  positionGroup: text("position_group").notNull(),
+  // The month the WORK belongs to; equals period_label except for late
+  // submissions (paid in this batch, reported under the earlier month).
+  workPeriod: text("work_period").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
-  // One payment record per (period, freelancer): upsertFreelancerRun does a
-  // single atomic onConflictDoUpdate on this index, mirroring allowance_runs.
-  uniqueIndex("freelancer_runs_period_name_idx").on(t.periodLabel, t.canonicalName),
+  // One payment record per (payout month, freelancer, position family, work
+  // month): the same person may be paid for several position families — and
+  // for a missed earlier month — within one batch; re-saving the same
+  // combination replaces it (upsertFreelancerRun's onConflictDoUpdate).
+  uniqueIndex("freelancer_runs_period_name_group_work_idx").on(
+    t.periodLabel,
+    t.canonicalName,
+    t.positionGroup,
+    t.workPeriod,
+  ),
   index("freelancer_runs_coach_idx").on(t.coachId),
 ]);
 

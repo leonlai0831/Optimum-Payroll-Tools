@@ -4,12 +4,10 @@
 // approximate match on both axes), an attendance bonus on fixed hours, and
 // payouts grouped per paying company (OT / OTG / PJ / QSM / KM).
 //
-// Positions deliberately REUSE the allowance pay tiers (`coaches.allowanceTier`
-// is the freelancer position) — no separate position column exists.
+// Positions reuse the allowance pay tiers (`coaches.allowanceTier` is the
+// freelancer position) plus the freelancer-only "CC", which never maps back
+// onto a coach's tier — the save-time carry-over skips it.
 
-import type { AllowanceTier } from "@/lib/allowance/types";
-
-/** Freelancer positions: the AllowanceTier subset that freelancers are hired on. */
 export const FREELANCER_POSITIONS = [
   "A1",
   "A2",
@@ -21,9 +19,29 @@ export const FREELANCER_POSITIONS = [
   "T3",
   "T4",
   "I1",
-] as const satisfies readonly AllowanceTier[];
+  "CC",
+] as const;
 
 export type FreelancerPosition = (typeof FREELANCER_POSITIONS)[number];
+
+/**
+ * Position families for the one-record-per-month rule: a person may hold
+ * SEVERAL payment records in the same payout month as long as each sits in a
+ * different group (admin A1–A3 / teaching PA–I1 / CC) — re-saving within the
+ * same group replaces that group's record.
+ */
+export const POSITION_GROUPS = {
+  admin: ["A1", "A2", "A3"],
+  teaching: ["PA", "T0", "T1", "T2", "T3", "T4", "I1"],
+  cc: ["CC"],
+} as const satisfies Record<string, readonly FreelancerPosition[]>;
+export type PositionGroup = keyof typeof POSITION_GROUPS;
+
+export function positionGroupOf(position: FreelancerPosition): PositionGroup {
+  if ((POSITION_GROUPS.admin as readonly string[]).includes(position)) return "admin";
+  if (position === "CC") return "cc";
+  return "teaching";
+}
 
 /** Positions whose student result (1 − black/colour) counts; everyone else is 0. */
 export const RESULT_POSITIONS = ["T1", "T2", "T3", "T4", "I1"] as const satisfies
@@ -96,6 +114,13 @@ export interface FreelancerInput {
   bankName: string;
   bankAccount: string;
   centerRows: FreelancerCenterRow[];
+  /**
+   * The month the WORK belongs to ("YYYY-MM"). Normally equals the payout
+   * period; an EARLIER month marks a late submission (补交) — the record is
+   * paid in this batch but reported (and KPI-bound) under the work month,
+   * exactly like the operator's summary's APRIL rows inside a MAY batch.
+   */
+  workPeriod?: string | null;
   /** Monthly black-band total (result positions only). */
   blackCount: number;
   /** Monthly colour-band total (result positions only). */

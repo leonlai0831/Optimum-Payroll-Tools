@@ -17,6 +17,7 @@ export const DEFAULT_FREELANCER_CONFIG: FreelancerConfig = {
     T3: { groupA: 20, groupB: 23 },
     T4: { groupA: 23, groupB: 26 },
     I1: { groupA: 26, groupB: 30 },
+    CC: { groupA: 26, groupB: 42 },
   },
   groupACenters: ["HQ", "BK", "BT"],
   // VLOOKUP-style approximate match on both axes (largest threshold ≤ value).

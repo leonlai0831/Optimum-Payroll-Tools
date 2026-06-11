@@ -111,7 +111,11 @@ export function FreelancerHistoryView({
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-gray-900">{r.canonicalName}</div>
                       <div className="mt-0.5 text-[11px] text-gray-400">
-                        {r.position} · {r.totalServiceHours} h · commitment +
+                        {r.position}
+                        {r.workPeriod !== r.periodLabel && (
+                          <span className="text-warning"> · for {r.workPeriod}</span>
+                        )}{" "}
+                        · {r.totalServiceHours} h · commitment +
                         {(r.commitment * 100).toFixed(0)}%
                         {r.attendance > 0 ? ` · attendance +${(r.attendance * 100).toFixed(0)}%` : ""}
                       </div>
@@ -171,7 +175,12 @@ export function FreelancerHistoryView({
                   {list.map((r) => (
                     <tr key={r.id} className="hover:bg-indigo-50/40">
                       <td className="px-4 py-2 font-medium text-gray-900">{r.canonicalName}</td>
-                      <td className="px-4 py-2 text-gray-600">{r.position}</td>
+                      <td className="px-4 py-2 text-gray-600">
+                        {r.position}
+                        {r.workPeriod !== r.periodLabel && (
+                          <span className="ml-1 text-xs text-warning">for {r.workPeriod}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right tabular-nums text-gray-600">
                         {r.totalServiceHours}
                       </td>

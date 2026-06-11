@@ -17,6 +17,7 @@ const MONEY = "#,##0.00";
 
 const COLUMNS = [
   { header: "No", width: 5 },
+  { header: "Month", width: 10 },
   { header: "Name", width: 28 },
   { header: "IC No", width: 18 },
   { header: "Bank", width: 26 },
@@ -24,6 +25,18 @@ const COLUMNS = [
   { header: "Account No", width: 18 },
   { header: "Amount (RM)", width: 13 },
 ] as const;
+
+const MONTH_NAMES = [
+  "JAN", "FEB", "MAR", "APRIL", "MAY", "JUNE",
+  "JULY", "AUG", "SEPT", "OCT", "NOV", "DEC",
+] as const;
+
+/** "2026-04" → "APRIL"; the year only shows for cross-year late submissions ("DEC 2025"). */
+function monthLabel(workPeriod: string, payoutPeriod: string): string {
+  const [y, m] = workPeriod.split("-").map(Number);
+  const name = MONTH_NAMES[(m ?? 1) - 1] ?? workPeriod;
+  return String(y) === payoutPeriod.slice(0, 4) ? name : `${name} ${y}`;
+}
 
 /** The slice of a saved run the workbook needs (a subset of FreelancerRunRecord). */
 export interface FreelancerExportRun {
@@ -62,12 +75,23 @@ export async function buildFreelancerBankWorkbook(opts: {
   }
 
   for (const { entity, label } of entities) {
-    const payees = runs
-      .map((run) => ({
-        run,
-        amount: run.result.entityTotals.find((e) => e.entity === entity)?.amount ?? 0,
-      }))
-      .filter((p) => p.amount > 0);
+    // One transfer row per (person, work month): a person's several position-
+    // family records merge into one amount; a late submission for an earlier
+    // month keeps its own row, distinguished by the Month column — exactly
+    // like the operator's summary.
+    const byPayee = new Map<string, { run: FreelancerExportRun; work: string; amount: number }>();
+    for (const run of runs) {
+      const amount = run.result.entityTotals.find((e) => e.entity === entity)?.amount ?? 0;
+      if (amount <= 0) continue;
+      const work = run.input.workPeriod || period;
+      const key = `${run.canonicalName}::${work}`;
+      const cur = byPayee.get(key);
+      if (cur) cur.amount += amount;
+      else byPayee.set(key, { run, work, amount });
+    }
+    const payees = [...byPayee.values()].sort(
+      (a, b) => a.run.canonicalName.localeCompare(b.run.canonicalName) || a.work.localeCompare(b.work),
+    );
     if (payees.length === 0) continue; // only entities with a payout this month
 
     const sheetName = `${label}`.replace(/[:\\/?*[\]]/g, " ").slice(0, 31) || entity;
@@ -88,29 +112,30 @@ export async function buildFreelancerBankWorkbook(opts: {
       ws.getColumn(i + 1).width = c.width;
     });
 
-    payees.forEach(({ run, amount }, i) => {
+    payees.forEach(({ run, work, amount }, i) => {
       const r = i + 3;
       ws.getCell(r, 1).value = i + 1;
+      ws.getCell(r, 2).value = monthLabel(work, period);
       // User-derived text gets formula-injection neutralized.
-      ws.getCell(r, 2).value = sanitizeSpreadsheetText(run.canonicalName);
-      ws.getCell(r, 3).value = sanitizeSpreadsheetText(run.input.icNo ?? "");
-      ws.getCell(r, 3).numFmt = "@"; // keep IC digits as TEXT
-      ws.getCell(r, 4).value = sanitizeSpreadsheetText(run.input.bankName ?? "");
-      ws.getCell(r, 5).value = bankCode(run.input.bankName ?? "");
-      ws.getCell(r, 6).value = sanitizeSpreadsheetText(run.input.bankAccount ?? "");
-      ws.getCell(r, 6).numFmt = "@"; // account numbers must never go scientific
-      ws.getCell(r, 7).value = amount;
-      ws.getCell(r, 7).numFmt = MONEY;
+      ws.getCell(r, 3).value = sanitizeSpreadsheetText(run.canonicalName);
+      ws.getCell(r, 4).value = sanitizeSpreadsheetText(run.input.icNo ?? "");
+      ws.getCell(r, 4).numFmt = "@"; // keep IC digits as TEXT
+      ws.getCell(r, 5).value = sanitizeSpreadsheetText(run.input.bankName ?? "");
+      ws.getCell(r, 6).value = bankCode(run.input.bankName ?? "");
+      ws.getCell(r, 7).value = sanitizeSpreadsheetText(run.input.bankAccount ?? "");
+      ws.getCell(r, 7).numFmt = "@"; // account numbers must never go scientific
+      ws.getCell(r, 8).value = amount;
+      ws.getCell(r, 8).numFmt = MONEY;
       for (let c = 1; c <= COLUMNS.length; c++) ws.getCell(r, c).font = ARIAL;
     });
 
     // TOTAL row.
     const totalRow = payees.length + 3;
-    ws.getCell(totalRow, 2).value = "TOTAL";
-    ws.getCell(totalRow, 2).font = ARIAL_BOLD;
-    const totalCell = ws.getCell(totalRow, 7);
+    ws.getCell(totalRow, 3).value = "TOTAL";
+    ws.getCell(totalRow, 3).font = ARIAL_BOLD;
+    const totalCell = ws.getCell(totalRow, 8);
     totalCell.value = {
-      formula: `SUM(G3:G${totalRow - 1})`,
+      formula: `SUM(H3:H${totalRow - 1})`,
       result: payees.reduce((s, p) => s + p.amount, 0),
     };
     totalCell.numFmt = MONEY;

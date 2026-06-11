@@ -4,6 +4,7 @@ import { Inbox } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { listKpiIngests, type KpiIngestSummary } from "@/lib/db/queries";
+import { logger } from "@/lib/log";
 import { Badge, Card } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
@@ -40,7 +41,16 @@ export default async function KpiIngestsPage() {
   const caps = await getCapabilities(user);
   if (!caps.has("run_kpi")) redirect("/");
 
-  const ingests = await listKpiIngests();
+  let ingests;
+  try {
+    ingests = await listKpiIngests();
+  } catch (e) {
+    // The deployed Uploads page has been intermittently 500ing with an opaque
+    // digest — surface the real cause in the function logs while keeping the
+    // error boundary behavior.
+    logger.error("kpi/ingests: listKpiIngests failed", { error: e instanceof Error ? `${e.message}\n${e.stack}` : String(e) });
+    throw e;
+  }
 
   return (
     <>

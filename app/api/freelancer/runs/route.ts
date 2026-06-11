@@ -57,6 +57,10 @@ function sanitizeInput(raw: unknown): FreelancerInput | null {
       })
       .filter((row) => row.center !== ""),
     blackCount: Math.max(0, num(r.blackCount)),
+    // Late submission: the work month may be the payout month or EARLIER —
+    // never later. Anything invalid falls back to the payout month.
+    workPeriod:
+      typeof r.workPeriod === "string" && isValidPeriod(r.workPeriod) ? r.workPeriod : null,
     kpiName:
       typeof r.kpiName === "string" && r.kpiName.trim() ? r.kpiName.trim().slice(0, 120) : null,
     colourCount: Math.max(0, num(r.colourCount)),
@@ -83,6 +87,13 @@ export async function POST(req: Request) {
   const input = sanitizeInput(body.input);
   if (!input) {
     return NextResponse.json({ error: "a freelancer name and valid position are required" }, { status: 400 });
+  }
+  // A late submission reports work from an EARLIER month — never a future one.
+  if (input.workPeriod && input.workPeriod > body.periodLabel) {
+    return NextResponse.json(
+      { error: "work month cannot be after the payout month" },
+      { status: 400 },
+    );
   }
   // Recompute server-side from the live config (ignore any client-sent result),
   // and snapshot that config so the saved record stays reproducible. Read FRESH
