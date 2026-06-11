@@ -142,6 +142,16 @@ async function lockPeriodAdvisory(tx: Tx, period: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${period}))`);
 }
 
+/**
+ * Namespace prefix for the KPI period advisory lock, kept distinct from the
+ * allowance lock (which keys on the bare period) so the two modules never
+ * serialize against each other on the same period string. Every path that can
+ * OPEN or CLOSE a KPI period — staging a delivery, finalizing/importing a run —
+ * takes `lockPeriodAdvisory(tx, KPI_PERIOD_LOCK_NS + period)`, so the staging
+ * close-check and a concurrent finalize/import are mutually exclusive.
+ */
+const KPI_PERIOD_LOCK_NS = "kpi:";
+
 export function defaultConfig(): AppConfig {
   return {
     personalKpi: structuredClone(DEFAULT_PERSONAL_KPI),
@@ -682,15 +692,24 @@ async function upsertCoachesFromRunWith(
         })
         .where(eq(coaches.id, match.id));
     } else {
-      await tx.insert(coaches).values({
-        canonicalName: rc.canonicalName,
-        aliases: mergedAliases,
-        center: normalizeCtr(rc.center),
-        defaultPosition: rc.position,
-        lastAllowance: rc.teachingAllowance,
-        lastMgmtAssessment: rc.mgmtAssessment ?? null,
-        lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
-      });
+      // onConflictDoNothing: the in-tx snapshot is the only thing telling us this
+      // coach is new, but a concurrent finalized run can create the same
+      // canonicalName between our snapshot and this insert. The unique index then
+      // rejects the loser with a 500 that aborts an otherwise-valid month-save.
+      // Skipping the insert on conflict keeps the winner's carry-over (these are
+      // "last known" hints, overwritten next finalize) and lets the save commit.
+      await tx
+        .insert(coaches)
+        .values({
+          canonicalName: rc.canonicalName,
+          aliases: mergedAliases,
+          center: normalizeCtr(rc.center),
+          defaultPosition: rc.position,
+          lastAllowance: rc.teachingAllowance,
+          lastMgmtAssessment: rc.mgmtAssessment ?? null,
+          lastMgmtAssessmentAt: rc.mgmtAssessment != null ? new Date() : null,
+        })
+        .onConflictDoNothing({ target: coaches.canonicalName });
     }
   }
 }
@@ -835,6 +854,12 @@ export async function createRun(input: {
   // profiles for a month that was never saved.
   const normalizeCtr = await centerNormalizerFromConfig();
   const id = await db.transaction(async (tx) => {
+    // Finalizing closes the period to KPI pushes; take the period lock first so a
+    // concurrent ingest staging this same period serializes behind us and its
+    // closed-period re-check sees this finalized run (createKpiIngestChecked).
+    if (status === "finalized") {
+      await lockPeriodAdvisory(tx, KPI_PERIOD_LOCK_NS + input.periodLabel);
+    }
     const [row] = await tx
       .insert(runs)
       .values({
@@ -866,8 +891,27 @@ export async function updateRunReview(
   status: "draft" | "finalized",
 ): Promise<void> {
   const db = await getDb();
-  await db.update(runs).set({ coachResults, status }).where(eq(runs.id, id));
-  if (status === "finalized") await upsertCoachesFromRun(coachResults);
+  // Fetch the (memoized) center normalizer OUTSIDE the transaction, like createRun.
+  const normalizeCtr = await centerNormalizerFromConfig();
+  await db.transaction(async (tx) => {
+    // Read the run's (immutable) period so we can take the KPI period lock when
+    // finalizing — same lock the staging path takes, so a concurrent push can't
+    // stage into the month this review is closing.
+    const [run] = await tx
+      .select({ periodLabel: runs.periodLabel })
+      .from(runs)
+      .where(eq(runs.id, id))
+      .limit(1);
+    if (!run) return;
+    if (status === "finalized") {
+      await lockPeriodAdvisory(tx, KPI_PERIOD_LOCK_NS + run.periodLabel);
+    }
+    await tx.update(runs).set({ coachResults, status }).where(eq(runs.id, id));
+    // Carry profiles forward in the SAME transaction as the status flip, so a
+    // crash between the two can't leave a finalized month whose carry-over
+    // (allowance, mgmt-assessment age, aliases) was never written.
+    if (status === "finalized") await upsertCoachesFromRunWith(tx, coachResults, normalizeCtr);
+  });
   invalidateSingleton("kpi-runs");
   invalidateSingleton("kpi-trend");
 }
@@ -929,20 +973,23 @@ export interface KpiIngestSummary {
  * period with 409 before staging, superseding, or auditing anything; the
  * payroll admin reopens the month first if a correction is needed.
  */
-export async function isKpiPeriodClosed(periodLabel: string): Promise<boolean> {
-  const db = await getDb();
-  const finalized = await db
+async function isKpiPeriodClosedWith(exec: DbOrTx, periodLabel: string): Promise<boolean> {
+  const finalized = await exec
     .select({ id: runs.id })
     .from(runs)
     .where(and(eq(runs.periodLabel, periodLabel), eq(runs.status, "finalized")))
     .limit(1);
   if (finalized.length > 0) return true;
-  const imported = await db
+  const imported = await exec
     .select({ id: kpiIngests.id })
     .from(kpiIngests)
     .where(and(eq(kpiIngests.periodLabel, periodLabel), eq(kpiIngests.status, "imported")))
     .limit(1);
   return imported.length > 0;
+}
+
+export async function isKpiPeriodClosed(periodLabel: string): Promise<boolean> {
+  return isKpiPeriodClosedWith(await getDb(), periodLabel);
 }
 
 /**
@@ -953,7 +1000,7 @@ export async function isKpiPeriodClosed(periodLabel: string): Promise<boolean> {
  * the insert, each with its own `kpi_ingest.superseded` audit entry. Imported
  * and discarded deliveries are never touched.
  */
-export async function createKpiIngest(input: {
+export interface CreateKpiIngestInput {
   periodLabel: string;
   label: string;
   rows: InstructorRow[];
@@ -961,9 +1008,19 @@ export async function createKpiIngest(input: {
   source?: KpiIngestSource;
   /** Audit attribution for the supersede entries (manual uploads name the user). */
   actor?: { id: number | null; email: string } | null;
-}): Promise<{ id: number; supersededIds: number[] }> {
-  const db = await getDb();
-  return db.transaction(async (tx) => {
+}
+
+/**
+ * Stage a delivery WITHOUT a closed-period guard — the raw primitive. Callers
+ * that must honor the closed-period invariant use `createKpiIngestChecked`; this
+ * core exists so it can be threaded into that checked transaction (and so the
+ * low-level supersede tests can stage into any period directly).
+ */
+async function createKpiIngestWith(
+  tx: Tx,
+  input: CreateKpiIngestInput,
+): Promise<{ id: number; supersededIds: number[] }> {
+  {
     // Flip BEFORE the insert so the new (pending) row can't match its own filter.
     const superseded = await tx
       .update(kpiIngests)
@@ -997,6 +1054,36 @@ export async function createKpiIngest(input: {
       );
     }
     return { id: row.id, supersededIds };
+  }
+}
+
+/** Public staging primitive: one transaction, no closed-period guard. */
+export async function createKpiIngest(
+  input: CreateKpiIngestInput,
+): Promise<{ id: number; supersededIds: number[] }> {
+  const db = await getDb();
+  return db.transaction((tx) => createKpiIngestWith(tx, input));
+}
+
+/**
+ * Stage a delivery while honoring the closed-period invariant ATOMICALLY: in one
+ * transaction it takes the KPI period advisory lock, re-checks `isKpiPeriodClosed`
+ * against committed state, and only then supersedes + inserts. Because every
+ * closing path (a finalized `createRun`/`updateRunReview`, `importKpiIngest`)
+ * acquires the same lock, a concurrent finalize/import can't slip in between the
+ * check and the insert — closing the check-then-act race that a separate
+ * `isKpiPeriodClosed()` call before `createKpiIngest()` left open. Returns
+ * `{ closed: true }` (nothing staged) when the period closed under us.
+ */
+export async function createKpiIngestChecked(
+  input: CreateKpiIngestInput,
+): Promise<{ closed: true } | { closed: false; id: number; supersededIds: number[] }> {
+  const db = await getDb();
+  return db.transaction(async (tx) => {
+    await lockPeriodAdvisory(tx, KPI_PERIOD_LOCK_NS + input.periodLabel);
+    if (await isKpiPeriodClosedWith(tx, input.periodLabel)) return { closed: true };
+    const { id, supersededIds } = await createKpiIngestWith(tx, input);
+    return { closed: false, id, supersededIds };
   });
 }
 
@@ -1073,12 +1160,24 @@ export async function discardKpiIngest(id: number): Promise<boolean> {
  */
 export async function importKpiIngest(id: number, runId: number): Promise<boolean> {
   const db = await getDb();
-  const updated = await db
-    .update(kpiIngests)
-    .set({ status: "imported", importedRunId: runId, importedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
-    .returning({ id: kpiIngests.id });
-  return updated.length > 0;
+  return db.transaction(async (tx) => {
+    // Importing closes the period; serialize with the staging path on the same
+    // lock so a concurrent push can't stage after this flip commits. Read the
+    // (immutable) period first to key the lock; a missing ingest is a no-op.
+    const [ingest] = await tx
+      .select({ periodLabel: kpiIngests.periodLabel })
+      .from(kpiIngests)
+      .where(eq(kpiIngests.id, id))
+      .limit(1);
+    if (!ingest) return false;
+    await lockPeriodAdvisory(tx, KPI_PERIOD_LOCK_NS + ingest.periodLabel);
+    const updated = await tx
+      .update(kpiIngests)
+      .set({ status: "imported", importedRunId: runId, importedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(kpiIngests.id, id), eq(kpiIngests.status, "pending")))
+      .returning({ id: kpiIngests.id });
+    return updated.length > 0;
+  });
 }
 
 // ── Commission (Optimum Fit) ──────────────────────────────────────────────────
@@ -1658,9 +1757,18 @@ async function ensureCoachForAllowanceWith(
     return match.id;
   }
 
+  // onConflictDoUpdate resolves the read→insert race: if a concurrent path
+  // created this coach after our snapshot, the unique index would otherwise 500
+  // the loser and abort the allowance save. On conflict we apply this call's
+  // tier (mirroring the match branch) and return the existing id — center is
+  // left untouched so a concurrent writer's center isn't clobbered.
   const [row] = await exec
     .insert(coaches)
     .values({ canonicalName: opts.canonicalName, center: opts.center, allowanceTier: opts.tier })
+    .onConflictDoUpdate({
+      target: coaches.canonicalName,
+      set: { allowanceTier: opts.tier, updatedAt: new Date() },
+    })
     .returning({ id: coaches.id });
   return row.id;
 }
@@ -2228,6 +2336,10 @@ async function ensureCoachForFreelancerWith(
     return match.id;
   }
 
+  // onConflictDoUpdate resolves the read→insert race (a concurrent save/import
+  // creating the same canonicalName after our snapshot) instead of 500-ing the
+  // loser. On conflict we apply the same fields the match branch would —
+  // tier (never for CC) + payee — and leave employmentType/jobRole untouched.
   const [row] = await exec
     .insert(coaches)
     .values({
@@ -2237,6 +2349,14 @@ async function ensureCoachForFreelancerWith(
       jobRole: input.position === "CC" ? "instructor" : jobRoleForTier(input.position),
       allowanceTier: input.position === "CC" ? null : input.position,
       ...payee,
+    })
+    .onConflictDoUpdate({
+      target: coaches.canonicalName,
+      set: {
+        ...(input.position === "CC" ? {} : { allowanceTier: input.position }),
+        ...payee,
+        updatedAt: new Date(),
+      },
     })
     .returning({ id: coaches.id });
   return row.id;

@@ -286,3 +286,69 @@ describe("KPI ingests (PGlite in-memory)", () => {
     expect((await queries.getKpiIngest(repush.id))?.status).toBe("pending");
   });
 });
+
+describe("KPI period-close atomicity + coach auto-create race (PGlite in-memory)", () => {
+  let queries: typeof import("./queries");
+
+  beforeAll(async () => {
+    queries = await import("./queries");
+  });
+
+  it("createKpiIngestChecked stages into an OPEN period and refuses one CLOSED by a finalized run", async () => {
+    const period = "2028-03";
+    const open = await queries.createKpiIngestChecked({ periodLabel: period, label: "v1", rows: [row()] });
+    expect(open.closed).toBe(false);
+
+    // Finalizing a run closes the period (both take the same advisory lock).
+    await queries.createRun({
+      periodLabel: period,
+      filename: "mar",
+      csvRows: [row()],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "finalized",
+    });
+
+    const blocked = await queries.createKpiIngestChecked({ periodLabel: period, label: "v2", rows: [row()] });
+    expect(blocked.closed).toBe(true);
+    // The refused push staged nothing — only the first (still-pending) delivery exists.
+    const list = (await queries.listKpiIngests()).filter((i) => i.periodLabel === period);
+    expect(list).toHaveLength(1);
+  });
+
+  it("createKpiIngestChecked refuses a period closed only by an imported delivery", async () => {
+    const period = "2028-04";
+    const staged = await queries.createKpiIngestChecked({ periodLabel: period, label: "v1", rows: [row()] });
+    expect(staged.closed).toBe(false);
+    if (staged.closed) throw new Error("unreachable — just asserted not closed");
+
+    // Import it into a DRAFT run: closure comes from the ingest status alone.
+    const runId = await queries.createRun({
+      periodLabel: period,
+      filename: "apr-draft",
+      csvRows: [row()],
+      configSnapshot: queries.defaultConfig(),
+      coachResults: [],
+      status: "draft",
+    });
+    expect(await queries.importKpiIngest(staged.id, runId)).toBe(true);
+
+    const blocked = await queries.createKpiIngestChecked({ periodLabel: period, label: "v2", rows: [row()] });
+    expect(blocked.closed).toBe(true);
+  });
+
+  it("concurrent ensureCoachForAllowance for one new name yields a single row, never a unique-violation 500", async () => {
+    const name = "RACE ALLOWANCE COACH";
+    // Fired together so their read→insert windows overlap. The unique index +
+    // onConflictDoUpdate must resolve every loser to the existing row, not throw.
+    const ids = await Promise.all([
+      queries.ensureCoachForAllowance({ coachId: null, canonicalName: name, center: "Berkeley", tier: "T1" }),
+      queries.ensureCoachForAllowance({ coachId: null, canonicalName: name, center: "Berkeley", tier: "T1" }),
+      queries.ensureCoachForAllowance({ coachId: null, canonicalName: name, center: "Berkeley", tier: "T1" }),
+    ]);
+    expect(new Set(ids).size).toBe(1);
+    const rows = (await queries.listCoaches()).filter((c) => c.canonicalName === name);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.allowanceTier).toBe("T1");
+  });
+});

@@ -83,8 +83,14 @@ export function FreelancerCalculator({
   const [kpiOptions, setKpiOptions] = useState<{ name: string; black: number; colour: number }[]>([]);
   const [kpiNote, setKpiNote] = useState<string | null>(null);
   const kpiSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic id of the latest KPI bind fetch. Rapid coach/period changes fire
+  // overlapping requests; a slow earlier response must NOT overwrite the counts a
+  // later one already wrote (wrong black/colour → wrong commitment bonus → wrong
+  // payout). Only the response whose seq is still current is applied.
+  const kpiReqSeq = useRef(0);
 
   async function fetchKpiFor(bound: string, forPeriod: string) {
+    const seq = ++kpiReqSeq.current;
     try {
       const res = await fetch(
         `/api/freelancer/kpi-result?period=${encodeURIComponent(forPeriod)}&name=${encodeURIComponent(bound)}`,
@@ -94,6 +100,7 @@ export function FreelancerCalculator({
         hasData: boolean;
         match: { black: number; colour: number } | null;
       };
+      if (seq !== kpiReqSeq.current) return; // superseded by a newer fetch
       if (d.match) {
         setBlackCount(d.match.black);
         setColourCount(d.match.colour);

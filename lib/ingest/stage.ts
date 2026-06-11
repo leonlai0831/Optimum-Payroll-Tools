@@ -1,5 +1,5 @@
 import {
-  createKpiIngest,
+  createKpiIngestChecked,
   isKpiPeriodClosed,
   recordAudit,
   type KpiIngestSource,
@@ -42,13 +42,16 @@ export async function stageKpiDelivery(input: {
 }): Promise<StageKpiDeliveryResult> {
   const { periodLabel, label, source, actor } = input;
 
-  if (await isKpiPeriodClosed(periodLabel)) {
-    return {
-      ok: false,
-      status: 409,
-      error: `${periodLabel} is already finalized — ask the payroll admin to reopen it if a correction is needed.`,
-    };
-  }
+  const closedError = {
+    ok: false,
+    status: 409,
+    error: `${periodLabel} is already finalized — ask the payroll admin to reopen it if a correction is needed.`,
+  } as const;
+
+  // Optimistic early check: gives a friendly 409 before the 400 header check and
+  // skips the work for an already-closed period. The authoritative guard runs
+  // inside createKpiIngestChecked's locked transaction (race-free) below.
+  if (await isKpiPeriodClosed(periodLabel)) return closedError;
 
   if (!hasInstructorHeader(input.rawRows)) {
     return {
@@ -62,7 +65,12 @@ export async function stageKpiDelivery(input: {
   // Normalize through the exact same header mapping the CSV upload uses, so a
   // staged delivery behaves identically to a hand-uploaded file from here on.
   const rows = mapCsvRows(input.rawRows);
-  const { id, supersededIds } = await createKpiIngest({ periodLabel, label, rows, source, actor });
+  const staged = await createKpiIngestChecked({ periodLabel, label, rows, source, actor });
+  // The period may have closed between the optimistic check and acquiring the
+  // lock (a concurrent finalize/import) — createKpiIngestChecked re-checked under
+  // the lock and staged nothing. Surface the same 409.
+  if (staged.closed) return closedError;
+  const { id, supersededIds } = staged;
   await recordAudit({
     actorId: actor?.id ?? null,
     actorEmail: actor?.email ?? "ingest-api",
