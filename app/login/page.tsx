@@ -5,9 +5,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
+import { LoginStripeBand } from "@/components/login-stripe-band";
 
-/** The stripe-band exit (0.8s) must finish inside this before the swap. */
-const NAVIGATE_AFTER_MS = 1050;
+/** The stripe-band exit (1.1s: under the card, around the bend, out the top)
+ * must finish inside this before the swap. */
+const NAVIGATE_AFTER_MS = 1250;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -70,32 +72,11 @@ export default function LoginPage() {
           className="h-4 w-auto sm:h-5"
         />
       </div>
-      {/* The gym deck's racing-stripe band (lg+): runs from the viewport's left
-          edge to the card's left side, led by a full-height arrowhead that
-          lands pointing at the card. Top stays flush with the card's top edge
-          (card ~27.4rem tall, centered, the whole cluster optically lifted
-          4vh). Enters from the left as one unit on the headline's beat; exits
-          right on success. right-[max(...)] = the card's left edge whether the
-          max-w-6xl container is viewport-bound or max-width-bound. */}
-      <div
-        aria-hidden
-        className={`absolute left-0 right-[max(31rem,calc(50%-5rem))] top-[calc(50%-13.7rem-4vh)] z-0 hidden lg:block ${
-          sweeping ? "stripe-band-exit" : "stripe-band-enter"
-        }`}
-      >
-        <div className="flex flex-col gap-5 pr-12">
-          <span className="h-4 bg-accent" />
-          <span className="h-4 bg-brand" />
-          <span className="h-4 bg-accent" />
-          <span className="h-4 bg-accent" />
-        </div>
-        {/* The arrowhead riding the band's leading edge (overlaps the bars by
-            0.5rem so shaft and head read as one arrow). */}
-        <span
-          className="absolute inset-y-0 right-0 w-14 bg-brand"
-          style={{ clipPath: "polygon(0 0, 100% 50%, 0 100%)" }}
-        />
-      </div>
+      {/* The gym deck's racing-stripe band (lg+), arrow-led. On sign-in
+          success the same band flows onward: under the card, slightly past
+          its right side, a deck-style concentric bend upward, out the top —
+          THEN the router swaps to the dashboard. */}
+      <LoginStripeBand sweeping={sweeping} />
       {/* Phones stack tagline-over-card; lg+ splits into tagline left, card
           right — the whole cluster sits slightly above geometric center
           (optical center) so tall screens don't read bottom-heavy. */}
