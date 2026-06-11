@@ -224,6 +224,23 @@ body {
   }
 }
 
+/* Login success: the racing stripes sweep from off-screen left across the
+   tagline + card and exit right (app/login/page.tsx), then the router
+   navigates. Each bar starts slightly after the previous one for a
+   trailing-speed feel; `both` keeps a delayed bar parked off-screen until
+   its turn. Stilled by the global prefers-reduced-motion rule. */
+.stripe-sweep-bar {
+  animation: stripeSweep 0.8s cubic-bezier(0.5, 0, 0.15, 1) both;
+}
+@keyframes stripeSweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100vw);
+  }
+}
+
 /* CI wave drift (components/ci-wave.tsx): the two traced layers slide in
    opposite directions at different speeds, like a slow swell. The original
    artwork overdraws the viewBox on both sides — accent ~-1227..1450, brand

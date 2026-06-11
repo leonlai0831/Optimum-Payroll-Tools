@@ -5,7 +5,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, Spinner } from "@/components/ui";
 import { CiWave } from "@/components/ci-wave";
-import { BrandStripes } from "@/components/brand-stripes";
+
+/** Stagger between sweep bars; the last bar's delay + the 0.8s sweep must
+ * finish inside NAVIGATE_AFTER_MS so the flourish completes before the swap. */
+const SWEEP_STAGGER_MS = 60;
+const NAVIGATE_AFTER_MS = 1050;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,8 +29,13 @@ export default function LoginPage() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      router.replace("/");
-      router.refresh();
+      // Success flourish first: the racing stripes sweep across the page,
+      // then we navigate. Loading stays on so the form can't be re-submitted.
+      setSweeping(true);
+      setTimeout(() => {
+        router.replace("/");
+        router.refresh();
+      }, NAVIGATE_AFTER_MS);
     } else {
       const d = (await res.json().catch(() => ({}))) as { error?: string };
       setError(d.error || "Login failed");
@@ -41,8 +51,6 @@ export default function LoginPage() {
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 p-4 pb-32 sm:pb-44 lg:flex-row lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water". */}
         <div className="max-w-xl text-center lg:flex-1 lg:text-left">
-          {/* The gym deck's racing stripes, entering with the headline. */}
-          <BrandStripes className="enter-from-top mx-auto mb-7 w-36 sm:w-44 lg:mx-0" />
           <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
             Optimizing
             <br className="hidden lg:block" /> Joy at Work
@@ -123,6 +131,23 @@ export default function LoginPage() {
           </form>
         </Card>
       </div>
+      {/* Login-success flourish: the gym deck's racing stripes (yellow / blue /
+          yellow / yellow) sweep from off-screen left across the tagline and the
+          card, exiting right before the router navigates. */}
+      {sweeping && (
+        <div
+          className="pointer-events-none fixed inset-y-0 left-0 z-50 flex w-full flex-col items-start justify-center gap-3"
+          aria-hidden
+        >
+          {(["bg-accent", "bg-brand", "bg-accent", "bg-accent"] as const).map((bg, i) => (
+            <span
+              key={i}
+              className={`stripe-sweep-bar h-2.5 w-[26rem] max-w-[75vw] sm:h-3 ${bg}`}
+              style={{ animationDelay: `${i * SWEEP_STAGGER_MS}ms` }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
