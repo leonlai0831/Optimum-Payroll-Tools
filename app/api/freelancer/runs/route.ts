@@ -57,6 +57,8 @@ function sanitizeInput(raw: unknown): FreelancerInput | null {
       })
       .filter((row) => row.center !== ""),
     blackCount: Math.max(0, num(r.blackCount)),
+    kpiName:
+      typeof r.kpiName === "string" && r.kpiName.trim() ? r.kpiName.trim().slice(0, 120) : null,
     colourCount: Math.max(0, num(r.colourCount)),
     extras: (Array.isArray(r.extras) ? r.extras : [])
       .map((row) => {

@@ -3,6 +3,7 @@ import {
   getAllowanceConfig,
   getFreelancerConfig,
   getFreelancerRun,
+  getLatestFreelancerKpiNames,
   listCoaches,
 } from "@/lib/db/queries";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -38,6 +39,7 @@ export default async function FreelancerPage({
 
   // Pay modules are exclusive by employment type: only freelancers are
   // searchable here (full-timers are paid via Allowance / KPI instead).
+  const kpiNames = await getLatestFreelancerKpiNames();
   const roster: FreelancerRosterCoach[] = rosterCoachesFor("freelancer", coaches).map((c) => ({
     id: c.id,
     canonicalName: c.canonicalName,
@@ -45,6 +47,9 @@ export default async function FreelancerPage({
     icNo: c.icNo ?? "",
     bankName: c.bankName ?? "",
     bankAccount: c.bankAccount ?? "",
+    // Carry-over: the KPI account this freelancer's result was bound to last
+    // month — the calculator auto-fetches this month's numbers for it.
+    kpiName: kpiNames[c.canonicalName] ?? "",
   }));
 
   // ?edit=<runId> loads a saved record back into the calculator. Re-saving the

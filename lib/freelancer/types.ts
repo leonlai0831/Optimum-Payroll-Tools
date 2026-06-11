@@ -100,6 +100,13 @@ export interface FreelancerInput {
   blackCount: number;
   /** Monthly colour-band total (result positions only). */
   colourCount: number;
+  /**
+   * The KPI instructor account this freelancer's student result is bound to
+   * (clean name from the month's KPI data). Saved with the run and carried to
+   * the next month, where the calculator auto-fills black/colour from that
+   * month's KPI upload — the counts stay editable either way. null = manual.
+   */
+  kpiName?: string | null;
   extras: FreelancerExtraItem[];
 }
 

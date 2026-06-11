@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Link2, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { StaffCombobox } from "@/components/staff-combobox";
@@ -29,6 +29,8 @@ export interface FreelancerRosterCoach {
   icNo: string;
   bankName: string;
   bankAccount: string;
+  /** Last month's KPI account binding (carry-over; "" = none yet). */
+  kpiName: string;
 }
 
 export interface FreelancerEditTarget {
@@ -69,6 +71,82 @@ export function FreelancerCalculator({
   );
   const [blackCount, setBlackCount] = useState(initial?.input.blackCount ?? 0);
   const [colourCount, setColourCount] = useState(initial?.input.colourCount ?? 0);
+  // KPI binding: the instructor account in the month's KPI data whose
+  // black/colour totals feed this freelancer's result. Carried over from the
+  // last saved run; auto-fetched on coach pick and period change; the counts
+  // stay editable regardless.
+  const [kpiName, setKpiName] = useState(initial?.input.kpiName ?? "");
+  const [kpiQuery, setKpiQuery] = useState("");
+  const [kpiOptions, setKpiOptions] = useState<{ name: string; black: number; colour: number }[]>([]);
+  const [kpiNote, setKpiNote] = useState<string | null>(null);
+  const kpiSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function fetchKpiFor(bound: string, forPeriod: string) {
+    try {
+      const res = await fetch(
+        `/api/freelancer/kpi-result?period=${encodeURIComponent(forPeriod)}&name=${encodeURIComponent(bound)}`,
+      );
+      if (!res.ok) return;
+      const d = (await res.json()) as {
+        hasData: boolean;
+        match: { black: number; colour: number } | null;
+      };
+      if (d.match) {
+        setBlackCount(d.match.black);
+        setColourCount(d.match.colour);
+        setKpiNote(null);
+      } else {
+        setKpiNote(
+          d.hasData
+            ? `"${bound}" not found in ${forPeriod}'s KPI data — counts left as-is.`
+            : `No KPI data for ${forPeriod} yet (it usually arrives on the 1st of the following month) — enter counts manually or retry later.`,
+        );
+      }
+      setSavedId(null);
+    } catch {
+      /* network hiccup — manual entry still works */
+    }
+  }
+
+  function searchKpi(q: string) {
+    setKpiQuery(q);
+    if (kpiSearchTimer.current) clearTimeout(kpiSearchTimer.current);
+    const query = q.trim();
+    if (query.length < 2) {
+      setKpiOptions([]);
+      return;
+    }
+    kpiSearchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/freelancer/kpi-result?period=${encodeURIComponent(period)}&q=${encodeURIComponent(query)}`,
+        );
+        if (!res.ok) return;
+        const d = (await res.json()) as {
+          hasData: boolean;
+          candidates: { name: string; black: number; colour: number }[];
+        };
+        setKpiOptions(d.candidates);
+        setKpiNote(
+          d.hasData
+            ? null
+            : `No KPI data for ${period} yet (it usually arrives on the 1st of the following month).`,
+        );
+      } catch {
+        /* ignore */
+      }
+    }, 300);
+  }
+
+  function bindKpi(opt: { name: string; black: number; colour: number }) {
+    setKpiName(opt.name);
+    setBlackCount(opt.black);
+    setColourCount(opt.colour);
+    setKpiQuery("");
+    setKpiOptions([]);
+    setKpiNote(null);
+    dirty();
+  }
   const [extras, setExtras] = useState<FreelancerExtraItem[]>(initial?.input.extras ?? []);
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
@@ -87,6 +165,7 @@ export function FreelancerCalculator({
     centerRows,
     blackCount,
     colourCount,
+    kpiName: kpiName.trim() || null,
     extras,
   };
   const result = calcFreelancer(input, config);
@@ -116,6 +195,9 @@ export function FreelancerCalculator({
     setIcNo(c.icNo);
     setBankName(c.bankName);
     setBankAccount(c.bankAccount);
+    // Carry-over: last month's KPI binding — auto-fill this month's counts.
+    setKpiName(c.kpiName);
+    if (c.kpiName) void fetchKpiFor(c.kpiName, period);
   }
 
   function updateRow(i: number, patch: Partial<FreelancerCenterRow>) {
@@ -178,6 +260,7 @@ export function FreelancerCalculator({
                   value={period}
                   onChange={(e) => {
                     setPeriod(e.target.value);
+                    if (kpiName && e.target.value) void fetchKpiFor(kpiName, e.target.value);
                     dirty();
                   }}
                   className="mt-1"
@@ -399,6 +482,60 @@ export function FreelancerCalculator({
             {hasResult ? `${(result.result * 100).toFixed(1)}%` : "n/a"}
           </span>
         </div>
+        {hasResult && (
+          <div className="mb-3 space-y-2">
+            {kpiName ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                  <Link2 className="h-3.5 w-3.5" /> Linked to {kpiName}
+                </span>
+                <span className="text-xs text-gray-400">
+                  auto-fills from {period}&apos;s KPI data · still editable below
+                </span>
+                <button
+                  type="button"
+                  className="text-gray-400 transition hover:text-red-500"
+                  title="Unlink — keep entering counts manually"
+                  onClick={() => {
+                    setKpiName("");
+                    setKpiNote(null);
+                    dirty();
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative max-w-sm">
+                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  className="pl-8"
+                  value={kpiQuery}
+                  placeholder="Search coach in this month's KPI data…"
+                  onChange={(e) => searchKpi(e.target.value)}
+                />
+                {kpiOptions.length > 0 && (
+                  <div className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-card">
+                    {kpiOptions.map((o) => (
+                      <button
+                        key={o.name}
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-indigo-50"
+                        onClick={() => bindKpi(o)}
+                      >
+                        <span className="truncate font-medium text-gray-800">{o.name}</span>
+                        <span className="nums shrink-0 text-xs text-gray-500">
+                          black {o.black} / colour {o.colour}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {kpiNote && <p className="text-xs text-warning">{kpiNote}</p>}
+          </div>
+        )}
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <Label htmlFor="fl-black">Black count</Label>

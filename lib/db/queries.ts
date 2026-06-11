@@ -41,6 +41,7 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
+import { getCleanName } from "@/lib/kpi/csv";
 import {
   ALL_TOOL_CATEGORIES,
   CAPABILITIES,
@@ -996,7 +997,13 @@ export async function listKpiIngests(): Promise<KpiIngestSummary[]> {
       periodLabel: kpiIngests.periodLabel,
       label: kpiIngests.label,
       status: kpiIngests.status,
-      rowCount: sql<number>`jsonb_array_length(${kpiIngests.rows})`.mapWith(Number),
+      // Defensive: jsonb_array_length THROWS on a non-array, which would 500
+      // the whole Uploads page over one malformed delivery — guard with
+      // jsonb_typeof so a bad row renders as "0 rows" instead.
+      rowCount:
+        sql<number>`case when jsonb_typeof(${kpiIngests.rows}) = 'array' then jsonb_array_length(${kpiIngests.rows}) else 0 end`.mapWith(
+          Number,
+        ),
       importedRunId: kpiIngests.importedRunId,
       importedAt: kpiIngests.importedAt,
       receivedAt: kpiIngests.receivedAt,
@@ -2963,4 +2970,73 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
 export async function listAuditLog(limit = 200): Promise<AuditLogRecord[]> {
   const db = await getDb();
   return db.select().from(auditLog).orderBy(desc(auditLog.createdAt), desc(auditLog.id)).limit(limit);
+}
+
+/* ── Freelancer ↔ KPI result binding ───────────────────────────────────────── */
+
+export interface KpiResultCandidate {
+  /** Clean instructor account name (getCleanName) from the month's KPI data. */
+  name: string;
+  black: number;
+  colour: number;
+}
+
+/**
+ * Black/colour totals per instructor account in a period's KPI data — the
+ * source for the Freelancer Payment "student result" binding. Reads the
+ * latest SAVED KPI run for the period, falling back to the latest pending
+ * ingest (data is pushed on the 1st of the FOLLOWING month, so early in that
+ * window only the staged delivery may exist). Empty when neither exists yet.
+ */
+export async function getKpiResultCandidates(periodLabel: string): Promise<KpiResultCandidate[]> {
+  const db = await getDb();
+  const [run] = await db
+    .select({ csvRows: runs.csvRows })
+    .from(runs)
+    .where(eq(runs.periodLabel, periodLabel))
+    .orderBy(desc(runs.createdAt))
+    .limit(1);
+  let rows = run?.csvRows;
+  if (!rows?.length) {
+    const [ingest] = await db
+      .select({ rows: kpiIngests.rows })
+      .from(kpiIngests)
+      .where(and(eq(kpiIngests.periodLabel, periodLabel), eq(kpiIngests.status, "pending")))
+      .orderBy(desc(kpiIngests.receivedAt))
+      .limit(1);
+    rows = ingest?.rows;
+  }
+  if (!rows?.length) return [];
+  const byName = new Map<string, { black: number; colour: number }>();
+  for (const r of rows) {
+    const name = getCleanName(r.Instructor);
+    if (!name) continue;
+    const cur = byName.get(name) ?? { black: 0, colour: 0 };
+    cur.black += Number(r.Black) || 0;
+    cur.colour += Number(r.TotalColor) || 0;
+    byName.set(name, cur);
+  }
+  return [...byName.entries()]
+    .map(([name, v]) => ({ name, ...v }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Each freelancer's most recent KPI binding (latest run's input.kpiName),
+ * keyed by canonical name — the calculator's carry-over: picking the coach
+ * next month auto-fetches that month's numbers for the bound account.
+ */
+export async function getLatestFreelancerKpiNames(): Promise<Record<string, string>> {
+  const db = await getDb();
+  const rows = await db
+    .select({ canonicalName: freelancerRuns.canonicalName, input: freelancerRuns.input })
+    .from(freelancerRuns)
+    .orderBy(desc(freelancerRuns.createdAt), desc(freelancerRuns.id));
+  const out: Record<string, string> = {};
+  for (const r of rows) {
+    if (out[r.canonicalName] !== undefined) continue;
+    const bound = (r.input as { kpiName?: string | null }).kpiName;
+    if (typeof bound === "string" && bound.trim()) out[r.canonicalName] = bound.trim();
+  }
+  return out;
 }
