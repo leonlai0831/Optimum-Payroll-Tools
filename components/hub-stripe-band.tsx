@@ -8,10 +8,10 @@ import { STRIPE_ARROW_W, StripeArrowPlate } from "@/components/stripe-arrow";
  * The launcher's PERMANENT racing-stripe ribbon: rises from the page's bottom
  * edge near the right side, takes a deck-style concentric left turn at the
  * hero card's height (the bend hides behind the opaque card) and runs out the
- * viewport's left edge. It is always there on lg+ — arriving from a fresh
- * sign-in just plays its draw-in once: the band EXTENDS along that route
- * (line-draw dash animation), chevron arrow leading and rotating through the
- * bend until it exits left; the finished ribbon then stays for good.
+ * viewport's left edge. EVERY visit to the launcher plays the draw-in: the
+ * band EXTENDS along that route (line-draw dash animation), chevron arrow
+ * leading and rotating through the bend until it exits left; the finished
+ * ribbon then stays for the rest of the visit.
  *
  * Positioned absolutely inside the (relative) launcher page root so it
  * scrolls with the content. Geometry is measured from the live hero rect
@@ -66,9 +66,10 @@ export function HubStripeBand() {
         },
       });
     };
-    const arrived = hasArrival();
-    if (arrived) clearArrival();
-    raf = requestAnimationFrame(() => measure(arrived));
+    // Consume the sign-in arrival mark (it already silenced the loading clip
+    // during this navigation); the draw-in itself plays on EVERY visit.
+    if (hasArrival()) clearArrival();
+    raf = requestAnimationFrame(() => measure(true));
     const onResize = () => {
       cancelAnimationFrame(raf);
       // After a resize just snap to the finished ribbon at the new geometry.
