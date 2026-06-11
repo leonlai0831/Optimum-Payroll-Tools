@@ -37,13 +37,26 @@ export function resultRate(
   return 1 - blackCount / colourCount;
 }
 
-/** VLOOKUP approximate match: index of the LARGEST threshold ≤ value (0 floor). */
+/**
+ * VLOOKUP approximate match: ORIGINAL index of the largest threshold ≤ value.
+ * Order-independent — the matrix is operator-editable on /freelancer/settings, so
+ * a reordered/mis-entered threshold row must not silently pick the wrong bonus
+ * (Excel's VLOOKUP assumes sorted input; this doesn't). `values[i]` stays tied to
+ * `thresholds[i]` positionally, so indexing by the original index is correct
+ * whatever the order. When value is below every threshold, floors to the smallest
+ * threshold's index (matching the old "idx 0 on sorted-ascending" behavior).
+ */
 function approxIndex(thresholds: number[], value: number): number {
-  let idx = 0;
+  let best = -1;
   for (let i = 0; i < thresholds.length; i++) {
-    if (value >= thresholds[i]) idx = i;
+    if (value >= thresholds[i] && (best === -1 || thresholds[i] > thresholds[best])) best = i;
   }
-  return idx;
+  if (best !== -1) return best;
+  let minIdx = 0;
+  for (let i = 1; i < thresholds.length; i++) {
+    if (thresholds[i] < thresholds[minIdx]) minIdx = i;
+  }
+  return minIdx;
 }
 
 /**

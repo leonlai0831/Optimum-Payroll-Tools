@@ -81,8 +81,8 @@ export function TeachingReport({ summary }: { summary: TeachingSummary }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {summary.coaches.map((c) => (
-              <tr key={c.staffName} className="tabular-nums">
+            {summary.coaches.map((c, i) => (
+              <tr key={`${c.staffName}-${i}`} className="tabular-nums">
                 <td className="px-3 py-2 text-gray-900">{c.staffName}</td>
                 <td className="px-3 py-2 text-right text-gray-600">{c.ptSessions}</td>
                 <td className="px-3 py-2 text-right text-gray-600">{c.ptAttendees}</td>

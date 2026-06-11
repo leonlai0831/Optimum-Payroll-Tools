@@ -50,6 +50,14 @@ const emptyRow = (): ProcedureRow => ({
   advancePreparation: "",
 });
 
+// Procedure rows carry a client-only stable key so React reconciles editable rows
+// by identity, not array index — removing a middle step must not shift typed
+// activity/time/materials onto the next row. Stripped before the plan is saved.
+type KeyedProcedureRow = ProcedureRow & { _key: string };
+let lpRowKeySeq = 0;
+const nextLpKey = () => `lp-${lpRowKeySeq++}`;
+const keyedRow = (): KeyedProcedureRow => ({ ...emptyRow(), _key: nextLpKey() });
+
 function emptySections(): SectionState {
   const out = {} as SectionState;
   for (const s of REPLACEMENT_SECTIONS) {
@@ -129,8 +137,10 @@ export function LessonPlanForm({
 
   // Actual class
   const [priorKnowledge, setPriorKnowledge] = useState(initial?.data.priorKnowledge ?? "");
-  const [procedure, setProcedure] = useState<ProcedureRow[]>(() =>
-    initial && initial.data.procedure.length > 0 ? initial.data.procedure : [emptyRow()],
+  const [procedure, setProcedure] = useState<KeyedProcedureRow[]>(() =>
+    initial && initial.data.procedure.length > 0
+      ? initial.data.procedure.map((r) => ({ ...r, _key: nextLpKey() }))
+      : [keyedRow()],
   );
 
   // Replacement class
@@ -184,7 +194,18 @@ export function LessonPlanForm({
     try {
       const data: Partial<LessonPlanData> =
         type === "actual"
-          ? { priorKnowledge, objectives, procedure }
+          ? {
+              priorKnowledge,
+              objectives,
+              procedure: procedure.map(
+                (r): ProcedureRow => ({
+                  activity: r.activity,
+                  time: r.time,
+                  materials: r.materials,
+                  advancePreparation: r.advancePreparation,
+                }),
+              ),
+            }
           : { priorSkills, objectives, sections: REPLACEMENT_SECTIONS.map((s) => ({ key: s.key, ...sections[s.key] })) };
       const payload = {
         type,
@@ -444,7 +465,7 @@ export function LessonPlanForm({
           {type === "actual" ? (
             <div className="mt-2 space-y-3">
               {procedure.map((row, i) => (
-                <div key={i} className="rounded-lg border border-gray-200 p-3">
+                <div key={row._key} className="rounded-lg border border-gray-200 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-xs font-bold uppercase tracking-wide text-gray-400">
                       Step {i + 1}
@@ -488,7 +509,7 @@ export function LessonPlanForm({
                   </div>
                 </div>
               ))}
-              <Button variant="outline" onClick={() => setProcedure((prev) => [...prev, emptyRow()])}>
+              <Button variant="outline" onClick={() => setProcedure((prev) => [...prev, keyedRow()])}>
                 <Plus className="h-4 w-4" /> Add step
               </Button>
             </div>

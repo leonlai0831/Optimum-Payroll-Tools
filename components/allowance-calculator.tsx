@@ -399,11 +399,12 @@ export function AllowanceCalculator({
                   <div className="col-span-2 flex items-center justify-end gap-1">
                     <span className="text-xs font-medium text-gray-700">{rm(rowTeaching(row))}</span>
                     <button
-                      className="text-gray-300 hover:text-red-500"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-red-400 hover:bg-red-50 hover:text-red-500 active:bg-red-100"
                       onClick={() => removeTeachingRow(i)}
-                      title="remove"
+                      title="Remove center"
+                      aria-label="Remove center"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -447,11 +448,12 @@ export function AllowanceCalculator({
                     onChange={(e) => updateOtherItem(i, { amount: num(e.target.value) })}
                   />
                   <button
-                    className="col-span-1 text-gray-300 hover:text-red-500"
+                    className="col-span-1 flex h-11 min-h-11 items-center justify-center rounded-md text-red-400 hover:bg-red-50 hover:text-red-500 active:bg-red-100"
                     onClick={() => removeOtherItem(i)}
-                    title="remove"
+                    title="Remove item"
+                    aria-label="Remove item"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               ))}
