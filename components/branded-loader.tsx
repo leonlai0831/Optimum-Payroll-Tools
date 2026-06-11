@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SRC = "/logo-animation.mp4";
+const FIT_SRC = "/logo-fit-animation.mp4";
 const DEFAULT_LABEL = "Loading…";
 
 /** Acceleration applied to the clip once the page is ready, so a fast load
@@ -22,8 +23,10 @@ const FADE_MS = 300;
  * OUTSIDE Suspense: fallbacks just check in/out, and the host lets the
  * current cycle finish (sped up) before fading the overlay away.
  */
-type Snapshot = { active: number; src: string; label: string };
-let snapshot: Snapshot = { active: 0, src: DEFAULT_SRC, label: DEFAULT_LABEL };
+/** `src` undefined = no explicit clip requested — the host falls back to the
+ * brand of the page the navigation STARTED from (see LoaderOverlayHost). */
+type Snapshot = { active: number; src: string | undefined; label: string };
+let snapshot: Snapshot = { active: 0, src: undefined, label: DEFAULT_LABEL };
 const listeners = new Set<() => void>();
 function emit(next: Partial<Snapshot>) {
   snapshot = { ...snapshot, ...next };
@@ -40,10 +43,12 @@ const getSnapshot = () => snapshot;
 /**
  * The loading.tsx fallback. Visuals are drawn by LoaderOverlayHost; this just
  * registers the pending load and holds the page area open behind the overlay.
+ * Omit `src` to follow the brand the user navigated FROM (e.g. the brand-
+ * neutral Home); pass one to pin a destination clip (commission → Fit).
  */
 export function BrandedLoader({
   label = DEFAULT_LABEL,
-  src = DEFAULT_SRC,
+  src,
 }: {
   label?: string;
   src?: string;
@@ -65,11 +70,21 @@ type Phase = "loading" | ExitPhase;
  * hidden. A navigation that starts mid-finish/fade rewinds straight back to
  * loading. Reduced-motion users skip the finish-the-cycle delay entirely.
  */
-export function LoaderOverlayHost() {
+export function LoaderOverlayHost({ brand }: { brand: string }) {
   const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const active = snap.active > 0;
+  // The brand of the page the user is ON, frozen while a load is in flight so
+  // a fallback without an explicit clip shows where the navigation STARTED
+  // (gym module → Home plays the Fit clip). Read the store live: the
+  // fallback's begin() effect runs before this one in the same commit, so the
+  // origin never gets overwritten by the destination's brand.
+  const originBrandRef = useRef(brand);
+  useEffect(() => {
+    if (getSnapshot().active === 0) originBrandRef.current = brand;
+  });
+  const src = snap.src ?? (originBrandRef.current === "fit" ? FIT_SRC : DEFAULT_SRC);
   // "loading" is derived from the store; only the exit animation needs state.
   // The render-time adjustment (not an effect) arms "finishing" the moment the
   // last pending load checks out, so the overlay never flashes a stale phase.
@@ -127,7 +142,7 @@ export function LoaderOverlayHost() {
       }, FADE_MS);
       return () => clearTimeout(t);
     }
-  }, [phase, snap.src]);
+  }, [phase, src]);
 
   return (
     <div
@@ -143,7 +158,7 @@ export function LoaderOverlayHost() {
       {/* Keyed by src so switching brand sections (swim ↔ fit clip) remounts
           cleanly; the effect above restarts playback after the swap. */}
       <video
-        key={snap.src}
+        key={src}
         ref={videoRef}
         className="w-44 max-w-[70vw] rounded-2xl shadow-sm sm:w-52"
         loop
@@ -152,7 +167,7 @@ export function LoaderOverlayHost() {
         preload="auto"
         aria-label="Loading animation"
       >
-        <source src={snap.src} type="video/mp4" />
+        <source src={src} type="video/mp4" />
       </video>
       <p className="text-sm font-semibold tracking-wide text-brand">{snap.label}</p>
     </div>

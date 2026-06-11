@@ -43,8 +43,9 @@ export function BrandShell({
       <main className="mx-auto max-w-7xl p-4 md:p-6">{children}</main>
       {/* Persistent loading overlay — lives outside the Suspense boundaries so
           the clip can finish its cycle after a fast load (branded-loader.tsx).
-          Inside the data-brand scope so the label adopts the brand color. */}
-      <LoaderOverlayHost />
+          Inside the data-brand scope so the label adopts the brand color; the
+          brand prop lets origin-based fallbacks pick the right clip. */}
+      <LoaderOverlayHost brand={brand} />
     </div>
   );
 }
