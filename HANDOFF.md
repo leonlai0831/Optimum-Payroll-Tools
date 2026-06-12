@@ -1,10 +1,9 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-12**, session end).
-`main` holds PRs #136–#141; **PR #142 is OPEN as a draft** with this session's
-work (see below). Full suite 411 passing on the PR branch. Read `CLAUDE.md`
-for architecture + the frozen Settings IA rules; read `AGENTS.md` before
-touching Next.js APIs.
+`main` holds PRs #136–#142 — everything from this session is merged. Full
+suite 411 passing. Read `CLAUDE.md` for architecture + the frozen Settings IA
+rules; read `AGENTS.md` before touching Next.js APIs.
 
 ## What's on `main` now
 
@@ -59,9 +58,9 @@ date labels via `formatDate`/`formatDateTime` only; removable list rows keyed
 by a client-only `_key`, never array index; read-then-write DB sequences go
 through the advisory-lock helpers or `onConflict`.
 
-### This session's work — PR #142 (OPEN, draft, branch `claude/charming-bohr-btq8cy`)
+### This session's work — PR #142 (MERGED 2026-06-12, squash `4bdc2fc`)
 
-Four commits; ready for review/merge once visual QA passes:
+Four pieces:
 
 1. **Docs refresh**: CLAUDE.md + HANDOFF.md brought to the post-#141 state.
 2. **Freelancer duplicate-save confirm**: the runs table upserts on (period,
@@ -85,12 +84,12 @@ Four commits; ready for review/merge once visual QA passes:
    violation in `e2e/auth.spec.ts` + `e2e/kpi-upload.spec.ts`) — both login
    helpers now use `{ exact: true }`.
 
-**Before merging #142**: confirm the e2e re-run is green (the failure above
-was caught on the third commit; the fix is the fourth), and give the login
-motion a quick visual pass on the Vercel preview — stripe glints, mascot
-poses/transitions, wave parallax, easter egg. If the mascot's reveal height
-looks off, the knob is the `-top-16` on its wrapper in `app/login/page.tsx`
-(math says: mouth fully visible, resting hands hidden behind the card edge).
+**Still outstanding after the merge**: a quick visual pass of the login
+motion — now in production — stripe glints, mascot poses/transitions, wave
+parallax, easter egg. If the mascot's reveal height looks off, the knob is
+the `-top-16` on its wrapper in `app/login/page.tsx` (math says: mouth fully
+visible, resting hands hidden behind the card edge). CI (incl. e2e) was green
+on the merged head.
 
 ### Previous session recap (PRs #127–#135)
 
@@ -104,8 +103,9 @@ fix (the persistent Uploads 500).
 
 ## Open / needs attention
 
-- **PR #142** (draft): visual QA of the login motion on the Vercel preview,
-  check e2e is green, mark ready, squash-merge (see "Before merging" above).
+- **Login motion visual QA** (PR #142 is merged, so this is production now):
+  stripe charging glints, mascot poses, wave parallax, the 5-tap easter egg —
+  see "Still outstanding" above for the tuning knob.
 - **Remember-last-email on the login page** was deliberately left out of the
   interactivity batch (localStorage on shared devices leaks who signed in) —
   pending Leon's call; trivial to add to `app/login/page.tsx` if wanted.
