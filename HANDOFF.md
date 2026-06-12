@@ -1,9 +1,10 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-12**, session end).
-`main` holds PRs #136–#142 — everything from this session is merged. Full
-suite 411 passing. Read `CLAUDE.md` for architecture + the frozen Settings IA
-rules; read `AGENTS.md` before touching Next.js APIs.
+Snapshot for the next session (last updated **2026-06-12**, second session of
+the day, session end). `main` holds PRs #136–#145 — everything from both
+2026-06-12 sessions is merged. Full suite 411 passing. Read `CLAUDE.md` for
+architecture + the frozen Settings IA rules; read `AGENTS.md` before touching
+Next.js APIs.
 
 ## What's on `main` now
 
@@ -15,100 +16,62 @@ The suite ("**Optimum People Hub**") is in production on Vercel. Modules:
 - **Fit**: Staff Earnings (commission + coaching income).
 - **System**: Users (hierarchy-scoped `manage_users`) · Audit log · Permissions.
 
-### Landed on `main` since the #136 snapshot (PRs #137–#141)
+### Earlier 2026-06-12 work (PRs #137–#143, recap)
 
-A rename plus a system-wide audit-hardening pass — no new modules, no behavior
-changes for correct inputs; the fixes close races and silent-wrong-number paths.
+Project renamed to Optimum People Hub (#137); system-wide audit hardening —
+concurrency races closed under advisory locks, `getCenterTarget` made
+deterministic, `SESSION_SECRET` fails fast in prod (#138–#141); freelancer
+duplicate-save confirm + the login interactivity batch (mascot rig, password
+reveal, Caps Lock hint, failure feedback, email completion chip, charging
+glints, wave parallax, 5-tap easter egg) (#142); handoff record (#143).
 
-1. **Project renamed to Optimum People Hub** (#137): package name, app
-   metadata, README, and the GitHub repo path (`leonlai0831/Optimum-People-Hub`;
-   ONBOARDING.md updated). Old "KPI & Bonus Dashboard" name survives only as
-   the "formerly" note in CLAUDE.md.
-2. **Concurrency races fixed** (#138, all pre-existing on `main`):
-   - KPI **period-close race**: closed-check + staging insert now run in ONE
-     transaction under a per-period advisory lock (`createKpiIngestChecked`,
-     `lib/db/queries.ts`); every closing path (finalizing `createRun` /
-     `updateRunReview`, `importKpiIngest`) takes the same lock.
-   - `updateRunReview` status flip + coach carry-forward are one transaction.
-   - Coach auto-create races resolve via `onConflict` instead of 500ing.
-   - `moveAllowancePeriod` is atomic (dual-period advisory locks, lowest key
-     first; returns `locked` → route 409).
-   - Freelancer **commitment-matrix lookup is order-independent** (largest
-     threshold ≤ value wins even if settings rows are reordered) and the
-     calculator's KPI-bind fetch race is guarded (request-sequence ref).
-3. **Low-severity sweep** (#139): hydration-safe `formatDate`/`formatDateTime`
-   in `lib/utils.ts` (fixed en-MY + Asia/Kuala_Lumpur; replaced 26 bare
-   `toLocaleString` sites); `ButtonLink`/`buttonClasses` replace
-   button-in-anchor; `window.confirm` → `ConfirmModal`; payee bulk save is one
-   transaction; 404 existence gates before note/assessment writes; masked
-   admin password fields with reveal; stable list keys; misc a11y/memoization.
-4. **`getCenterTarget` is deterministic** (#140): center-name → target matching
-   keeps both containment directions ("Kinrara" → "Puchong Kinrara", operator
-   confirmed), but multiple candidates now resolve closest-first (most shared
-   tokens, fewest unmatched, then alphabetical) instead of config insertion
-   order — a config edit can no longer silently flip a supervisor's target.
-5. **SESSION_SECRET fails fast in production** (#141): missing/short secret
-   used to silently fall back to a public built-in string (forgeable cookies).
-   `resolveSessionPassword()` now throws at request time in prod; `next build`
-   phase is exempt (builds succeed without the env var); dev/test keep the
-   clearly-named insecure fallback.
+### This session's work — PRs #144 + #145 (both MERGED 2026-06-12)
 
-New conventions worth knowing (now in CLAUDE.md "Conventions & gotchas"):
-date labels via `formatDate`/`formatDateTime` only; removable list rows keyed
-by a client-only `_key`, never array index; read-then-write DB sequences go
-through the advisory-lock helpers or `onConflict`.
+**PR #144 — login polish (squash `d562ffe`)**:
 
-### This session's work — PR #142 (MERGED 2026-06-12, squash `4bdc2fc`)
+1. **Mascot redrawn to match `logo-mark.png`**: rounded-SQUARE yellow goggle
+   frames (were circles) and YELLOW hands/arms with a darker amber outline
+   (were warm white) — operator's spot of the mismatch.
+2. **Charging-glints intermittency fixed**: the white "current" only ran while
+   the sign-in request was in flight, and warm production sign-ins resolve in
+   ~200ms — too short for the glints' fade-in + travel, so the effect read as
+   sometimes-there-sometimes-not. Submit now holds the in-flight state ≥
+   `MIN_CHARGE_MS` (700ms, `app/login/page.tsx`), padding fast responses.
+3. **Click toys on the login page**: tap the painted wave → drift surges 6×
+   for 2s (WAAPI `updatePlaybackRate` + one-shot crest rear-up); tap a stripe
+   bar or the arrow → one-shot glint current; tap the mascot → transient
+   reaction alternating a new "boop" surprise pose with the cheer. Enabled by
+   pointer-events plumbing: the login content wrapper is `pointer-events-none`
+   (its two children re-enable), bands/wave re-enable hits on painted strokes
+   only.
 
-Four pieces:
+**PR #145 — the same toys on the launcher (squash `a97287b`)**:
 
-1. **Docs refresh**: CLAUDE.md + HANDOFF.md brought to the post-#141 state.
-2. **Freelancer duplicate-save confirm**: the runs table upserts on (period,
-   person, position family, work month), so duplicates never errored — they
-   silently replaced or silently added a second record. The calculator now
-   looks up the payout month before submitting and asks first — same family +
-   work month → "replace that record"; different family/work month → "adds a
-   second record"; an edit whose key changed warns the opened record stays.
-   Pure classifier in `lib/freelancer/collision.ts` (9 tests); server upsert
-   unchanged.
-3. **Login interactivity** (all eight items Leon picked): password reveal +
-   Caps Lock hint + shake/`role="alert"`/vibration on failure +
-   `@optimumtrain.page` completion chip (`lib/auth/email-suggest.ts`, 8 tests)
-   + stripe-band charging glints while the request is in flight + the mascot
-   rig (`components/login-mascot.tsx` — watches email, covers its goggles on
-   password, peeks on reveal, cheers on success) + footer-wave mouse parallax
-   + a 5-tap logo easter egg (mascot swims the wave). Deliberately NOT
-   included: remember-last-email (shared-device privacy — Leon hasn't decided).
-4. **e2e fix**: the reveal toggle's aria-label ("Show password") made
-   Playwright's substring `getByLabel("Password")` ambiguous (strict-mode
-   violation in `e2e/auth.spec.ts` + `e2e/kpi-upload.spec.ts`) — both login
-   helpers now use `{ exact: true }`.
+- `components/splash-wave.tsx`: click-to-surge extracted from the login page,
+  reused on the hero (login refactored onto it; parallax unchanged).
+- `components/hero-mascot.tsx`: the rig floats half-submerged in the hero
+  wave (rendered BEFORE the wave svg so the crest paints over its lower half),
+  idle blink + bob, tap → boop/cheer reaction.
+- Hub ribbon click current: at `-z-10` the ribbon's strokes can never win
+  hit-testing, so `hub-stripe-band.tsx` listens on the document and tests the
+  click point against the ribbon's known geometry (legs/arc/runs ± half-bar;
+  interactive elements + `#hub-hero` excluded; armed only after the draw-in
+  finishes via a ref).
 
-**Still outstanding after the merge**: a quick visual pass of the login
-motion — now in production — stripe glints, mascot poses/transitions, wave
-parallax, easter egg. If the mascot's reveal height looks off, the knob is
-the `-top-16` on its wrapper in `app/login/page.tsx` (math says: mouth fully
-visible, resting hands hidden behind the card edge). CI (incl. e2e) was green
-on the merged head.
-
-### Previous session recap (PRs #127–#135)
-
-Freelancer Payment module (rates × center group, commitment matrix, CC
-position, multi-record months, late submissions 补交, KPI-bound student result,
-bank-transfer XLSX export); Workforce rename + Payees tab with Payment Summary
-xlsx import; roster scoping (`lib/staff/roster.ts`); Student Progress module
-(staging pipeline extracted from KPI Uploads); hierarchy-scoped user
-management; login/launcher racing-stripe experience; `EmptyState` server-safe
-fix (the persistent Uploads 500).
+Operator also reported the hub ribbon "misplaced on resize" — that turned out
+to be browser zoom (narrower effective viewport → legs re-anchor at
+`vw − 150` and thread behind the cards), confirmed not a bug.
 
 ## Open / needs attention
 
-- **Login motion visual QA** (PR #142 is merged, so this is production now):
-  stripe charging glints, mascot poses, wave parallax, the 5-tap easter egg —
-  see "Still outstanding" above for the tuning knob.
-- **Remember-last-email on the login page** was deliberately left out of the
-  interactivity batch (localStorage on shared devices leaks who signed in) —
-  pending Leon's call; trivial to add to `app/login/page.tsx` if wanted.
+- **Visual QA on real devices** (everything above is in production): login
+  charging current now guaranteed visible each sign-in; launcher hero mascot
+  (half-submerged position vs the drifting crest), wave surge, ribbon current
+  along the visible segments (right margin, grid gaps). Mascot hero position
+  knobs: the wrapper classes in `components/hero-mascot.tsx`
+  (`bottom-6 right-6 w-12 sm:bottom-8 sm:right-10 sm:w-16`).
+- **Remember-last-email on the login page** still deliberately left out
+  (localStorage on shared devices leaks who signed in) — pending Leon's call.
 - **CC bonus semantics are an assumption**: CC gets the hours-based commitment
   bonus and no student result (like PA/T0). The operator only specified rates
   (RM26/42) — **confirm with Leon**; if CC should earn no bonuses at all, edit
@@ -125,12 +88,22 @@ fix (the persistent Uploads 500).
   rules" checkbox. Squash-merge is the convention (one commit per PR). The
   account's GitHub API quota is easily exhausted by automation — when rate
   limited, merge via the web UI (no API quota).
+- **Gotcha learned this session — a CONFLICTED PR runs no Actions at all**:
+  `pull_request` workflows run against the merge ref, which GitHub can't
+  create while the PR has conflicts, so CI silently never starts (no failure,
+  no run; opened/synchronize/reopened all ignored — meanwhile Vercel builds
+  the branch head normally, which makes it look like an Actions outage).
+  Empty commits and close/reopen don't help; `workflow_dispatch` via the
+  integration token is 403. **Fix the conflict (rebase) and CI fires
+  immediately.** It bit here because the session container had cloned `main`
+  from before the previous PR's squash-merge, so the next PR from the same
+  branch was conflicted from birth — when reusing a session branch across
+  merges, rebase onto fresh `origin/main` before opening the next PR.
 - Login stripe-band geometry mirrors the login layout's Tailwind values by
   hand (`components/login-stripe-band.tsx` docblock lists them) — if the card
   size/offsets change, update the constants there and in `stripeLegsMidX`
   (`components/stripe-arrow.tsx`, shared with the dashboard ribbon so the
-  login → dashboard cut stays continuous). The PR #142 login work deliberately
-  left the card's size/position untouched.
+  login → dashboard cut stays continuous).
 
 ## Environment notes (Claude Code on the web)
 
@@ -138,5 +111,9 @@ fix (the persistent Uploads 500).
   can't delete remote branches. Do those on a normal machine / the GitHub UI.
   CI runs the Playwright e2e suite (`e2e/`), so e2e regressions surface there,
   not locally.
+- No `gh` CLI — use the GitHub MCP tools. Anonymous api.github.com calls from
+  the sandbox rate-limit quickly (shared egress IP).
+- `npm install` + `npx next typegen` are needed before `npm run typecheck`
+  works in a fresh container (the `RouteContext` types are generated).
 - Google Drive + Gmail MCP tools are connected (used to read the operator's
   Payment Summary directly from the shared drive).
