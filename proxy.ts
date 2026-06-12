@@ -12,13 +12,16 @@ export function proxy(req: NextRequest) {
   // Public paths. `/setup` + `/api/health` stay open so a broken deploy can be
   // diagnosed before anyone can sign in. `/api/ingest` is machine-to-machine
   // (bearer-key auth inside the route, no session cookie) — without this
-  // exemption the proxy would 307 the external sender to /login.
+  // exemption the proxy would 307 the external sender to /login. `/api/errors`
+  // accepts client error reports from the LOGIN page too (no cookie yet); the
+  // route rate-limits per IP and its DELETE re-checks super_admin itself.
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/setup") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/health") ||
-    pathname.startsWith("/api/ingest")
+    pathname.startsWith("/api/ingest") ||
+    pathname.startsWith("/api/errors")
   ) {
     return NextResponse.next();
   }
