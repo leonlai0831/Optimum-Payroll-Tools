@@ -299,6 +299,21 @@ reduced-motion is handled explicitly (WAAPI ignores the global CSS kill rule).
 The login→launcher handshake lives in `lib/arrival.ts` (sessionStorage; also
 stands the loading clip down for that navigation).
 
+**Login interactivity (2026-06)**: a poseable mascot rig
+(`components/login-mascot.tsx`, drawn to match `logo-mark.png`) peeks over the
+sign-in card — watches the email being typed (pupils track), covers its goggles
+during password entry (peeks when revealed), cheers on success; poses are CSS
+transitions in globals.css (`.mascot-*`), stilled by the global reduced-motion
+rule. The form ships a password reveal toggle, a Caps Lock hint, failure
+feedback on three channels (card shake + `role="alert"` + a short vibration),
+and a one-tap `@optimumtrain.page` completion chip (`suggestLoginEmail` in
+`lib/auth/email-suggest.ts`, unit-tested; applied on mousedown so the blur
+can't eat the tap). While the sign-in request is in flight the stripe band runs
+white glints toward the card (`charging` prop, WAAPI with an explicit
+reduced-motion skip); the footer wave leans gently with the mouse (lg+
+pointers); five quick taps on the card's logo row send the mascot swimming
+across the wave (one-shot, unmounts on animationend).
+
 ## Data model (Drizzle / Postgres)
 
 - **`config`** — singleton row (`id = 1`), `data` jsonb = `{ personalKpi, centerKpi, centerTargets,

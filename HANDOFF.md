@@ -58,6 +58,15 @@ changes for correct inputs; the fixes close races and silent-wrong-number paths.
    and an edit whose key changed warns the opened record stays. Pure
    classifier in `lib/freelancer/collision.ts` (+ `collision.test.ts`); the
    server upsert is unchanged.
+7. **Login interactivity** (also on PR #142, all eight items Leon picked):
+   password reveal + Caps Lock hint + shake/`role="alert"`/vibration on
+   failure + `@optimumtrain.page` completion chip (`lib/auth/email-suggest.ts`,
+   tested) + stripe-band charging glints while the request is in flight +
+   the mascot rig (`components/login-mascot.tsx` — watches email, covers its
+   goggles on password, peeks on reveal, cheers on success) + footer-wave
+   mouse parallax + a 5-tap logo easter egg (mascot swims the wave).
+   Deliberately NOT included: remember-last-email (shared-device privacy —
+   Leon hasn't decided).
 
 New conventions worth knowing (now in CLAUDE.md "Conventions & gotchas"):
 date labels via `formatDate`/`formatDateTime` only; removable list rows keyed
