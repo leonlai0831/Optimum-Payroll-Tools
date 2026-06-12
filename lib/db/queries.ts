@@ -43,7 +43,6 @@ import {
   type UserRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { getCleanName } from "@/lib/kpi/csv";
 import {
   ALL_TOOL_CATEGORIES,
   CAPABILITIES,
@@ -3267,7 +3266,7 @@ export async function clearAppErrors(): Promise<void> {
 /* ── Freelancer ↔ KPI result binding ───────────────────────────────────────── */
 
 export interface KpiResultCandidate {
-  /** Clean instructor account name (getCleanName) from the month's KPI data. */
+  /** RAW instructor account name exactly as it appears in the month's KPI data. */
   name: string;
   black: number;
   colour: number;
@@ -3279,6 +3278,11 @@ export interface KpiResultCandidate {
  * latest SAVED KPI run for the period, falling back to the latest pending
  * ingest (data is pushed on the 1st of the FOLLOWING month, so early in that
  * window only the staged delivery may exist). Empty when neither exists yet.
+ *
+ * Accounts are NOT merged by `getCleanName` (operator decision 2026-06-12):
+ * branch accounts like `CK [BK]` / `CK [PK]` stay separate candidates so a
+ * freelancer's result binds the branch account they actually teach at.
+ * Multiple rows of the SAME raw account (e.g. per-center) still sum.
  */
 export async function getKpiResultCandidates(periodLabel: string): Promise<KpiResultCandidate[]> {
   const db = await getDb();
@@ -3301,7 +3305,7 @@ export async function getKpiResultCandidates(periodLabel: string): Promise<KpiRe
   if (!rows?.length) return [];
   const byName = new Map<string, { black: number; colour: number }>();
   for (const r of rows) {
-    const name = getCleanName(r.Instructor);
+    const name = String(r.Instructor ?? "").trim();
     if (!name) continue;
     const cur = byName.get(name) ?? { black: 0, colour: 0 };
     cur.black += Number(r.Black) || 0;

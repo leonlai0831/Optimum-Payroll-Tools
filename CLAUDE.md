@@ -232,7 +232,10 @@ surfaces.
 **Student result ← KPI data**: the calculator binds a freelancer's black/colour
 counts to an instructor account in the WORK month's KPI data (`input.kpiName`;
 `GET /api/freelancer/kpi-result?period=&q=|&name=` reads the period's saved KPI
-run, falling back to the latest pending ingest, aggregated by `getCleanName`).
+run, falling back to the latest pending ingest, summed per RAW instructor
+account — **no `getCleanName` merging** (operator decision 2026-06-12): branch
+accounts like `CK [BK]` / `CK [PK]` stay separate so the binding targets the
+branch actually taught at).
 The binding carries over via the latest run; counts stay editable; month P's
 data arrives on the 1st of P+1 (the UI says so when empty). **CC bonus
 semantics (operator-confirmed 2026-06-12, validated against the real May
