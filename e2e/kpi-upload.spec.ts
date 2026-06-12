@@ -8,7 +8,8 @@ const FIXTURE = "e2e/fixtures/kpi-sample.csv";
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
-  await page.getByLabel("Password").fill(PASSWORD);
+  // exact: the reveal toggle's aria-label ("Show password") also substring-matches.
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page.getByRole("heading", { name: "Optimum People Hub" })).toBeVisible();
 }

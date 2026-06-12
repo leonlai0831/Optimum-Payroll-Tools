@@ -1,8 +1,10 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-12**, after PRs #136–#141
-all merged to `main`; full suite 403 passing). Read `CLAUDE.md` for architecture
-+ the frozen Settings IA rules; read `AGENTS.md` before touching Next.js APIs.
+Snapshot for the next session (last updated **2026-06-12**, session end).
+`main` holds PRs #136–#141; **PR #142 is OPEN as a draft** with this session's
+work (see below). Full suite 411 passing on the PR branch. Read `CLAUDE.md`
+for architecture + the frozen Settings IA rules; read `AGENTS.md` before
+touching Next.js APIs.
 
 ## What's on `main` now
 
@@ -14,7 +16,7 @@ The suite ("**Optimum People Hub**") is in production on Vercel. Modules:
 - **Fit**: Staff Earnings (commission + coaching income).
 - **System**: Users (hierarchy-scoped `manage_users`) · Audit log · Permissions.
 
-### This session's changes (PRs #137–#141)
+### Landed on `main` since the #136 snapshot (PRs #137–#141)
 
 A rename plus a system-wide audit-hardening pass — no new modules, no behavior
 changes for correct inputs; the fixes close races and silent-wrong-number paths.
@@ -51,27 +53,44 @@ changes for correct inputs; the fixes close races and silent-wrong-number paths.
    `resolveSessionPassword()` now throws at request time in prod; `next build`
    phase is exempt (builds succeed without the env var); dev/test keep the
    clearly-named insecure fallback.
-6. **Freelancer duplicate-save confirm** (rides PR #142 with this docs
-   refresh): the calculator looks up the payout month before submitting and
-   asks — same position family + work month → "replace that record",
-   different family/work month → "adds a second record for the same person",
-   and an edit whose key changed warns the opened record stays. Pure
-   classifier in `lib/freelancer/collision.ts` (+ `collision.test.ts`); the
-   server upsert is unchanged.
-7. **Login interactivity** (also on PR #142, all eight items Leon picked):
-   password reveal + Caps Lock hint + shake/`role="alert"`/vibration on
-   failure + `@optimumtrain.page` completion chip (`lib/auth/email-suggest.ts`,
-   tested) + stripe-band charging glints while the request is in flight +
-   the mascot rig (`components/login-mascot.tsx` — watches email, covers its
-   goggles on password, peeks on reveal, cheers on success) + footer-wave
-   mouse parallax + a 5-tap logo easter egg (mascot swims the wave).
-   Deliberately NOT included: remember-last-email (shared-device privacy —
-   Leon hasn't decided).
 
 New conventions worth knowing (now in CLAUDE.md "Conventions & gotchas"):
 date labels via `formatDate`/`formatDateTime` only; removable list rows keyed
 by a client-only `_key`, never array index; read-then-write DB sequences go
 through the advisory-lock helpers or `onConflict`.
+
+### This session's work — PR #142 (OPEN, draft, branch `claude/charming-bohr-btq8cy`)
+
+Four commits; ready for review/merge once visual QA passes:
+
+1. **Docs refresh**: CLAUDE.md + HANDOFF.md brought to the post-#141 state.
+2. **Freelancer duplicate-save confirm**: the runs table upserts on (period,
+   person, position family, work month), so duplicates never errored — they
+   silently replaced or silently added a second record. The calculator now
+   looks up the payout month before submitting and asks first — same family +
+   work month → "replace that record"; different family/work month → "adds a
+   second record"; an edit whose key changed warns the opened record stays.
+   Pure classifier in `lib/freelancer/collision.ts` (9 tests); server upsert
+   unchanged.
+3. **Login interactivity** (all eight items Leon picked): password reveal +
+   Caps Lock hint + shake/`role="alert"`/vibration on failure +
+   `@optimumtrain.page` completion chip (`lib/auth/email-suggest.ts`, 8 tests)
+   + stripe-band charging glints while the request is in flight + the mascot
+   rig (`components/login-mascot.tsx` — watches email, covers its goggles on
+   password, peeks on reveal, cheers on success) + footer-wave mouse parallax
+   + a 5-tap logo easter egg (mascot swims the wave). Deliberately NOT
+   included: remember-last-email (shared-device privacy — Leon hasn't decided).
+4. **e2e fix**: the reveal toggle's aria-label ("Show password") made
+   Playwright's substring `getByLabel("Password")` ambiguous (strict-mode
+   violation in `e2e/auth.spec.ts` + `e2e/kpi-upload.spec.ts`) — both login
+   helpers now use `{ exact: true }`.
+
+**Before merging #142**: confirm the e2e re-run is green (the failure above
+was caught on the third commit; the fix is the fourth), and give the login
+motion a quick visual pass on the Vercel preview — stripe glints, mascot
+poses/transitions, wave parallax, easter egg. If the mascot's reveal height
+looks off, the knob is the `-top-16` on its wrapper in `app/login/page.tsx`
+(math says: mouth fully visible, resting hands hidden behind the card edge).
 
 ### Previous session recap (PRs #127–#135)
 
@@ -85,6 +104,11 @@ fix (the persistent Uploads 500).
 
 ## Open / needs attention
 
+- **PR #142** (draft): visual QA of the login motion on the Vercel preview,
+  check e2e is green, mark ready, squash-merge (see "Before merging" above).
+- **Remember-last-email on the login page** was deliberately left out of the
+  interactivity batch (localStorage on shared devices leaks who signed in) —
+  pending Leon's call; trivial to add to `app/login/page.tsx` if wanted.
 - **CC bonus semantics are an assumption**: CC gets the hours-based commitment
   bonus and no student result (like PA/T0). The operator only specified rates
   (RM26/42) — **confirm with Leon**; if CC should earn no bonuses at all, edit
@@ -105,11 +129,14 @@ fix (the persistent Uploads 500).
   hand (`components/login-stripe-band.tsx` docblock lists them) — if the card
   size/offsets change, update the constants there and in `stripeLegsMidX`
   (`components/stripe-arrow.tsx`, shared with the dashboard ribbon so the
-  login → dashboard cut stays continuous).
+  login → dashboard cut stays continuous). The PR #142 login work deliberately
+  left the card's size/position untouched.
 
 ## Environment notes (Claude Code on the web)
 
 - This sandbox can't download Playwright browsers (CDN not allowlisted) and
   can't delete remote branches. Do those on a normal machine / the GitHub UI.
+  CI runs the Playwright e2e suite (`e2e/`), so e2e regressions surface there,
+  not locally.
 - Google Drive + Gmail MCP tools are connected (used to read the operator's
   Payment Summary directly from the shared drive).
