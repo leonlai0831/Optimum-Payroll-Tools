@@ -316,13 +316,21 @@ reduced-motion skip; the page holds the in-flight state ≥ `MIN_CHARGE_MS`
 wave leans gently with the mouse (lg+ pointers); five quick taps on the card's
 logo row send the mascot swimming across the wave (one-shot, unmounts on
 animationend). Click toys: tapping the painted wave surges its drift 6× for 2s
-(WAAPI `updatePlaybackRate` + a one-shot crest rear-up), tapping a stripe bar
-or the arrow fires a one-shot glint "current", and tapping the mascot pokes a
-transient reaction (alternating "boop" surprise / cheer). To let those clicks
-reach the decorative layers, the login content wrapper is `pointer-events-none`
-with its two children re-enabled, and the band/wave re-enable hits on their
-painted strokes only (containers stay `pointer-events-none`, so empty areas
-pass through).
+(WAAPI `updatePlaybackRate` + a one-shot crest rear-up — shared
+`components/splash-wave.tsx`), tapping a stripe bar or the arrow fires a
+one-shot glint "current", and tapping the mascot pokes a transient reaction
+(alternating "boop" surprise / cheer). To let those clicks reach the
+decorative layers, the login content wrapper is `pointer-events-none` with its
+two children re-enabled, and the band/wave re-enable hits on their painted
+strokes only (containers stay `pointer-events-none`, so empty areas pass
+through). **The launcher carries the same toys**: the hero hosts `SplashWave`
+plus `components/hero-mascot.tsx` (the rig floating half-submerged in the
+hero wave, rendered before it so the crest paints over its lower half), and
+the hub ribbon answers clicks with the glint current — but at `-z-10` its
+strokes can never win hit-testing, so `hub-stripe-band.tsx` listens on the
+document and tests the click point against the ribbon's known geometry
+(legs/arc/runs ± half-bar; interactive elements and `#hub-hero` excluded;
+held until the draw-in finishes).
 
 ## Data model (Drizzle / Postgres)
 

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Button, Card, Input, Spinner } from "@/components/ui";
-import { CiWave } from "@/components/ci-wave";
+import { SplashWave } from "@/components/splash-wave";
 import { LoginMascot, type MascotState } from "@/components/login-mascot";
 import { LoginStripeBand } from "@/components/login-stripe-band";
 import { suggestLoginEmail } from "@/lib/auth/email-suggest";
@@ -20,9 +20,6 @@ const NAVIGATE_AFTER_MS = 1650;
  * glints need to register, so the "current" read as sometimes-there-sometimes-
  * not. Hold the in-flight state at least this long so it shows every time. */
 const MIN_CHARGE_MS = 700;
-/** Clicking the footer wave: drift runs this much faster, for this long. */
-const WAVE_SURGE_RATE = 6;
-const WAVE_SURGE_MS = 2000;
 /** A tap on the mascot holds its reaction pose this long. */
 const MASCOT_REACT_MS = 1100;
 
@@ -39,13 +36,11 @@ export default function LoginPage() {
   const [pwFocused, setPwFocused] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [swimming, setSwimming] = useState(false);
-  const [surging, setSurging] = useState(false);
   // A tap on the mascot overrides its form-driven pose for a beat.
   const [reaction, setReaction] = useState<MascotState | null>(null);
   // Easter egg: five quick taps on the card's logo row → mascot swims the wave.
   const logoTaps = useRef({ n: 0, t: 0 });
   const waveRef = useRef<HTMLDivElement | null>(null);
-  const surgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reactionFlip = useRef(false);
 
@@ -128,23 +123,6 @@ export default function LoginPage() {
     }
   }
 
-  /** Clicking the wave: the two drift layers surge to WAVE_SURGE_RATE for 2s
-   * (WAAPI playbackRate — smooth mid-cycle, where a CSS duration change would
-   * jump) plus a one-shot crest rear-up (`ci-wave-surge`). Re-clicks extend
-   * the surge window; the rate is set absolutely, never stacked. */
-  function onWaveClick() {
-    const el = waveRef.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    for (const a of el.getAnimations({ subtree: true })) a.updatePlaybackRate(WAVE_SURGE_RATE);
-    setSurging(true);
-    if (surgeTimer.current) clearTimeout(surgeTimer.current);
-    surgeTimer.current = setTimeout(() => {
-      const wave = waveRef.current;
-      if (wave) for (const a of wave.getAnimations({ subtree: true })) a.updatePlaybackRate(1);
-      setSurging(false);
-    }, WAVE_SURGE_MS);
-  }
-
   /** Tapping the mascot pokes a reaction — alternating surprise ("boop") and
    * a cheer — that overrides the form-driven pose for a beat. */
   function onMascotClick() {
@@ -175,17 +153,13 @@ export default function LoginPage() {
       onPointerMove={onPointerMove}
     >
       {/* The CI guide's own wave artwork anchors the page bottom; the wrapper
-          carries the pointer parallax, and a click on the painted wave (the
-          wrapper stays pointer-events-none — CiWave re-enables its paths)
-          surges the swell for a couple of seconds. */}
+          carries the pointer parallax, SplashWave the click-to-surge toy
+          (painted strokes only — empty areas pass through). */}
       <div
         ref={waveRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 transition-transform duration-700 ease-out will-change-transform"
       >
-        <CiWave
-          className={cn("block h-28 w-full sm:h-40", surging && "ci-wave-surge")}
-          onClick={onWaveClick}
-        />
+        <SplashWave waveClassName="block h-28 w-full sm:h-40" />
       </div>
       {/* Easter egg: the mascot front-crawls the width of the wave, then is
           unmounted when the crossing animation ends (the bob inside never
