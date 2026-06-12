@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   STRIPE_ARROW_TIP,
   STRIPE_ARROW_W,
@@ -29,6 +29,11 @@ import {
  * upward through the bend on the way out. Keyframes live in globals.css and
  * read per-path distances from custom properties set here. Reduced-motion is
  * stilled by the global rule.
+ *
+ * Clicking a bar (or the arrow) fires a one-shot "current" — the same white
+ * glints the in-flight sign-in streams continuously. The container is
+ * pointer-events-none; only the painted strokes re-enable hits, so the band
+ * never swallows clicks meant for the page.
  *
  * Geometry mirrors the login layout's Tailwind values — keep in sync:
  *   card: max-w-md (448px), inside max-w-6xl + lg:px-12 → its left edge is
@@ -70,6 +75,8 @@ const getServerSize = () => "0x0";
 /** Length of one charging glint along a stripe (px of path distance). */
 const PULSE_LEN = 90;
 const PULSE_MS = 1100;
+/** Click "current": one glint per stripe, a touch quicker than charging. */
+const ZAP_MS = 800;
 
 export function LoginStripeBand({
   sweeping,
@@ -80,6 +87,8 @@ export function LoginStripeBand({
   charging?: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
+  // Click "current": each click bumps the tick; an effect fires one glint run.
+  const [zap, setZap] = useState(0);
   const [vw, vh] = useSyncExternalStore(subscribeResize, getSize, getServerSize)
     .split("x")
     .map(Number);
@@ -176,11 +185,20 @@ export function LoginStripeBand({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- geometry is pure in (vw, vh)
   }, [sweeping]);
 
-  // Charging "current" (sign-in request in flight): a short white glint runs
-  // along each stripe from the viewport's left edge into the bar's head at the
-  // arrow gap, where it fades out — staggered per stripe so the band reads as
-  // energy flowing toward the card. WAAPI like the exit (the global CSS
-  // reduced-motion rule can't reach it), so reduced-motion skips it here.
+  // One white glint travelling a bar — dash head distance d = -offset:
+  // off-screen left → absorbed at the bar head by the arrow gap. Shared by the
+  // charging flow (infinite) and the click zap (one shot).
+  const glintFrames: Keyframe[] = [
+    { strokeDashoffset: `${-(vw - PULSE_LEN)}px`, opacity: 0 },
+    { opacity: 0.45, offset: 0.2 },
+    { opacity: 0.45, offset: 0.8 },
+    { strokeDashoffset: `${-(vw + snakeLen - PULSE_LEN)}px`, opacity: 0 },
+  ];
+
+  // Charging "current" (sign-in request in flight): the glints run along each
+  // stripe staggered, so the band reads as energy flowing toward the card.
+  // WAAPI like the exit (the global CSS reduced-motion rule can't reach it),
+  // so reduced-motion skips it here.
   useEffect(() => {
     if (!charging || sweeping || vw < 1024) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -189,28 +207,47 @@ export function LoginStripeBand({
     const anims: Animation[] = [];
     box.querySelectorAll<SVGPathElement>("path[data-pulse]").forEach((el, i) => {
       anims.push(
-        el.animate(
-          [
-            // Dash head distance d = -offset: off-screen left → absorbed at the bar head.
-            { strokeDashoffset: -(vw - PULSE_LEN), opacity: 0 },
-            { opacity: 0.45, offset: 0.2 },
-            { opacity: 0.45, offset: 0.8 },
-            { strokeDashoffset: -(vw + snakeLen - PULSE_LEN), opacity: 0 },
-          ],
-          { duration: PULSE_MS, delay: i * 140, iterations: Infinity, easing: "linear" },
-        ),
+        el.animate(glintFrames, {
+          duration: PULSE_MS,
+          delay: i * 140,
+          iterations: Infinity,
+          easing: "linear",
+        }),
       );
     });
     return () => anims.forEach((a) => a.cancel());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- geometry is pure in (vw, vh)
   }, [charging, sweeping, vw]);
 
+  // Click "current": one glint fires along each stripe. Charging owns the
+  // pulse paths while it runs (clicks are ignored then via fireZap); a re-click
+  // mid-flight restarts the burst.
+  useEffect(() => {
+    if (!zap || charging || sweeping || vw < 1024) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const box = boxRef.current;
+    if (!box) return;
+    const anims: Animation[] = [];
+    box.querySelectorAll<SVGPathElement>("path[data-pulse]").forEach((el, i) => {
+      anims.push(el.animate(glintFrames, { duration: ZAP_MS, delay: i * 100, easing: "linear" }));
+    });
+    return () => anims.forEach((a) => a.cancel());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires per click; geometry is pure in (vw, vh)
+  }, [zap]);
+
+  const fireZap = () => {
+    if (charging || sweeping) return;
+    setZap((t) => t + 1);
+  };
+
   // The stacked phone layout has no band (and 0x0 covers SSR/first paint).
   if (vw < 1024) return null;
 
   return (
-    <div ref={boxRef} aria-hidden className="absolute inset-0 z-0 hidden lg:block">
-      <svg className="h-full w-full" viewBox={`0 0 ${vw} ${vh}`} fill="none">
+    <div ref={boxRef} aria-hidden className="pointer-events-none absolute inset-0 z-0 hidden lg:block">
+      {/* Clicks land only on painted strokes (pointer-events re-enabled per
+          path below) and bubble here — empty areas stay click-through. */}
+      <svg className="h-full w-full" viewBox={`0 0 ${vw} ${vh}`} fill="none" onClick={fireZap}>
         {stripes.map((s, i) => (
           <path
             key={i}
@@ -228,6 +265,8 @@ export function LoginStripeBand({
                 strokeDasharray: `${snakeLen} ${dashGap}`,
                 "--dash-from": `${cardLeft - vw}px`, // head just off-screen left
                 "--dash-rest": `${-vw}px`,
+                pointerEvents: "visiblePainted",
+                cursor: "pointer",
               } as React.CSSProperties
             }
           />
@@ -255,7 +294,8 @@ export function LoginStripeBand({
           coordinates line up in every engine. */}
       <div
         data-arrow
-        className="stripe-arrow-enter absolute left-0 top-0"
+        className="stripe-arrow-enter pointer-events-auto absolute left-0 top-0 cursor-pointer"
+        onClick={fireZap}
         style={
           {
             offsetPath: `path("${arrowD}")`,

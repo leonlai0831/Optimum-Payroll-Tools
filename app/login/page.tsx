@@ -16,6 +16,15 @@ import { cn } from "@/lib/utils";
  * plus the screen drop chasing it (1.05s delay + 0.55s) must finish inside
  * this before the swap. */
 const NAVIGATE_AFTER_MS = 1650;
+/** Warm sign-ins resolve in ~200ms — shorter than the stripe band's charging
+ * glints need to register, so the "current" read as sometimes-there-sometimes-
+ * not. Hold the in-flight state at least this long so it shows every time. */
+const MIN_CHARGE_MS = 700;
+/** Clicking the footer wave: drift runs this much faster, for this long. */
+const WAVE_SURGE_RATE = 6;
+const WAVE_SURGE_MS = 2000;
+/** A tap on the mascot holds its reaction pose this long. */
+const MASCOT_REACT_MS = 1100;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,23 +39,31 @@ export default function LoginPage() {
   const [pwFocused, setPwFocused] = useState(false);
   const [shaking, setShaking] = useState(false);
   const [swimming, setSwimming] = useState(false);
+  const [surging, setSurging] = useState(false);
+  // A tap on the mascot overrides its form-driven pose for a beat.
+  const [reaction, setReaction] = useState<MascotState | null>(null);
   // Easter egg: five quick taps on the card's logo row → mascot swims the wave.
   const logoTaps = useRef({ n: 0, t: 0 });
   const waveRef = useRef<HTMLDivElement | null>(null);
+  const surgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reactionFlip = useRef(false);
 
   const suggestion = suggestLoginEmail(email);
 
   // The mascot mirrors the form: it watches the email being typed, covers its
   // goggles while a password goes in (peeks when revealed), cheers on success.
+  // A tap reaction trumps the form (but never the success cheer).
   const mascot: MascotState = sweeping
     ? "cheer"
-    : pwFocused
-      ? showPw
-        ? "peek"
-        : "cover"
-      : emailFocused
-        ? "watch"
-        : "idle";
+    : (reaction ??
+      (pwFocused
+        ? showPw
+          ? "peek"
+          : "cover"
+        : emailFocused
+          ? "watch"
+          : "idle"));
   const look = Math.min(1, email.length / 24);
 
   function failFeedback(message: string) {
@@ -67,11 +84,16 @@ export default function LoginPage() {
     }
     setLoading(true);
     setError("");
+    const started = Date.now();
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
+    // Read the body before the hold so the two overlap.
+    const data = res.ok ? null : ((await res.json().catch(() => ({}))) as { error?: string });
+    // Pad fast responses so the charging current gets its screen time.
+    await new Promise((r) => setTimeout(r, Math.max(0, MIN_CHARGE_MS - (Date.now() - started))));
     if (res.ok) {
       // Success flourish first: the stripes run out the top, THEN we
       // navigate — the dashboard picks the sequence up via the arrival mark
@@ -84,8 +106,7 @@ export default function LoginPage() {
         router.refresh();
       }, NAVIGATE_AFTER_MS);
     } else {
-      const d = (await res.json().catch(() => ({}))) as { error?: string };
-      failFeedback(d.error || "Login failed");
+      failFeedback(data?.error || "Login failed");
       setLoading(false);
     }
   }
@@ -105,6 +126,32 @@ export default function LoginPage() {
       logoTaps.current = { n: 0, t: 0 };
       setSwimming(true);
     }
+  }
+
+  /** Clicking the wave: the two drift layers surge to WAVE_SURGE_RATE for 2s
+   * (WAAPI playbackRate — smooth mid-cycle, where a CSS duration change would
+   * jump) plus a one-shot crest rear-up (`ci-wave-surge`). Re-clicks extend
+   * the surge window; the rate is set absolutely, never stacked. */
+  function onWaveClick() {
+    const el = waveRef.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const a of el.getAnimations({ subtree: true })) a.updatePlaybackRate(WAVE_SURGE_RATE);
+    setSurging(true);
+    if (surgeTimer.current) clearTimeout(surgeTimer.current);
+    surgeTimer.current = setTimeout(() => {
+      const wave = waveRef.current;
+      if (wave) for (const a of wave.getAnimations({ subtree: true })) a.updatePlaybackRate(1);
+      setSurging(false);
+    }, WAVE_SURGE_MS);
+  }
+
+  /** Tapping the mascot pokes a reaction — alternating surprise ("boop") and
+   * a cheer — that overrides the form-driven pose for a beat. */
+  function onMascotClick() {
+    reactionFlip.current = !reactionFlip.current;
+    setReaction(reactionFlip.current ? "boop" : "cheer");
+    if (reactionTimer.current) clearTimeout(reactionTimer.current);
+    reactionTimer.current = setTimeout(() => setReaction(null), MASCOT_REACT_MS);
   }
 
   /** Wave parallax: the footer wave leans gently with the mouse (lg+ pointers
@@ -127,13 +174,18 @@ export default function LoginPage() {
       className={`relative min-h-screen overflow-hidden ${sweeping ? "screen-exit-down" : ""}`}
       onPointerMove={onPointerMove}
     >
-      {/* The CI guide's own wave artwork anchors the page bottom (decoration
-          only); the wrapper carries the pointer parallax. */}
+      {/* The CI guide's own wave artwork anchors the page bottom; the wrapper
+          carries the pointer parallax, and a click on the painted wave (the
+          wrapper stays pointer-events-none — CiWave re-enables its paths)
+          surges the swell for a couple of seconds. */}
       <div
         ref={waveRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 transition-transform duration-700 ease-out will-change-transform"
       >
-        <CiWave className="block h-28 w-full sm:h-40" />
+        <CiWave
+          className={cn("block h-28 w-full sm:h-40", surging && "ci-wave-surge")}
+          onClick={onWaveClick}
+        />
       </div>
       {/* Easter egg: the mascot front-crawls the width of the wave, then is
           unmounted when the crossing animation ends (the bob inside never
@@ -178,13 +230,16 @@ export default function LoginPage() {
       <LoginStripeBand sweeping={sweeping} charging={loading && !sweeping} />
       {/* Phones stack tagline-over-card; lg+ splits into tagline left, card
           right — the whole cluster sits slightly above geometric center
-          (optical center) so tall screens don't read bottom-heavy. */}
-      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 px-4 py-10 pb-32 sm:pb-44 lg:flex-row lg:-translate-y-[4vh] lg:justify-between lg:gap-16 lg:px-12">
+          (optical center) so tall screens don't read bottom-heavy. The wrapper
+          spans the viewport, so it is pointer-events-none (children re-enable)
+          — otherwise it would swallow every click meant for the stripe band
+          and the wave behind it. */}
+      <div className="pointer-events-none relative mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-10 px-4 py-10 pb-32 sm:pb-44 lg:flex-row lg:-translate-y-[4vh] lg:justify-between lg:gap-16 lg:px-12">
         {/* The staff-side echo of the brand slogan "Optimizing Joy in the Water".
             Pushed well down on lg so it sits clear below the stripe band; the
             inner inline-block shrink-wraps to the headline so both headline
             lines AND the support line center on the same axis. */}
-        <div className="max-w-xl text-center lg:mt-32 lg:flex-1 lg:text-left">
+        <div className="pointer-events-auto max-w-xl text-center lg:mt-32 lg:flex-1 lg:text-left">
           <div className="inline-block text-center">
             <h1 className="enter-from-top text-5xl font-extrabold leading-[1.08] tracking-[-0.035em] text-brand sm:text-6xl xl:text-7xl">
               Optimizing
@@ -216,11 +271,17 @@ export default function LoginPage() {
         {/* The entrance animation lives on this wrapper (not the Card) so the
             error shake can come and go on the Card without restarting it; the
             mascot sits behind the Card and peeks over its top edge. */}
-        <div className="enter-from-bottom relative w-full max-w-md shrink-0">
+        <div className="enter-from-bottom pointer-events-auto relative w-full max-w-md shrink-0">
           {/* w-24 → the 120×96 rig renders 96×76.8px; -top-16 leaves svg-y 0–80
               above the card edge (cap, goggles, full smile) and hides the
-              chin + resting hands behind the card, where the hands rise from. */}
-          <div className="pointer-events-none absolute -top-16 right-8 w-24 select-none" aria-hidden>
+              chin + resting hands behind the card, where the hands rise from.
+              Tapping it pokes a reaction (the card paints over the wrapper's
+              lower overlap, so only the visible mascot catches clicks). */}
+          <div
+            className="absolute -top-16 right-8 w-24 cursor-pointer select-none"
+            aria-hidden
+            onClick={onMascotClick}
+          >
             <LoginMascot state={mascot} look={look} className="h-auto w-full" />
           </div>
           <Card

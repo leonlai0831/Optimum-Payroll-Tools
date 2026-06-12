@@ -2,21 +2,23 @@
 
 /**
  * The Optimum swimmer mascot as a poseable SVG rig, drawn to match
- * `public/logo-mark.png` (blue swim cap, yellow goggles, big pupils, open
- * smile). It peeks over the sign-in card's top edge and reacts to the form:
+ * `public/logo-mark.png` (blue swim cap, rounded-square yellow goggles, big
+ * pupils, open smile, yellow arms). It peeks over the sign-in card's top edge
+ * and reacts to the form:
  *
  *   idle   — resting smile, pupils centered, slow blink
  *   watch  — follows the email being typed (pupils track `look` 0..1)
  *   cover  — password is being typed: hands up over the goggles, "o" mouth
  *   peek   — password revealed: hands drop a touch, eyes peer down over them
  *   cheer  — sign-in success: hands thrown up, beaming
+ *   boop   — tapped: wide-eyed "o" surprise (the page alternates it w/ cheer)
  *
  * All posing is CSS transforms transitioned in globals.css (`.mascot-*`), so
  * the global prefers-reduced-motion rule stills every move; the rig's lower
  * edge is meant to sit BEHIND the card, which is where the hands rise from.
  */
 
-export type MascotState = "idle" | "watch" | "cover" | "peek" | "cheer";
+export type MascotState = "idle" | "watch" | "cover" | "peek" | "cheer" | "boop";
 
 export function LoginMascot({
   state,
@@ -56,13 +58,14 @@ export function LoginMascot({
       />
       {/* Goggle strap behind the lenses. */}
       <rect x="16" y="50" width="88" height="7" rx="3.5" fill="var(--color-accent)" />
-      {/* Lenses: yellow frames, white glass, big brown pupils. */}
+      {/* Lenses: the logo's rounded-SQUARE yellow frames (not circles), white
+          glass, big brown pupils. */}
       <g className="mascot-eyes">
-        <circle cx="42" cy="54" r="13.5" fill="var(--color-accent)" />
-        <circle cx="78" cy="54" r="13.5" fill="var(--color-accent)" />
+        <rect x="28.5" y="40.5" width="27" height="27" rx="9" fill="var(--color-accent)" />
+        <rect x="64.5" y="40.5" width="27" height="27" rx="9" fill="var(--color-accent)" />
         <rect x="52" y="50" width="16" height="6" rx="3" fill="var(--color-accent)" />
-        <circle cx="42" cy="54" r="9" fill="#ffffff" />
-        <circle cx="78" cy="54" r="9" fill="#ffffff" />
+        <rect x="33.5" y="45.5" width="17" height="17" rx="5.5" fill="#ffffff" />
+        <rect x="69.5" y="45.5" width="17" height="17" rx="5.5" fill="#ffffff" />
         <g
           className="mascot-pupils"
           style={{ transform: `translate(${px}px, ${py}px)` }}
@@ -82,12 +85,13 @@ export function LoginMascot({
       </g>
       <circle className="mascot-mouth-o" cx="60" cy="71" r="4" fill="#5b3a29" />
       {/* Hands — rise from behind the card's edge to cover the goggles; thrown
-          up beside the cap on cheer. Sleeve-less, same warm white as the face. */}
+          up beside the cap on cheer. Yellow like the logo's swim-stroke arm;
+          the darker outline keeps them legible over the yellow frames. */}
       <g className="mascot-hand mascot-hand-l">
-        <circle cx="42" cy="57" r="10.5" fill="#fdf8f0" stroke="#ead9c2" strokeWidth="1.5" />
+        <circle cx="42" cy="57" r="10.5" fill="var(--color-accent)" stroke="#d97706" strokeWidth="1.5" />
       </g>
       <g className="mascot-hand mascot-hand-r">
-        <circle cx="78" cy="57" r="10.5" fill="#fdf8f0" stroke="#ead9c2" strokeWidth="1.5" />
+        <circle cx="78" cy="57" r="10.5" fill="var(--color-accent)" stroke="#d97706" strokeWidth="1.5" />
       </g>
     </svg>
   );

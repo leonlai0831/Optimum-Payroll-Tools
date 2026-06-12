@@ -300,19 +300,29 @@ The login→launcher handshake lives in `lib/arrival.ts` (sessionStorage; also
 stands the loading clip down for that navigation).
 
 **Login interactivity (2026-06)**: a poseable mascot rig
-(`components/login-mascot.tsx`, drawn to match `logo-mark.png`) peeks over the
-sign-in card — watches the email being typed (pupils track), covers its goggles
-during password entry (peeks when revealed), cheers on success; poses are CSS
-transitions in globals.css (`.mascot-*`), stilled by the global reduced-motion
-rule. The form ships a password reveal toggle, a Caps Lock hint, failure
-feedback on three channels (card shake + `role="alert"` + a short vibration),
-and a one-tap `@optimumtrain.page` completion chip (`suggestLoginEmail` in
+(`components/login-mascot.tsx`, drawn to match `logo-mark.png` — rounded-square
+yellow goggles, yellow arms) peeks over the sign-in card — watches the email
+being typed (pupils track), covers its goggles during password entry (peeks
+when revealed), cheers on success; poses are CSS transitions in globals.css
+(`.mascot-*`), stilled by the global reduced-motion rule. The form ships a
+password reveal toggle, a Caps Lock hint, failure feedback on three channels
+(card shake + `role="alert"` + a short vibration), and a one-tap
+`@optimumtrain.page` completion chip (`suggestLoginEmail` in
 `lib/auth/email-suggest.ts`, unit-tested; applied on mousedown so the blur
 can't eat the tap). While the sign-in request is in flight the stripe band runs
 white glints toward the card (`charging` prop, WAAPI with an explicit
-reduced-motion skip); the footer wave leans gently with the mouse (lg+
-pointers); five quick taps on the card's logo row send the mascot swimming
-across the wave (one-shot, unmounts on animationend).
+reduced-motion skip; the page holds the in-flight state ≥ `MIN_CHARGE_MS`
+700ms — warm sign-ins resolve too fast for the glints to register); the footer
+wave leans gently with the mouse (lg+ pointers); five quick taps on the card's
+logo row send the mascot swimming across the wave (one-shot, unmounts on
+animationend). Click toys: tapping the painted wave surges its drift 6× for 2s
+(WAAPI `updatePlaybackRate` + a one-shot crest rear-up), tapping a stripe bar
+or the arrow fires a one-shot glint "current", and tapping the mascot pokes a
+transient reaction (alternating "boop" surprise / cheer). To let those clicks
+reach the decorative layers, the login content wrapper is `pointer-events-none`
+with its two children re-enabled, and the band/wave re-enable hits on their
+painted strokes only (containers stay `pointer-events-none`, so empty areas
+pass through).
 
 ## Data model (Drizzle / Postgres)
 
