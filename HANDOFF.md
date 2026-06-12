@@ -1,7 +1,7 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-12**, after PRs #136–#141
-all merged to `main`; full suite 394 passing). Read `CLAUDE.md` for architecture
+all merged to `main`; full suite 403 passing). Read `CLAUDE.md` for architecture
 + the frozen Settings IA rules; read `AGENTS.md` before touching Next.js APIs.
 
 ## What's on `main` now
@@ -51,6 +51,13 @@ changes for correct inputs; the fixes close races and silent-wrong-number paths.
    `resolveSessionPassword()` now throws at request time in prod; `next build`
    phase is exempt (builds succeed without the env var); dev/test keep the
    clearly-named insecure fallback.
+6. **Freelancer duplicate-save confirm** (rides PR #142 with this docs
+   refresh): the calculator looks up the payout month before submitting and
+   asks — same position family + work month → "replace that record",
+   different family/work month → "adds a second record for the same person",
+   and an edit whose key changed warns the opened record stays. Pure
+   classifier in `lib/freelancer/collision.ts` (+ `collision.test.ts`); the
+   server upsert is unchanged.
 
 New conventions worth knowing (now in CLAUDE.md "Conventions & gotchas"):
 date labels via `formatDate`/`formatDateTime` only; removable list rows keyed

@@ -211,7 +211,14 @@ the work month like the operator's APRIL-rows-in-MAY-batch practice; config
 snapshot per run; no period locks in v1). Saving recomputes server-side from a FRESH config read, audits
 `freelancer.save`, and carries the position + **payee details** (icNo / bankName /
 bankAccount — nullable `coaches` columns, also editable on the staff profile)
-back onto the coach profile; blank payee fields never wipe stored values. Pages:
+back onto the coach profile; blank payee fields never wipe stored values.
+Because the upsert never errors on a duplicate, the calculator looks up the
+payout month before submitting and **asks first** (`classifySaveCollision` in
+`lib/freelancer/collision.ts`, locked by `collision.test.ts`, + `ConfirmModal`):
+same person + position family + work month → "saving replaces that record";
+same person but different family/work month → "saving adds a second record";
+an edit whose family/work month changed warns that it lands on ANOTHER record
+(or creates a new one) while the opened record stays. Pages:
 `/freelancer` (calculator, `?edit=<runId>`), `/freelancer/history` (grouped by
 month; edit/delete/export), `/freelancer/settings`. `GET
 /api/freelancer/export?period=` builds the **bank-transfer XLSX**
