@@ -300,8 +300,8 @@ The login→launcher handshake lives in `lib/arrival.ts` (sessionStorage; also
 stands the loading clip down for that navigation).
 
 **Login interactivity (2026-06)**: a poseable mascot rig
-(`components/login-mascot.tsx`, drawn to match `logo-mark.png` — rounded-square
-yellow goggles, yellow arms) peeks over the sign-in card — watches the email
+(`components/login-mascot.tsx`, drawn to match `logo-mark.png` — oval yellow
+goggles, smooth cap, yellow arms) peeks over the sign-in card — watches the email
 being typed (pupils track), covers its goggles during password entry (peeks
 when revealed), cheers on success; poses are CSS transitions in globals.css
 (`.mascot-*`), stilled by the global reduced-motion rule. The form ships a
