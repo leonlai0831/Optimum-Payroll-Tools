@@ -1,51 +1,71 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-11**, after PRs #127–#135
-all merged to `main`). Read `CLAUDE.md` for architecture + the frozen Settings
-IA rules; read `AGENTS.md` before touching Next.js APIs.
+Snapshot for the next session (last updated **2026-06-12**, after PRs #136–#141
+all merged to `main`; full suite 394 passing). Read `CLAUDE.md` for architecture
++ the frozen Settings IA rules; read `AGENTS.md` before touching Next.js APIs.
 
 ## What's on `main` now
 
 The suite ("**Optimum People Hub**") is in production on Vercel. Modules:
 
-- **Swim**: Staff Allowance · **Freelancer Payment** (new) · Instructor KPI
-  Bonus · **Student Progress** (new — the monthly data pipeline) · Workforce
-  (directory + **Payees** tab) · Instructor Assessment · Lesson Plan.
+- **Swim**: Staff Allowance · Freelancer Payment · Instructor KPI Bonus ·
+  Student Progress (the monthly data pipeline) · Workforce (directory +
+  Payees tab) · Instructor Assessment · Lesson Plan.
 - **Fit**: Staff Earnings (commission + coaching income).
 - **System**: Users (hierarchy-scoped `manage_users`) · Audit log · Permissions.
 
-### This session's additions (PRs #127–#135)
+### This session's changes (PRs #137–#141)
 
-1. **Freelancer Payment** (`lib/freelancer`, `/freelancer`) — full module from
-   the operator's Excel: hourly rates by position × center group, commitment
-   matrix, attendance bonus, per-entity payouts (OT/OTG/PJ/QSM/KM), bank-transfer
-   XLSX with bank codes. Extended same-day with: **CC position** (RM26/42),
-   **multi-record months** (one record per position family per work month),
-   **late submissions** (补交 — "Work month" field; APRIL-row-in-MAY-batch like
-   the operator's summary), and **student result bound to the month's KPI data**
-   (search/bind an instructor account; carry-over auto-fills next month; counts
-   stay editable; data for month P arrives on the 1st of P+1).
-2. **Workforce** (renamed from Staff): "Add member"; **Payees tab**
-   (`/staff/payees`) — bulk entry of freelancer IC/bank/account with search +
-   sort, plus **"Import summary file"**: upload the monthly Payment Summary
-   xlsx and every payee becomes/updates a freelancer profile (parser handles
-   the file's real quirks; locked by tests).
-3. **Roster scoping** (`lib/staff/roster.ts`): Freelancer Payment searches only
-   freelancers; Allowance/KPI exclude them; Assessment sees all instructors.
-4. **Student Progress** (`/progress`, `lib/ingest`): the KPI Uploads surface as
-   a standalone module — months list, manual CSV upload + machine push through
-   ONE staging engine, editing relaxed to any non-superseded delivery (banner
-   on imported: KPI run snapshots unaffected). External API contract unchanged.
-5. **User management hierarchy**: manage below own rank / same rank view-only /
-   higher ranks invisible; `/system/users` gated on `manage_users`.
-6. **Login → dashboard experience**: split login hero ("Optimizing Joy at Work"
-   / "Powering the people behind"), racing-stripe band with deck-style corner
-   (WAAPI, constant-speed bends), camera-pan screen swap, permanent launcher
-   ribbon with per-visit draw-in; loader clips trimmed + brand-follows-origin;
-   WhatsApp support link; mobile login fixes.
-7. **Production fix**: `EmptyState` was wrongly `"use client"` — server pages
-   passing lucide icon components crashed (the persistent Uploads 500,
-   digest 1621801304). Fixed in #133.
+A rename plus a system-wide audit-hardening pass — no new modules, no behavior
+changes for correct inputs; the fixes close races and silent-wrong-number paths.
+
+1. **Project renamed to Optimum People Hub** (#137): package name, app
+   metadata, README, and the GitHub repo path (`leonlai0831/Optimum-People-Hub`;
+   ONBOARDING.md updated). Old "KPI & Bonus Dashboard" name survives only as
+   the "formerly" note in CLAUDE.md.
+2. **Concurrency races fixed** (#138, all pre-existing on `main`):
+   - KPI **period-close race**: closed-check + staging insert now run in ONE
+     transaction under a per-period advisory lock (`createKpiIngestChecked`,
+     `lib/db/queries.ts`); every closing path (finalizing `createRun` /
+     `updateRunReview`, `importKpiIngest`) takes the same lock.
+   - `updateRunReview` status flip + coach carry-forward are one transaction.
+   - Coach auto-create races resolve via `onConflict` instead of 500ing.
+   - `moveAllowancePeriod` is atomic (dual-period advisory locks, lowest key
+     first; returns `locked` → route 409).
+   - Freelancer **commitment-matrix lookup is order-independent** (largest
+     threshold ≤ value wins even if settings rows are reordered) and the
+     calculator's KPI-bind fetch race is guarded (request-sequence ref).
+3. **Low-severity sweep** (#139): hydration-safe `formatDate`/`formatDateTime`
+   in `lib/utils.ts` (fixed en-MY + Asia/Kuala_Lumpur; replaced 26 bare
+   `toLocaleString` sites); `ButtonLink`/`buttonClasses` replace
+   button-in-anchor; `window.confirm` → `ConfirmModal`; payee bulk save is one
+   transaction; 404 existence gates before note/assessment writes; masked
+   admin password fields with reveal; stable list keys; misc a11y/memoization.
+4. **`getCenterTarget` is deterministic** (#140): center-name → target matching
+   keeps both containment directions ("Kinrara" → "Puchong Kinrara", operator
+   confirmed), but multiple candidates now resolve closest-first (most shared
+   tokens, fewest unmatched, then alphabetical) instead of config insertion
+   order — a config edit can no longer silently flip a supervisor's target.
+5. **SESSION_SECRET fails fast in production** (#141): missing/short secret
+   used to silently fall back to a public built-in string (forgeable cookies).
+   `resolveSessionPassword()` now throws at request time in prod; `next build`
+   phase is exempt (builds succeed without the env var); dev/test keep the
+   clearly-named insecure fallback.
+
+New conventions worth knowing (now in CLAUDE.md "Conventions & gotchas"):
+date labels via `formatDate`/`formatDateTime` only; removable list rows keyed
+by a client-only `_key`, never array index; read-then-write DB sequences go
+through the advisory-lock helpers or `onConflict`.
+
+### Previous session recap (PRs #127–#135)
+
+Freelancer Payment module (rates × center group, commitment matrix, CC
+position, multi-record months, late submissions 补交, KPI-bound student result,
+bank-transfer XLSX export); Workforce rename + Payees tab with Payment Summary
+xlsx import; roster scoping (`lib/staff/roster.ts`); Student Progress module
+(staging pipeline extracted from KPI Uploads); hierarchy-scoped user
+management; login/launcher racing-stripe experience; `EmptyState` server-safe
+fix (the persistent Uploads 500).
 
 ## Open / needs attention
 

@@ -77,7 +77,7 @@ lib/
   db/migrations/                 # drizzle-kit SQL + snapshots
   auth/session.ts                # iron-session helpers, isAuthed(), expectedPassword()
   ai/anthropic.ts                # match-names + analyze, both degrade gracefully without a key
-  types.ts utils.ts              # shared types; rm() ringgit formatter, cn() class merge
+  types.ts utils.ts              # shared types; rm() ringgit, formatDate/formatDateTime, cn()
 components/                      # dashboard, nav, ui, radar-chart, trends-view, settings-form, ...
 proxy.ts                         # optimistic auth gate (Next 16 renamed middleware -> proxy)
 ```
@@ -118,7 +118,11 @@ target set to the center target (min = target, max = 2×target). **`payout = fin
 
 Two extras ship **disabled** (opt-in via Settings): **Net Progression** `(LevelUp−Downgrade)/TotalColor`
 and **Downgrade Rate** `Downgrade/TotalColor` (lower-is-better). Center student targets live in
-`DEFAULT_CENTER_TARGETS` (e.g. HQ/Berkeley 450, Puchong Kinrara & Subang USJ 750; fallback 140).
+`DEFAULT_CENTER_TARGETS` (e.g. HQ/Berkeley 450, Puchong Kinrara & Subang USJ 750; fallback 140);
+`getCenterTarget` matches a CSV center name to a configured key by token overlap in **either
+direction** ("Kinrara" resolves to "Puchong Kinrara"), and when several keys match the closest
+wins deterministically — most shared tokens, then fewest unmatched tokens, then alphabetical —
+so a config edit can't silently flip a supervisor's target.
 
 **Readiness:** a coach is "incomplete" when a required input is missing — teaching allowance,
 management assessment (when that metric is enabled), or group/center hours (for supervisors).
@@ -163,7 +167,11 @@ the same `periodLabel` atomically supersedes any still-pending earlier deliverie
 and the response reports `superseded: <count>`); a delivery for a period that is already
 **closed** — a finalized run exists for it, or a delivery for it was already imported — gets a
 `409 Conflict` before anything is staged, superseded, or audited (draft runs don't block;
-reopen the run to push a correction). Owners (`run_kpi`) review on `/progress` (deliveries
+reopen the run to push a correction). The closed-check and the staging insert run in **one
+transaction under a per-period advisory lock** (`createKpiIngestChecked` in
+`lib/db/queries.ts`), and every closing path — finalizing `createRun`/`updateRunReview`,
+`importKpiIngest` — takes the same lock, so a concurrent finalize can't race a stray pending
+delivery into a just-closed month. Owners (`run_kpi`) review on `/progress` (deliveries
 grouped by month, newest first, with status + source badges and row counts): edit/add/delete
 rows on **any non-superseded delivery** (PATCH `/api/kpi/ingests/[id]`, audited — pending,
 imported and discarded records stay correctable; editing an *imported* delivery shows a banner
@@ -184,7 +192,9 @@ plus the freelancer-only **CC** (RM26/42), which never writes back onto the tier
 HQ/BK/BT, groupB = the rest); **student result** = `1 − black/colour` (T1–T4 + I1
 only, others forced 0); **commitment bonus** = matrix lookup with VLOOKUP-style
 approximate match on BOTH axes (hours rows 0/31/41/51 × result columns 0/0.7/0.85,
-0 for A1–A3); **attendance bonus** (default +0.2, fixed hours only) unless ANY
+0 for A1–A3; order-independent — the largest threshold ≤ value wins even if an
+operator reorders the rows on `/freelancer/settings`); **attendance bonus**
+(default +0.2, fixed hours only) unless ANY
 center row is marked absent. Per-center pay =
 `rate × (replaced×(1+commit) + fixed×(1+commit+attend))`; payouts group per paying
 company (OT = HQ/BK/BT/PK, OTG = KK/USJ, PJ, QSM, KM) plus free-form per-entity
@@ -332,7 +342,11 @@ regardless of category (the launcher's My Profile card is category-independent).
   routes re-validate the iron-session against the DB — a present-but-invalid cookie or a
   deactivated account still gets a JSON `401`/`403`.
 - `/api/auth/login` checks the `users` table (in-process rate-limit per IP+email; session is
-  destroyed and re-issued on login). `SESSION_SECRET` (≥ 32 chars) encrypts the cookie.
+  destroyed and re-issued on login). `SESSION_SECRET` (≥ 32 chars) encrypts the cookie; in
+  **production a missing/short secret fails fast at request time** (`resolveSessionPassword`
+  in `lib/auth/session.ts` throws — no silent fallback to a known string; the `next build`
+  phase is exempt so builds succeed without the env var, and dev/test keep a clearly-named
+  insecure fallback).
 - First boot seeds a super admin from `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`
   (dev fallback `admin@local` / `swim123`).
 
@@ -347,7 +361,7 @@ without `ANTHROPIC_API_KEY`: `matchInstructorNames` → `[]` (deterministic merg
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | yes (prod, first boot) | Seeds the first super-admin account (dev falls back to `admin@local` / `swim123`). |
-| `SESSION_SECRET` | yes | ≥ 32 random chars; encrypts the session cookie. |
+| `SESSION_SECRET` | yes | ≥ 32 random chars; encrypts the session cookie. Production refuses to serve requests without it (dev/test fall back). |
 | `POSTGRES_URL` (or `DATABASE_URL`) | yes (prod) | Postgres connection string. Unset → PGlite at `./.pglite`. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
 | `INGEST_API_KEY` | optional | Bearer key for the machine KPI push endpoint (`POST /api/ingest/kpi`). Unset → the endpoint answers 503. |
@@ -387,6 +401,18 @@ npm run db:migrate   # apply migrations explicitly (optional; auto-applied on fi
   given JSON `401`; the route-level `401` only fires for present-but-invalid cookies.
 - **CSV headers** are mapped flexibly (`tr_name→Instructor`, `cr_name→Center`, `TTL-COLOR→TotalColor`,
   `UP→LevelUp`, `STUDENT_STOP→Stop`, `STUDENT_ATTENDED_CLASS→Attended`, …) in `lib/kpi/csv.ts`.
+- **Date labels must use `formatDate`/`formatDateTime`** (`lib/utils.ts` — fixed `en-MY` locale +
+  `Asia/Kuala_Lumpur`), never bare `toLocaleDateString()`/`toLocaleString()`: server and client
+  locales differ, which breaks hydration.
+- **Removable list rows reconcile by a stable client-only key** (a `_key` field stripped before
+  persist), never by array index — index keys shift a focused input onto the neighbour when a
+  middle row is removed (see commission bands, freelancer center rows/extras, lesson-plan steps).
+- **Read-then-write DB sequences must be atomic.** Anything that checks state before writing
+  (period close/lock checks, coach auto-create) goes through the advisory-lock/transaction
+  helpers in `lib/db/queries.ts` (`createKpiIngestChecked`, `createAllowanceRunIfUnlocked`,
+  `moveAllowancePeriod`) or an `onConflict` upsert — separate check + insert transactions race.
+- **Link-styled buttons use `ButtonLink`/`buttonClasses`** (`components/ui.tsx`) — never nest a
+  `<button>` inside an `<a>` (invalid HTML).
 
 ## Settings IA — frozen rules (don't move things again)
 
