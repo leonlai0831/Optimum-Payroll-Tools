@@ -48,10 +48,12 @@ export const RESULT_POSITIONS = ["T1", "T2", "T3", "T4", "I1"] as const satisfie
   readonly FreelancerPosition[];
 
 /**
- * Positions that never earn the commitment bonus: admin A1–A3, and CC
- * (operator-confirmed 2026-06-12 — CC pays rate + attendance only).
+ * Admin positions that never earn the commitment bonus. CC is NOT here: the
+ * May 2026 batch shows the operator pays CC the hours-based commitment (the
+ * 0-result column, like PA/T0) — re-confirmed by the operator on 2026-06-12
+ * after a brief same-day ruling the other way; see calc.test.ts.
  */
-export const NO_COMMITMENT_POSITIONS = ["A1", "A2", "A3", "CC"] as const satisfies
+export const NO_COMMITMENT_POSITIONS = ["A1", "A2", "A3"] as const satisfies
   readonly FreelancerPosition[];
 
 /** RM/hour for one position in each of the two center groups. */

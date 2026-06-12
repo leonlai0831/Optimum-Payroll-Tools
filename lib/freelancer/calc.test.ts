@@ -63,9 +63,14 @@ describe("commitmentFor (matrix edges)", () => {
     }
   });
 
-  it("CC never earns commitment (operator-confirmed 2026-06-12)", () => {
-    expect(commitmentFor("CC", 100, 0.95, cfg)).toBe(0);
-    expect(commitmentFor("CC", 45, 0.9, cfg)).toBe(0);
+  it("CC earns hours-based commitment like PA/T0 (operator-confirmed: May 2026 practice)", () => {
+    // The May 2026 batch's real CC record: 66h, no student result → the
+    // 51+-hours row of the 0-result column (15%). Was briefly ruled out on
+    // 2026-06-12, then re-confirmed against the operator's own payouts.
+    expect(commitmentFor("CC", 66, 0, cfg)).toBe(0.15);
+    expect(commitmentFor("CC", 30, 0, cfg)).toBe(0); // below 31h → none
+    // CC never has a student result, so the lookup always uses column 0.
+    expect(resultRate("CC", 2, 20)).toBe(0);
   });
 
   it("below 31 hours → 0 for every result column", () => {

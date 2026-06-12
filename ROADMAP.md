@@ -9,27 +9,23 @@ truth; this file only records **intent** and **what's left**. Rewritten
 
 **Intent:** June 2026 is the first month freelancer pay is computed in the
 system instead of the Excel chain. The engine is numerically ready — the May
-tally check reproduced the operator's real payouts to the cent (21/22 sampled
-records at delta RM 0.00; the one exception is the open CC decision below;
-details in `HANDOFF.md`).
+tally check reproduced the operator's real payouts to the cent (22/22 sampled
+records at delta RM 0.00 with the final CC rule; details in `HANDOFF.md`).
+The CC commitment question is SETTLED (May practice stands: CC earns
+hours-based commitment; locked by `calc.test.ts` with the May numbers).
 
 What's left, in order:
 
-1. **Settle the CC commitment question (Leon).** Leon's instruction
-   (2026-06-12): CC earns no commitment bonus — implemented. May practice:
-   commitment WAS paid on CC work (concrete example: RM 415.80 on one
-   record). One of these is wrong; the code change either way is one line
-   (`NO_COMMITMENT_POSITIONS` in `lib/freelancer/types.ts`) + one test flip.
-2. **One-time payee load (Leon, one click):** Workforce → Payees → "Import
+1. **One-time payee load (Leon, one click):** Workforce → Payees → "Import
    summary file" with `05-2026 Payment Summary.xlsx` (Drive: …/Year
    2026/05-2026/PV) → ~207 freelancer profiles; spot-check a handful against
    the Excel.
-3. **June parallel run:** compute June in the system while the operator runs
+2. **June parallel run:** compute June in the system while the operator runs
    the Excel chain as usual; diff per person before anything is paid. The
    May check validated the engine on history — the parallel run validates
    inputs + process with real stakes. Treat any per-person delta > RM 0.01
    as a blocker.
-4. **Payee completeness pass before the first bank-file export** (IC / bank /
+3. **Payee completeness pass before the first bank-file export** (IC / bank /
    account on every active freelancer — the import reports gaps).
 
 ## P1 — Observability follow-ups (v1 shipped in PR #148)

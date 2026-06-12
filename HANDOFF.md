@@ -71,8 +71,9 @@ session:
 1. **Mascot redraw**: oval goggles (16×12 frames / 11.5×7.5 glass, bridge +
    strap + pupils centered on the lens midline) + the crest bump removed —
    two rounds, the operator rejected the first oval pass as "egg-shaped".
-2. **CC commitment rule**: `CC` → `NO_COMMITMENT_POSITIONS` per the
-   operator's instruction — but see the contradiction in the open items.
+2. **CC commitment rule**: briefly added `CC` to `NO_COMMITMENT_POSITIONS`
+   on the operator's instruction, then REVERTED the same day when the May
+   tally proved the operator pays CC commitment — see the open items.
 3. **Idle auto-logout (10 min)**: `lib/auth/idle.ts` policy (unit-tested),
    `lastSeenAt` in the session, `POST/GET /api/auth/touch` heartbeat,
    `components/idle-logout.tsx` in the (app) layout (multi-tab-safe: asks the
@@ -100,18 +101,17 @@ session:
 - **Remember-last-email: DECIDED — not doing it** (Leon, 2026-06-12;
   localStorage on shared devices leaks who signed in). Instead the login got
   stricter: **10-minute idle auto-logout** shipped (see session notes below).
-- **CC bonus semantics — CONTRADICTION, needs Leon's re-confirmation.** Leon
-  said (2026-06-12) CC earns NO commitment bonus → `CC` added to
-  `NO_COMMITMENT_POSITIONS` (`lib/freelancer/types.ts`), locked by
-  `calc.test.ts`. But the May tally check (below) found the operator DID pay
-  commitment on CC work in May: CHUAH SHAN YI's "(PRE COM)" record is billed
-  at the CC rate (42/h group B) with 66h → 15% commitment + 20% attendance =
-  RM 3,515.40 + 226.80, exactly the Excel; today's rule pays RM 415.80 less.
-  Code follows Leon's instruction; if May practice should stand instead, the
-  whole fix is removing `"CC"` from `NO_COMMITMENT_POSITIONS` (and flipping
-  the calc.test case). Note: the summary never says "CC" — CC work hides
-  inside I1 rows via an in-file rate override, so imports can't detect it by
-  position. Attendance for CC was confirmed correct by the same record.
+- **CC bonus semantics — RESOLVED (2026-06-12, twice).** Leon first said CC
+  earns no commitment; the May tally check then showed the operator DID pay
+  it (CHUAH SHAN YI "(PRE COM)": CC rate 42/h group B × 66h → 15% commitment
+  + 20% attendance = RM 3,515.40 + 226.80, exactly the Excel). Confronted
+  with that example, Leon ruled **May practice is correct** → CC stays OUT
+  of `NO_COMMITMENT_POSITIONS` (hours-based commitment via the 0-result
+  column, like PA/T0; no student result; attendance applies). Locked by
+  `calc.test.ts` with the May numbers — with this rule the sampled May
+  records match **22/22 at RM 0.00**. Note for imports: the summary never
+  says "CC" — CC work hides inside I1 rows via an in-file rate override, so
+  it can't be detected by position.
 - **One-time data load**: Leon still needs to run Workforce → Payees →
   "Import summary file" with `05-2026 Payment Summary.xlsx` (Drive:
   Optimum Management/Freelancer/Freelancer Payment/Year 2026/05-2026/PV) to
@@ -122,11 +122,11 @@ session:
   RM 245,759.30 across 208 source workbooks / 207 people), and a 21-person /
   22-record sample covering every position, both center groups, both APRIL
   late submissions, absences, extras and the multi-file merge matched at
-  delta RM 0.00 on every per-entity amount — EXCEPT the one CC record above
-  (RM 415.80, entirely explained by today's CC rule change). Rate table +
-  commitment matrix embedded in the workbooks are identical to
-  `lib/freelancer/defaults.ts`. So the system is numerically ready for a June
-  parallel run once the CC question is settled.
+  delta RM 0.00 on every per-entity amount (22/22 with the final CC rule —
+  the one transient mismatch was the same-day CC experiment, since
+  reverted). Rate table + commitment matrix embedded in the workbooks are
+  identical to `lib/freelancer/defaults.ts`. The system is numerically ready
+  for the June parallel run.
 - **External developer** (`optimummarketing`, write collaborator) builds on
   branch `claude/staff-income-report`; his KPI push integration is live and
   its API contract must stay stable (locked by `app/api/ingest/kpi` tests).
