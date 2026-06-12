@@ -56,24 +56,26 @@ export function LoginMascot({
         fill="#fdf8f0"
       />
       {/* Goggle strap behind the lenses. */}
-      <rect x="16" y="50" width="88" height="7" rx="3.5" fill="var(--color-accent)" />
-      {/* Lenses: the logo's OVAL yellow frames, white glass, big brown
+      <rect x="16" y="50.5" width="88" height="7" rx="3.5" fill="var(--color-accent)" />
+      {/* Lenses: the logo's OVAL yellow frames — clearly wider than tall
+          (~4:3), with the bridge and strap centered on the lens midline so
+          the silhouette doesn't read top-heavy. White glass, big brown
           pupils. */}
       <g className="mascot-eyes">
-        <ellipse cx="42" cy="54" rx="15" ry="13" fill="var(--color-accent)" />
-        <ellipse cx="78" cy="54" rx="15" ry="13" fill="var(--color-accent)" />
-        <rect x="52" y="50" width="16" height="6" rx="3" fill="var(--color-accent)" />
-        <ellipse cx="42" cy="54" rx="10.5" ry="8.5" fill="#ffffff" />
-        <ellipse cx="78" cy="54" rx="10.5" ry="8.5" fill="#ffffff" />
+        <ellipse cx="42" cy="54" rx="16" ry="12" fill="var(--color-accent)" />
+        <ellipse cx="78" cy="54" rx="16" ry="12" fill="var(--color-accent)" />
+        <rect x="52" y="51" width="16" height="6" rx="3" fill="var(--color-accent)" />
+        <ellipse cx="42" cy="54" rx="11.5" ry="7.5" fill="#ffffff" />
+        <ellipse cx="78" cy="54" rx="11.5" ry="7.5" fill="#ffffff" />
         <g
           className="mascot-pupils"
           style={{ transform: `translate(${px}px, ${py}px)` }}
         >
           <g className="mascot-blink">
-            <circle cx="42" cy="55" r="4.6" fill="#4a3325" />
-            <circle cx="78" cy="55" r="4.6" fill="#4a3325" />
-            <circle cx="43.6" cy="53.2" r="1.5" fill="#ffffff" />
-            <circle cx="79.6" cy="53.2" r="1.5" fill="#ffffff" />
+            <circle cx="42" cy="54" r="4.6" fill="#4a3325" />
+            <circle cx="78" cy="54" r="4.6" fill="#4a3325" />
+            <circle cx="43.6" cy="52.2" r="1.5" fill="#ffffff" />
+            <circle cx="79.6" cy="52.2" r="1.5" fill="#ffffff" />
           </g>
         </g>
       </g>
