@@ -12,7 +12,8 @@ test("an unauthenticated visit is redirected to the login page", async ({ page }
 test("the super admin can sign in and lands on the hub", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
-  await page.getByLabel("Password").fill(PASSWORD);
+  // exact: the reveal toggle's aria-label ("Show password") also substring-matches.
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: /sign in/i }).click();
 
   await expect(page.getByRole("heading", { name: "Optimum People Hub" })).toBeVisible();

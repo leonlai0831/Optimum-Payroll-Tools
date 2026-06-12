@@ -334,6 +334,127 @@ body {
   }
 }
 
+/* Login sign-in card: a quick sideways shake on a failed attempt (paired with
+   role="alert" + a short vibration for non-visual channels). Lives on the Card
+   itself, NOT the enter-from-bottom wrapper — removing this class must not
+   restart the entrance animation. Stilled by the global reduced-motion rule. */
+.login-shake {
+  animation: loginShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes loginShake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-6px);
+  }
+  40%,
+  60% {
+    transform: translateX(6px);
+  }
+}
+
+/* Login mascot rig (components/login-mascot.tsx): pose transitions, driven by
+   the [data-mascot] state on the svg. The hands REST translated down behind
+   the sign-in card's top edge (the rig's lower half is covered by the card)
+   and rise to cover the goggles while a password is typed; "peek" lets them
+   drop a touch so the pupils peer down over them; "cheer" throws them up past
+   the cap. Pupil gaze is an inline transform on .mascot-pupils (transitioned
+   here); the slow blink runs on the nested .mascot-blink group so it composes
+   with the gaze instead of overriding it. All transforms/opacity — the global
+   prefers-reduced-motion rule stills every move. */
+.mascot-pupils {
+  transition: transform 0.18s ease-out;
+}
+.mascot-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascotBlink 5.2s ease-in-out infinite;
+}
+@keyframes mascotBlink {
+  0%,
+  93.5%,
+  97%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.08);
+  }
+}
+.mascot-hand {
+  transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mascot-hand-l {
+  transform: translate(-8px, 36px);
+}
+.mascot-hand-r {
+  transform: translate(8px, 36px);
+}
+[data-mascot="cover"] .mascot-hand-l,
+[data-mascot="cover"] .mascot-hand-r {
+  transform: translate(0, 0);
+}
+[data-mascot="peek"] .mascot-hand-l,
+[data-mascot="peek"] .mascot-hand-r {
+  transform: translate(0, 14px);
+}
+[data-mascot="cheer"] .mascot-hand-l {
+  transform: translate(-25px, -24px);
+}
+[data-mascot="cheer"] .mascot-hand-r {
+  transform: translate(25px, -24px);
+}
+.mascot-mouth-smile,
+.mascot-mouth-o {
+  transition: opacity 0.15s ease-out;
+}
+.mascot-mouth-o {
+  opacity: 0;
+}
+[data-mascot="cover"] .mascot-mouth-smile,
+[data-mascot="peek"] .mascot-mouth-smile {
+  opacity: 0;
+}
+[data-mascot="cover"] .mascot-mouth-o,
+[data-mascot="peek"] .mascot-mouth-o {
+  opacity: 1;
+}
+
+/* Login easter egg: five quick taps on the card's logo row send the mascot
+   swimming across the wave. The outer element carries the one-shot crossing
+   (its animationend unmounts it); the inner one bobs. Under reduced motion
+   both collapse to ~0ms — the crossing ends instantly and unmounts. */
+.login-swimmer {
+  animation: swimAcross 7s linear both;
+}
+.login-swimmer-bob {
+  animation: swimBob 0.8s ease-in-out infinite alternate;
+}
+@keyframes swimAcross {
+  from {
+    transform: translateX(-20vw);
+  }
+  to {
+    transform: translateX(105vw);
+  }
+}
+@keyframes swimBob {
+  from {
+    transform: translateY(0) rotate(-4deg);
+  }
+  to {
+    transform: translateY(7px) rotate(5deg);
+  }
+}
+
 /* ── Phase 2: legibility, elevation, focus & motion (site-wide) ──────────────
    Refinements that propagate through the shared layer to every page. Brand-
    agnostic: focus + selection use --color-brand, so they adopt the Swim (blue)

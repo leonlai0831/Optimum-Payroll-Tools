@@ -67,7 +67,18 @@ function subscribeResize(cb: () => void) {
 const getSize = () => `${window.innerWidth}x${window.innerHeight}`;
 const getServerSize = () => "0x0";
 
-export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
+/** Length of one charging glint along a stripe (px of path distance). */
+const PULSE_LEN = 90;
+const PULSE_MS = 1100;
+
+export function LoginStripeBand({
+  sweeping,
+  charging = false,
+}: {
+  sweeping: boolean;
+  /** Sign-in request in flight: white glints flow along the bars toward the card. */
+  charging?: boolean;
+}) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [vw, vh] = useSyncExternalStore(subscribeResize, getSize, getServerSize)
     .split("x")
@@ -129,7 +140,7 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
       fill: "both",
     };
     const anims: Animation[] = [];
-    box.querySelectorAll<SVGPathElement>("path").forEach((el, i) => {
+    box.querySelectorAll<SVGPathElement>("path[data-stripe]").forEach((el, i) => {
       const s = stripes[i];
       if (!s) return;
       anims.push(
@@ -165,6 +176,35 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- geometry is pure in (vw, vh)
   }, [sweeping]);
 
+  // Charging "current" (sign-in request in flight): a short white glint runs
+  // along each stripe from the viewport's left edge into the bar's head at the
+  // arrow gap, where it fades out — staggered per stripe so the band reads as
+  // energy flowing toward the card. WAAPI like the exit (the global CSS
+  // reduced-motion rule can't reach it), so reduced-motion skips it here.
+  useEffect(() => {
+    if (!charging || sweeping || vw < 1024) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const box = boxRef.current;
+    if (!box) return;
+    const anims: Animation[] = [];
+    box.querySelectorAll<SVGPathElement>("path[data-pulse]").forEach((el, i) => {
+      anims.push(
+        el.animate(
+          [
+            // Dash head distance d = -offset: off-screen left → absorbed at the bar head.
+            { strokeDashoffset: -(vw - PULSE_LEN), opacity: 0 },
+            { opacity: 0.45, offset: 0.2 },
+            { opacity: 0.45, offset: 0.8 },
+            { strokeDashoffset: -(vw + snakeLen - PULSE_LEN), opacity: 0 },
+          ],
+          { duration: PULSE_MS, delay: i * 140, iterations: Infinity, easing: "linear" },
+        ),
+      );
+    });
+    return () => anims.forEach((a) => a.cancel());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- geometry is pure in (vw, vh)
+  }, [charging, sweeping, vw]);
+
   // The stacked phone layout has no band (and 0x0 covers SSR/first paint).
   if (vw < 1024) return null;
 
@@ -174,6 +214,7 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
         {stripes.map((s, i) => (
           <path
             key={i}
+            data-stripe
             d={s.d}
             stroke={s.color}
             strokeWidth={BAR_H}
@@ -189,6 +230,23 @@ export function LoginStripeBand({ sweeping }: { sweeping: boolean }) {
                 "--dash-rest": `${-vw}px`,
               } as React.CSSProperties
             }
+          />
+        ))}
+        {/* Charging glints: one short white dash per stripe, animated by the
+            charging effect above; invisible (opacity 0) when idle. Rendered
+            AFTER the stripes so they paint on top of the bars. */}
+        {stripes.map((s, i) => (
+          <path
+            key={`pulse-${i}`}
+            data-pulse
+            d={s.d}
+            stroke="#ffffff"
+            strokeWidth={BAR_H}
+            opacity={0}
+            style={{
+              strokeDasharray: `${PULSE_LEN} ${dashGap}`,
+              strokeDashoffset: -(vw - PULSE_LEN),
+            }}
           />
         ))}
       </svg>

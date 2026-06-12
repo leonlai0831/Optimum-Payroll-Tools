@@ -5,9 +5,11 @@ import Link from "next/link";
 import { Link2, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
+import { ConfirmModal } from "@/components/modal";
 import { StaffCombobox } from "@/components/staff-combobox";
 import { useToast } from "@/components/toast";
 import { calcFreelancer, rateFor } from "@/lib/freelancer/calc";
+import { classifySaveCollision, type ExistingRunKey } from "@/lib/freelancer/collision";
 import { currentPeriod } from "@/lib/allowance/period";
 import { MALAYSIAN_BANKS } from "@/lib/freelancer/banks";
 import {
@@ -171,6 +173,12 @@ export function FreelancerCalculator({
   );
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
+  // A duplicate-save warning awaiting the operator's confirmation (modal copy).
+  const [pendingSave, setPendingSave] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+  } | null>(null);
 
   function dirty() {
     setSavedId(null);
@@ -242,12 +250,84 @@ export function FreelancerCalculator({
     dirty();
   }
 
+  /**
+   * Saving never errors on a duplicate — the server upserts on (period, person,
+   * position family, work month): a same-key save silently REPLACES the existing
+   * record, and a different family/work month silently ADDS a second record for
+   * the same person+month. Look up the month's saved records and ask first.
+   * Best-effort: if the lookup fails, save without the prompt (the upsert is safe).
+   */
+  async function duplicateWarning(): Promise<typeof pendingSave> {
+    try {
+      const res = await fetch(`/api/freelancer/runs?period=${encodeURIComponent(period)}`);
+      if (!res.ok) return null;
+      const runs = (await res.json()) as ExistingRunKey[];
+      const c = classifySaveCollision(
+        {
+          name: input.name,
+          position,
+          workPeriod: input.workPeriod || period,
+          editingRunId: initial?.runId ?? null,
+        },
+        runs,
+      );
+      if (c.kind === "replace") {
+        return {
+          title: "Replace existing record?",
+          message:
+            `${input.name} already has a ${period} record in this position family ` +
+            `(${c.existing.position} · work month ${c.existing.workPeriod} · ${rm2(c.existing.grandTotal)}). ` +
+            (editing
+              ? "Saving will replace THAT record — not the one you opened, which stays unchanged."
+              : "Saving will replace that record."),
+          confirmLabel: "Replace record",
+        };
+      }
+      if (c.kind === "second") {
+        const list = c.existing.map((r) => `${r.position} · ${r.workPeriod}`).join(", ");
+        return {
+          title: "Add a second record?",
+          message: editing
+            ? `The position family or work month changed, so saving creates a NEW ${period} record for ${input.name} — the record you opened stays as it was saved (existing: ${list}).`
+            : `${input.name} already has ${c.existing.length === 1 ? "a record" : `${c.existing.length} records`} in ${period} (${list}). This entry's position family or work month differs, so saving adds another record for the same person.`,
+          confirmLabel: "Save anyway",
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async function save() {
     if (!input.name) {
       toast.error("Pick or name a freelancer first.");
       return;
     }
     setSaving(true);
+    try {
+      const warn = await duplicateWarning();
+      if (warn) {
+        setPendingSave(warn);
+        return;
+      }
+      await doSave();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmPendingSave() {
+    setPendingSave(null);
+    setSaving(true);
+    try {
+      await doSave();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function doSave() {
     try {
       const res = await fetch("/api/freelancer/runs", {
         method: "POST",
@@ -260,8 +340,6 @@ export function FreelancerCalculator({
       toast.success(editing ? "Payment updated." : "Payment saved.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -754,6 +832,16 @@ export function FreelancerCalculator({
         </div>
         <p className="text-3xl font-extrabold text-brand">{rm2(result.grandTotal)}</p>
       </Card>
+
+      <ConfirmModal
+        open={!!pendingSave}
+        onClose={() => setPendingSave(null)}
+        onConfirm={confirmPendingSave}
+        title={pendingSave?.title ?? ""}
+        message={pendingSave?.message ?? ""}
+        confirmLabel={pendingSave?.confirmLabel}
+        busy={saving}
+      />
     </div>
   );
 }
