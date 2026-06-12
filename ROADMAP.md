@@ -2,54 +2,66 @@
 
 Working notes for in-flight initiatives — enough for a fresh session (or a
 teammate) to pick up without replaying chat history. `main` is the source of
-truth; this file only records **intent** and **what's left**.
+truth; this file only records **intent** and **what's left**. Rewritten
+2026-06-12 with the owner.
 
-## Gym-staff module → Swim-School staff parity — ✅ COMPLETE
+## P0 — June freelancer payroll go-live
 
-Brought the Optimum Fit gym-staff module (`/commission/staff`) up to the same
-shape as the Swim-School staff module (`/staff`): **directory + profile + HR
-notes + audit + login links** — **no appraisals** (as agreed with the owner).
+**Intent:** June 2026 is the first month freelancer pay is computed in the
+system instead of the Excel chain. The engine is numerically ready — the May
+tally check reproduced the operator's real payouts to the cent (21/22 sampled
+records at delta RM 0.00; the one exception is the open CC decision below;
+details in `HANDOFF.md`).
 
-### Architecture decisions (kept, for reference)
+What's left, in order:
 
-- Gym data stays **isolated** from the test-locked Swim HR tables: gym notes live
-  in their own `gym_notes` table (not a polymorphic generalization of `notes`),
-  mirroring how `gym_staff` is already separate from `coaches`.
-- **UI is shared, data is separate**: Swim components like `NotesTimeline` are
-  parameterized (`subjectId` + `createUrl` / `deleteBase`) so both modules render
-  the same UI against their own routes/tables.
+1. **Settle the CC commitment question (Leon).** Leon's instruction
+   (2026-06-12): CC earns no commitment bonus — implemented. May practice:
+   commitment WAS paid on CC work (concrete example: RM 415.80 on one
+   record). One of these is wrong; the code change either way is one line
+   (`NO_COMMITMENT_POSITIONS` in `lib/freelancer/types.ts`) + one test flip.
+2. **One-time payee load (Leon, one click):** Workforce → Payees → "Import
+   summary file" with `05-2026 Payment Summary.xlsx` (Drive: …/Year
+   2026/05-2026/PV) → ~207 freelancer profiles; spot-check a handful against
+   the Excel.
+3. **June parallel run:** compute June in the system while the operator runs
+   the Excel chain as usual; diff per person before anything is paid. The
+   May check validated the engine on history — the parallel run validates
+   inputs + process with real stakes. Treat any per-person delta > RM 0.01
+   as a blocker.
+4. **Payee completeness pass before the first bank-file export** (IC / bank /
+   account on every active freelancer — the import reports gaps).
 
-### Done (all merged)
+## P1 — Observability follow-ups (v1 shipped in PR #148)
 
-- Phase 1 — searchable / filterable / sortable directory — #50
-- Phase 2 — per-staff profile page (editable Details + Earnings) — #51
-- Phase 3 — HR notes timeline (`gym_notes`, gated by `edit_notes`, audited) — #52
-- Phase 4 — link a `gym_staff` row to a `users` login + role, in Staff → Users — #57
-- Phase 5 — gym-staff create/update/delete + note create/delete write to the
-  shared `audit_log` (surfaced at `/staff/audit`) — confirmed wired
-- CI — full suite on every PR as a visible `test` check — #53
-- Tests — HTTP smoke covers the gym-staff directory/profile/notes + login-link
-  flow (browser-free) — #54, #57
+In-app error log is live: `app_errors` + `/system/errors`, server sink +
+browser reporter, optional Sentry via `SENTRY_DSN`. Remaining:
 
-## No active initiative
+- **Route error boundaries** (`app/error.tsx`, `app/global-error.tsx`): a
+  render crash should show a friendly retry page and self-report, instead of
+  the default white screen.
+- **Set `SENTRY_DSN` in prod or decide not to** — the in-app log works either
+  way; Sentry adds alerting + grouping.
+- **Surface unseen-error count** somewhere a super_admin already looks
+  (launcher System card badge), so the page gets visited without a habit.
 
-The parity work above is closed. Other things shipped to `main` recently (no
-follow-up owed):
+## Backlog (unordered — pick with the owner)
 
-- **KPI CSV** — `TTL-LVL` accepted as the Total Student header — #58
-- **Pay-tier role rule** — a Swim coach's job role is **derived from the pay tier**
-  (A1/A2/A3 → Front Desk, else Instructor), not hand-set; the staff directory
-  edits Type / Pay tier / Active / Center inline. Existing rows corrected by
-  migration `0016` (applies on deploy) — #59
-- **Browser E2E re-gated** — the Playwright suite is green and **gating** again
-  (`continue-on-error` dropped); the `kpi-upload` spec was updated for the
-  allowance-gated leaderboard — #60
-- **Section-nav flicker fixed** — the KPI/Staff section nav renders in a section
-  `layout.tsx` (like commission already did), so it persists across
-  sub-navigation and permission-gated tabs no longer flicker out on load — #60
-- **Optimum Fit earnings** — the commission + coaching-income calculators were
-  dogfooded end-to-end on real exports (compute → report → save → History/Trends)
-  with no defects. Data note: commission "unattributed sales" are simply source
-  rows exported with a blank `staff_code`.
+- **Staff self-service**: a coach/freelancer signs in and sees their OWN
+  payslips / payment history (auth + roster linkage already exist; needs a
+  scoped read surface and a product decision on what's visible).
+- **Marketing KPI module product definition** — the external developer has a
+  sandbox (`ONBOARDING.md`) but no spec; without one, nothing should be
+  built there.
+- **Monthly data-pipeline automation**: the ingest API is live for KPI rows;
+  the freelancer side still runs on per-person Excel files. Long-term:
+  hours/absence entry in-app, killing the workbook merge step.
+- **Audit-log retention/paging** (currently "last 200") if usage grows.
 
-Pick the next initiative from the owner or from `HANDOFF.md`'s suggestions.
+## Decided — do not reopen without the owner
+
+- **Remember-last-email on login: NO** (2026-06-12) — shared front-desk
+  devices must not leak who signed in. The 10-minute idle auto-logout
+  (PR #148) is the direction login security moves in.
+- **No appraisals in the gym-staff module** (parity initiative, complete —
+  see git history of this file for the full record).

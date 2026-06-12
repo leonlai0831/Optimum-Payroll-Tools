@@ -362,7 +362,7 @@ sees higher-ranked accounts at all (lists filter them; direct API access 404s so
 leak). Creating and role-assignment are limited to roles below the actor's own. super_admin is
 all-access, incl. over fellow super_admins (last-active-super-admin safeguards still apply).
 `/system/users` (page, layout, section-nav tab, launcher card) is gated on `manage_users`, not
-`super_admin` — the other System pages (Audit log, Permissions) stay super_admin-only.
+`super_admin` — the other System pages (Audit log, Errors, Permissions) stay super_admin-only.
 
 Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
 `swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,
@@ -378,10 +378,18 @@ one exception is `/staff/[id]` for the user's OWN coach profile, which stays rea
 regardless of category (the launcher's My Profile card is category-independent).
 
 - **`proxy.ts`** is an *optimistic* gate: redirects to `/login` when the `kpi_session` cookie is
-  **absent**. Public paths: `/login`, `/api/auth/*`. (Matcher excludes `_next/static`, images, favicon.)
+  **absent**. Public paths: `/login`, `/api/auth/*`, `/api/errors`. (Matcher excludes `_next/static`, images, favicon.)
 - **Authoritative** checks: the `(app)` layout and `getCurrentUser()`/`requireCapability()` in API
   routes re-validate the iron-session against the DB — a present-but-invalid cookie or a
   deactivated account still gets a JSON `401`/`403`.
+- **Idle auto-logout (10 min)** — policy in `lib/auth/idle.ts` (unit-tested). The session carries
+  `lastSeenAt` (set at login, refreshed by `POST /api/auth/touch`); `getCurrentUser()` treats a
+  session past `IDLE_TIMEOUT_MS + IDLE_SERVER_GRACE_MS` (or one without the field) as signed out.
+  `components/idle-logout.tsx` (mounted in the `(app)` layout) pings the touch route on real
+  activity (throttled to 1/min) and performs the visible logout after 10 idle minutes — asking
+  `GET /api/auth/touch` first so an active sibling tab postpones it instead of being killed.
+  Remember-last-email on the login page is deliberately NOT implemented (operator decision
+  2026-06-12 — shared front-desk devices must not leak who signed in).
 - `/api/auth/login` checks the `users` table (in-process rate-limit per IP+email; session is
   destroyed and re-issued on login). `SESSION_SECRET` (≥ 32 chars) encrypts the cookie; in
   **production a missing/short secret fails fast at request time** (`resolveSessionPassword`
@@ -397,6 +405,20 @@ regardless of category (the launcher's My Profile card is category-independent).
 without `ANTHROPIC_API_KEY`: `matchInstructorNames` → `[]` (deterministic merge still applies),
 `analyzePerformance` → a template naming the strongest/weakest metric.
 
+## Error tracking & logs
+
+`lib/log.ts` is a zero-dependency JSON-lines logger (honors `LOG_LEVEL`). Every error-level
+log — plus Next's `onRequestError` (`instrumentation.ts`) — flows through the sink registered
+by `lib/observability.ts` into TWO places: the **in-app error log** (`app_errors` table, always
+on) and **Sentry** (only when `SENTRY_DSN` is set; graceful no-op otherwise). Browser errors
+(uncaught exceptions + unhandled rejections) are captured by `components/error-reporter.tsx`
+(root layout, login page included) and posted to `POST /api/errors` — proxy-exempt so the
+login page can report, defended by an in-process per-IP rate limit + hard field caps, with
+per-page-load dedupe on the client. `/system/errors` (super_admin) lists captured errors
+(source badge, path, reporter, collapsible stack) with an audited "Clear all"; rows older than
+30 days trim opportunistically on insert. `recordAppError` MUST stay silent on failure — it
+runs inside the error sink, so logging its own failure at error level would recurse.
+
 ## Environment variables
 
 | Variable | Required | Purpose |
@@ -406,6 +428,7 @@ without `ANTHROPIC_API_KEY`: `matchInstructorNames` → `[]` (deterministic merg
 | `POSTGRES_URL` (or `DATABASE_URL`) | yes (prod) | Postgres connection string. Unset → PGlite at `./.pglite`. |
 | `ANTHROPIC_API_KEY` | optional | Enables AI name-merging + analysis. |
 | `INGEST_API_KEY` | optional | Bearer key for the machine KPI push endpoint (`POST /api/ingest/kpi`). Unset → the endpoint answers 503. |
+| `SENTRY_DSN` | optional | Forwards captured errors to Sentry on top of the always-on in-app error log (`/system/errors`). |
 
 `.env.local` is loaded automatically in dev. `.npmrc` sets `legacy-peer-deps=true` for the
 Next 16 / React 19 peer ranges — keep it for Vercel installs.
@@ -465,12 +488,12 @@ rule below rather than relocating UI:
   AND freelance people; the directory's create button is “Add member”); system
   administration lives under System Setting.**
   The staff directory and Centers (`/staff/settings`) stay under Staff. **Users / accounts
-  (`/system/users`), Audit log (`/system/audit`), and the Permissions matrix
-  (`/system/permissions` — role capabilities, role-default launcher categories, AND per-user
-  category overrides, all on one page) live under the System Setting section** (`/system/*`).
-  Audit log and Permissions are gated to `role === "super_admin"`; **Users is gated on the
-  `manage_users` capability** (hierarchy-scoped — see Auth) and is the one System surface a
-  non-super-admin can hold. The old
+  (`/system/users`), Audit log (`/system/audit`), Errors (`/system/errors`), and the Permissions
+  matrix (`/system/permissions` — role capabilities, role-default launcher categories, AND
+  per-user category overrides, all on one page) live under the System Setting section**
+  (`/system/*`). Audit log, Errors and Permissions are gated to `role === "super_admin"`;
+  **Users is gated on the `manage_users` capability** (hierarchy-scoped — see Auth) and is the
+  one System surface a non-super-admin can hold. The old
   `/staff/users` · `/staff/audit` · `/staff/permissions` paths 301-redirect (`next.config.ts`),
   and `/system/categories` (the retired Category Visibility page) 301s to `/system/permissions`.
 - **Calculator math lives under its calculator.** Allowance tiers + rate tables
