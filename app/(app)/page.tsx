@@ -16,7 +16,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui";
-import { CiWave } from "@/components/ci-wave";
+import { SplashWave } from "@/components/splash-wave";
+import { HeroMascot } from "@/components/hero-mascot";
 import { HubStripeBand } from "@/components/hub-stripe-band";
 import { ArrivalSlide } from "@/components/arrival-slide";
 import { cn } from "@/lib/utils";
@@ -252,7 +253,14 @@ export default async function HubPage() {
         )}
         <h1 className="text-display mt-1 text-brand">Optimum People Hub</h1>
         <p className="mt-2 text-body text-muted">Choose a tool to get started.</p>
-        <CiWave className="absolute inset-x-0 bottom-0 h-16 w-full sm:h-20" />
+        {/* Mascot BEFORE the wave: the crest paints over its lower half, so it
+            floats half-submerged, logo-style. Both carry the login page's
+            click toys (reaction poke / drift surge). */}
+        <HeroMascot />
+        <SplashWave
+          className="absolute inset-x-0 bottom-0"
+          waveClassName="block h-16 w-full sm:h-20"
+        />
       </section>
 
       {tools.length === 0 && !profileTool ? (
