@@ -63,6 +63,11 @@ describe("commitmentFor (matrix edges)", () => {
     }
   });
 
+  it("CC never earns commitment (operator-confirmed 2026-06-12)", () => {
+    expect(commitmentFor("CC", 100, 0.95, cfg)).toBe(0);
+    expect(commitmentFor("CC", 45, 0.9, cfg)).toBe(0);
+  });
+
   it("below 31 hours → 0 for every result column", () => {
     expect(commitmentFor("T1", 0, 0.9, cfg)).toBe(0);
     expect(commitmentFor("T1", 30, 0.9, cfg)).toBe(0);

@@ -192,7 +192,7 @@ plus the freelancer-only **CC** (RM26/42), which never writes back onto the tier
 HQ/BK/BT, groupB = the rest); **student result** = `1 − black/colour` (T1–T4 + I1
 only, others forced 0); **commitment bonus** = matrix lookup with VLOOKUP-style
 approximate match on BOTH axes (hours rows 0/31/41/51 × result columns 0/0.7/0.85,
-0 for A1–A3; order-independent — the largest threshold ≤ value wins even if an
+0 for A1–A3 and CC; order-independent — the largest threshold ≤ value wins even if an
 operator reorders the rows on `/freelancer/settings`); **attendance bonus**
 (default +0.2, fixed hours only) unless ANY
 center row is marked absent. Per-center pay =
@@ -235,8 +235,9 @@ counts to an instructor account in the WORK month's KPI data (`input.kpiName`;
 run, falling back to the latest pending ingest, aggregated by `getCleanName`).
 The binding carries over via the latest run; counts stay editable; month P's
 data arrives on the 1st of P+1 (the UI says so when empty). **CC bonus
-semantics are an assumption awaiting the operator's confirmation**: hours-based
-commitment applies, student result does not (like PA/T0).
+semantics (operator-confirmed 2026-06-12)**: NO commitment bonus (`CC` is in
+`NO_COMMITMENT_POSITIONS`), no student result; the attendance bonus still
+applies.
 
 **Payees (`/staff/payees`, Workforce tab)**: bulk entry of freelancer payee
 details (IC / bank from `MALAYSIAN_BANKS` with live bank-code / account) with

@@ -72,10 +72,12 @@ to be browser zoom (narrower effective viewport → legs re-anchor at
   (`bottom-6 right-6 w-12 sm:bottom-8 sm:right-10 sm:w-16`).
 - **Remember-last-email on the login page** still deliberately left out
   (localStorage on shared devices leaks who signed in) — pending Leon's call.
-- **CC bonus semantics are an assumption**: CC gets the hours-based commitment
-  bonus and no student result (like PA/T0). The operator only specified rates
-  (RM26/42) — **confirm with Leon**; if CC should earn no bonuses at all, edit
-  `NO_COMMITMENT_POSITIONS` in `lib/freelancer/types.ts`.
+- **CC bonus semantics RESOLVED (2026-06-12)**: Leon confirmed CC earns NO
+  commitment bonus — `CC` added to `NO_COMMITMENT_POSITIONS`
+  (`lib/freelancer/types.ts`), locked by `calc.test.ts`. Attendance bonus and
+  no-student-result behavior unchanged (rate + attendance only). Leon hasn't
+  said anything about the ATTENDANCE bonus for CC — if that should go too,
+  it needs its own exclusion (there's no per-position attendance rule yet).
 - **One-time data load**: Leon still needs to run Workforce → Payees →
   "Import summary file" with `05-2026 Payment Summary.xlsx` (Drive:
   Optimum Management/Freelancer/Freelancer Payment/Year 2026/05-2026) to seed
