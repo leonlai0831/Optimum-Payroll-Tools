@@ -517,7 +517,8 @@ MIT-licensed skills are committed into the repo so they're available in every Cl
 Code on the web session with no network (the container is ephemeral; vendoring beats
 bootstrapping for skills that don't need it). The SessionStart hook
 (`.claude/hooks/session-start.sh`) bootstraps the ones we can't or shouldn't vendor —
-gstack, and the proprietary `frontend-design` skill.
+gstack, the proprietary `frontend-design` skill, and the `pm-skills` plugin
+marketplace.
 
 - **karpathy-guidelines** — guardrails against common LLM coding mistakes (simplicity,
   surgical edits, verifiable success criteria).
@@ -538,3 +539,9 @@ gstack, and the proprietary `frontend-design` skill.
 proprietary ("© Anthropic PBC. All rights reserved."), so it is *not* committed; the
 SessionStart hook installs it from the official source each session and its artifacts
 (`.agents/`, `skills-lock.json`, `.claude/skills/frontend-design`) are gitignored.
+The hook also adds the **pm-skills** plugin marketplace
+([deanpeters/Product-Manager-Skills](https://github.com/deanpeters/Product-Manager-Skills))
+and installs its `jobs-to-be-done` plugin — product-management skills (structured
+jobs/pains/gains discovery). Plugin installs live at user scope in `~/.claude`,
+which the ephemeral container loses, hence per-session bootstrap rather than
+vendoring.
