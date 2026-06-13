@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Clock, Loader2, Plus, Send, Trash2 } from "lucide-react";
 import { Badge, Button, Card, Input, Label, Select } from "@/components/ui";
 import { MobileCards, DesktopTable } from "@/components/responsive-table";
+import { cn } from "@/lib/utils";
 import { CENTERS } from "@/lib/allowance/types";
+import { SESSION_HOURS_TOLERANCE } from "@/lib/timesheet/validate";
 import {
   TIMESHEET_CLASS_TYPE_LABELS,
   TIMESHEET_CLASS_TYPES,
@@ -42,15 +44,38 @@ const STATUS_LABEL: Record<Status, string> = {
 
 function describe(r: Row): string {
   if (r.entryType === "shift") return `Shift ${r.startTime ?? ""}–${r.endTime ?? ""}`;
-  return r.classType ? TIMESHEET_CLASS_TYPE_LABELS[r.classType] : "Lesson";
+  const label = r.classType ? TIMESHEET_CLASS_TYPE_LABELS[r.classType] : "Lesson";
+  return r.startTime && r.endTime ? `${label} · ${r.startTime}–${r.endTime}` : label;
+}
+
+/** A single (class type, hours) line within a lesson session. Carries a stable
+ *  client-only `_key` so removing a middle row never shifts focus onto its
+ *  neighbour (see CLAUDE.md — reconcile list rows by key, never index). */
+interface LessonLine {
+  _key: number;
+  classType: TimesheetClassType;
+  hours: string;
+}
+
+/** Hours between two "HH:MM" strings, or null when invalid / non-positive. */
+function spanHours(start: string, end: string): number | null {
+  const re = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!re.test(start) || !re.test(end) || end <= start) return null;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  return eh + em / 60 - (sh + sm / 60);
 }
 
 export function TimesheetEntry({
   hasCoachProfile,
+  entryMode,
   initialPeriod,
   initialEntries,
 }: {
   hasCoachProfile: boolean;
+  /** Fixed by the linked coach's job role — front desk logs a shift, everyone
+   *  else logs a lesson session. There is no Lesson/Shift toggle. */
+  entryMode: TimesheetEntryType;
   initialPeriod: string;
   initialEntries: Row[];
 }) {
@@ -60,14 +85,15 @@ export function TimesheetEntry({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Add-entry form state.
-  const [mode, setMode] = useState<TimesheetEntryType>("lesson");
+  // Add-entry form state. The mode is fixed by `entryMode` (prop), not a toggle.
+  // A lesson = a clocked window (start/end) holding one or more (classType, hours)
+  // lines; a shift = just the start/end span.
   const [date, setDate] = useState(`${period}-01`);
   const [center, setCenter] = useState<string>(CENTERS[0]);
-  const [classType, setClassType] = useState<TimesheetClassType>("low");
-  const [hours, setHours] = useState("1");
   const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("17:00");
+  const [endTime, setEndTime] = useState(entryMode === "shift" ? "17:00" : "10:00");
+  const [lines, setLines] = useState<LessonLine[]>([{ _key: 1, classType: "low", hours: "1" }]);
+  const lineKeyRef = useRef(1);
   const [note, setNote] = useState("");
 
   // Re-fetch a month's entries. Always called from an event handler (never an
@@ -102,13 +128,43 @@ export function TimesheetEntry({
     return { total, drafts };
   }, [rows]);
 
+  function addLine() {
+    lineKeyRef.current += 1;
+    const key = lineKeyRef.current;
+    setLines((ls) => [...ls, { _key: key, classType: "low", hours: "1" }]);
+  }
+  function removeLine(key: number) {
+    setLines((ls) => (ls.length > 1 ? ls.filter((l) => l._key !== key) : ls));
+  }
+  function updateLine(key: number, patch: Partial<Omit<LessonLine, "_key">>) {
+    setLines((ls) => ls.map((l) => (l._key === key ? { ...l, ...patch } : l)));
+  }
+
+  // Live "sum vs span" gate for a lesson session: the class lines must total the
+  // clocked window within tolerance, or the server (parseTimesheetSession) would
+  // reject it — so we surface it and block submit.
+  const span = useMemo(() => spanHours(startTime, endTime), [startTime, endTime]);
+  const lineSum = useMemo(() => lines.reduce((s, l) => s + (Number(l.hours) || 0), 0), [lines]);
+  const sessionOk =
+    span != null &&
+    lines.every((l) => Number(l.hours) > 0) &&
+    Math.abs(lineSum - span) <= SESSION_HOURS_TOLERANCE;
+
   async function addEntry() {
     setBusy(true);
     setError(null);
     try {
       const body =
-        mode === "lesson"
-          ? { periodLabel: period, date, center, entryType: "lesson", classType, hours: Number(hours), note }
+        entryMode === "lesson"
+          ? {
+              periodLabel: period,
+              date,
+              center,
+              startTime,
+              endTime,
+              lines: lines.map((l) => ({ classType: l.classType, hours: Number(l.hours) })),
+              note,
+            }
           : { periodLabel: period, date, center, entryType: "shift", startTime, endTime, note };
       const res = await fetch("/api/timesheets", {
         method: "POST",
@@ -118,6 +174,10 @@ export function TimesheetEntry({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to add");
       setNote("");
+      if (entryMode === "lesson") {
+        lineKeyRef.current += 1;
+        setLines([{ _key: lineKeyRef.current, classType: "low", hours: "1" }]);
+      }
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add");
@@ -204,23 +264,10 @@ export function TimesheetEntry({
         </p>
       </Card>
 
-      {/* Add entry */}
+      {/* Add entry — the mode is fixed by the coach's role (no toggle). */}
       <Card className="space-y-3 p-5">
-        <div className="flex gap-2">
-          <Button
-            variant={mode === "lesson" ? "primary" : "outline"}
-            size="sm"
-            onClick={() => setMode("lesson")}
-          >
-            Lesson
-          </Button>
-          <Button
-            variant={mode === "shift" ? "primary" : "outline"}
-            size="sm"
-            onClick={() => setMode("shift")}
-          >
-            Front-desk shift
-          </Button>
+        <div className="text-sm font-semibold text-gray-900">
+          {entryMode === "lesson" ? "Lesson session" : "Front-desk shift"}
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -238,55 +285,81 @@ export function TimesheetEntry({
               ))}
             </Select>
           </div>
-
-          {mode === "lesson" ? (
-            <>
-              <div>
-                <Label htmlFor="ts-class">Class type</Label>
-                <Select
-                  id="ts-class"
-                  value={classType}
-                  onChange={(e) => setClassType(e.target.value as TimesheetClassType)}
-                >
-                  {TIMESHEET_CLASS_TYPES.map((c) => (
-                    <option key={c} value={c}>
-                      {TIMESHEET_CLASS_TYPE_LABELS[c]}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="ts-hours">Hours</Label>
-                <Input
-                  id="ts-hours"
-                  type="number"
-                  min="0"
-                  step="0.25"
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <Label htmlFor="ts-start">Start</Label>
-                <Input id="ts-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="ts-end">End</Label>
-                <Input id="ts-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-              </div>
-            </>
-          )}
+          <div>
+            <Label htmlFor="ts-start">Start</Label>
+            <Input id="ts-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="ts-end">End</Label>
+            <Input id="ts-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+          </div>
         </div>
+
+        {entryMode === "lesson" && (
+          <div className="space-y-2">
+            <Label>Classes taught in this window</Label>
+            {lines.map((line, i) => (
+              <div key={line._key} className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Select
+                    aria-label={`Class type, line ${i + 1}`}
+                    value={line.classType}
+                    onChange={(e) =>
+                      updateLine(line._key, { classType: e.target.value as TimesheetClassType })
+                    }
+                  >
+                    {TIMESHEET_CLASS_TYPES.map((c) => (
+                      <option key={c} value={c}>
+                        {TIMESHEET_CLASS_TYPE_LABELS[c]}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="w-24">
+                  <Input
+                    aria-label={`Hours, line ${i + 1}`}
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={line.hours}
+                    onChange={(e) => updateLine(line._key, { hours: e.target.value })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLine(line._key)}
+                  disabled={lines.length === 1}
+                  aria-label={`Remove line ${i + 1}`}
+                  className="mb-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition hover:text-red-600 disabled:opacity-30"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={addLine}>
+              <Plus className="h-4 w-4" /> Add class
+            </Button>
+            <p
+              className={cn(
+                "text-xs",
+                span == null ? "text-amber-600" : sessionOk ? "text-green-700" : "text-red-600",
+              )}
+            >
+              {span == null
+                ? "Enter a valid start and end time."
+                : `Classes total ${lineSum.toFixed(2)} h · clocked ${span.toFixed(2)} h${
+                    sessionOk ? "" : ` — must match within ${SESSION_HOURS_TOLERANCE} h`
+                  }`}
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1">
             <Label htmlFor="ts-note">Note (optional)</Label>
             <Input id="ts-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. covered for X" />
           </div>
-          <Button onClick={addEntry} disabled={busy}>
+          <Button onClick={addEntry} disabled={busy || (entryMode === "lesson" && !sessionOk)}>
             <Plus className="h-4 w-4" /> Add
           </Button>
         </div>

@@ -4,6 +4,7 @@ import {
   parseScheduleSlots,
   parseTimesheetEntry,
   parseTimesheetSession,
+  sessionToEntries,
 } from "./validate";
 
 describe("parsePeriod", () => {
@@ -160,6 +161,59 @@ describe("parseTimesheetSession — lesson (start/end + multiple class lines)", 
     expect(
       parseTimesheetSession({ date: "2026-06-08", center: "PK", startTime: "09:00", endTime: "10:00", lines: [{ classType: "low", hours: 0 }] }),
     ).toEqual({ error: "line 1: hours must be a positive number" });
+  });
+});
+
+describe("sessionToEntries — one lesson row per class line", () => {
+  it("fans a session out into per-line lesson entries sharing the window", () => {
+    const s = parseTimesheetSession({
+      date: "2026-06-08",
+      center: "PK",
+      startTime: "14:00",
+      endTime: "18:00",
+      lines: [
+        { classType: "medium", hours: 2 },
+        { classType: "high", hours: 2 },
+      ],
+      note: "double session",
+    });
+    if (!("value" in s)) throw new Error("expected a valid session");
+    expect(sessionToEntries(s.value)).toEqual([
+      {
+        date: "2026-06-08",
+        center: "PK",
+        entryType: "lesson",
+        classType: "medium",
+        startTime: "14:00",
+        endTime: "18:00",
+        hours: 2,
+        note: "double session",
+      },
+      {
+        date: "2026-06-08",
+        center: "PK",
+        entryType: "lesson",
+        classType: "high",
+        startTime: "14:00",
+        endTime: "18:00",
+        hours: 2,
+        note: "double session",
+      },
+    ]);
+  });
+
+  it("keeps a single-line session as one entry", () => {
+    const s = parseTimesheetSession({
+      date: "2026-06-08",
+      center: "PK",
+      startTime: "09:00",
+      endTime: "10:00",
+      lines: [{ classType: "low", hours: 1 }],
+    });
+    if (!("value" in s)) throw new Error("expected a valid session");
+    const entries = sessionToEntries(s.value);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ entryType: "lesson", classType: "low", hours: 1 });
   });
 });
 

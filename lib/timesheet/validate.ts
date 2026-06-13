@@ -156,6 +156,25 @@ export function parseTimesheetSession(
   return { value: { date, center, startTime, endTime, lines, note } };
 }
 
+/**
+ * Expand a parsed lesson session into one {@link ParsedTimesheetEntry} per class
+ * line — each a `lesson` row sharing the session's date/center/window/note, with
+ * that line's class type + hours. One row per line keeps downstream aggregation /
+ * reconcile (which read classType + hours) unchanged. Pure → unit-locked.
+ */
+export function sessionToEntries(s: ParsedTimesheetSession): ParsedTimesheetEntry[] {
+  return s.lines.map((line) => ({
+    date: s.date,
+    center: s.center,
+    entryType: "lesson",
+    classType: line.classType,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    hours: line.hours,
+    note: s.note,
+  }));
+}
+
 export interface ParsedScheduleSlot {
   weekday: number;
   startTime: string;

@@ -42,9 +42,10 @@ browser reporter, optional Sentry via `SENTRY_DSN`.
 
 Operator feedback batched faster than build; do **one PR at a time**, in order.
 
-- **A. Clock-in entry redesign** — branch `claude/clockin-entry-redesign` (pushed,
-  validator done): auto-lock Lesson/Shift by `coaches.jobRole`; lesson = start/end
-  + multiple (classType, hours) lines whose sum ≈ span (±0.25 h) or it blocks.
+- ✅ **A. Clock-in entry redesign** — DONE: mode auto-locked by `coaches.jobRole`
+  (no toggle); a lesson is a start/end session with multiple (classType, hours)
+  lines whose sum ≈ span (±0.25 h) or it blocks, persisted one row per line.
+  Pure parsing Vitest-locked (`parseTimesheetSession` + `sessionToEntries`).
 - **B. Notification badges — launcher cards AND section-nav tabs** (merged with the
   operator's "drill-down" ask, 2026-06-13): one shared per-destination count helper
   (`lib/nav/badges.ts`) + a shared `<CountBadge>` lights up BOTH the launcher card

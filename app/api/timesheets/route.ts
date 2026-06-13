@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createTimesheetEntry, listTimesheetsForCoach } from "@/lib/db/queries";
 import { timesheetAccess } from "@/lib/timesheet/access";
-import { parsePeriod, parseTimesheetEntry } from "@/lib/timesheet/validate";
+import {
+  parsePeriod,
+  parseTimesheetEntry,
+  parseTimesheetSession,
+  sessionToEntries,
+} from "@/lib/timesheet/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +55,22 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const period = parsePeriod(body.periodLabel);
   if (!period) return NextResponse.json({ error: "periodLabel must be YYYY-MM" }, { status: 400 });
+
+  // A lesson SESSION (`lines` present) = a clocked start–end window with one or
+  // more (classType, hours) lines; it persists as one lesson row per line sharing
+  // the window. Everything else (front-desk shift, or a legacy single entry) goes
+  // through parseTimesheetEntry.
+  if (Array.isArray(body.lines)) {
+    const parsed = parseTimesheetSession(body);
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const ids: number[] = [];
+    for (const entry of sessionToEntries(parsed.value)) {
+      const row = await createTimesheetEntry({ coachId: user.coachId, periodLabel: period, ...entry });
+      ids.push(row.id);
+    }
+    return NextResponse.json({ ok: true, ids });
+  }
+
   const parsed = parseTimesheetEntry(body);
   if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 

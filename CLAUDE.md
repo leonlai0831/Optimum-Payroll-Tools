@@ -386,11 +386,24 @@ Vitest-locked like the freelancer/allowance engines (payroll).
   clock-in on a scheduled day is fixed wherever it happened; hours land on the
   center actually worked; the schedule carries no class type — declared at
   clock-in).
-- **Two entry modes**: `lesson` (instructor — class type + hours) and `shift`
-  (front-desk freelancer — start/end → hours; no class type). v1 covers
-  **full-time instructors + all freelancers (incl. freelance front desk)**;
-  **full-time front desk is deferred** (still manual). Hours for a `shift` are
-  derived server-side from start/end (`lib/timesheet/validate.ts`).
+- **Two entry modes, auto-locked by `coaches.jobRole`** (no Lesson/Shift toggle):
+  `jobRole === "front_desk"` → **shift** (start/end → hours; no class type),
+  everyone else → **lesson**. The page reads the linked coach's role
+  (`getCoach(user.coachId)`) and passes a fixed `entryMode` to
+  `components/timesheet-entry.tsx`; defaults to lesson when there's no profile.
+  A **lesson is a SESSION**: a clocked start–end window holding **one or more
+  `(classType, hours)` lines** (a multi-line editor with a live "sum vs span"
+  gate). The lines' hours must total the window within **±0.25 h**
+  (`SESSION_HOURS_TOLERANCE`) or both the form and the server reject it; the
+  session **persists as one lesson row per line** sharing the window
+  (`sessionToEntries` → N × `createTimesheetEntry`), so aggregation/reconcile
+  (which read `entryType` + `classType` + `hours`, never the times) are unchanged.
+  `POST /api/timesheets` routes a body with a `lines` array through
+  `parseTimesheetSession`; a shift (or legacy single entry) still goes through
+  `parseTimesheetEntry`. v1 covers **full-time instructors + all freelancers
+  (incl. freelance front desk)**; **full-time front desk is deferred** (still
+  manual). Hours for a `shift` are derived server-side from start/end. All parsing
+  is pure + Vitest-locked (`lib/timesheet/validate.ts`).
 - **Schema** (`timesheets` + `freelancer_schedules`): review workflow mirrors
   lesson plans (`draft → submitted → approved / changes_requested`); editing an
   entry resets it to draft; rows never hard-deleted. `slotType` is derived (admin

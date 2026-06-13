@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { listTimesheetsForCoach } from "@/lib/db/queries";
+import { getCoach, listTimesheetsForCoach } from "@/lib/db/queries";
 import { TimesheetEntry } from "@/components/timesheet-entry";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,11 @@ function currentPeriod(): string {
 export default async function TimesheetsPage() {
   const user = await getCurrentUser();
   const period = currentPeriod();
+  // The entry mode is LOCKED by the linked coach's job role — front desk logs a
+  // start/end shift, everyone else (instructors) logs a lesson session. No free
+  // Lesson/Shift toggle. Defaults to lesson when there's no profile to read.
+  const coach = user?.coachId != null ? await getCoach(user.coachId) : undefined;
+  const entryMode = coach?.jobRole === "front_desk" ? "shift" : "lesson";
   const entries =
     user?.coachId != null
       ? (await listTimesheetsForCoach(user.coachId, period)).map((e) => ({
@@ -40,6 +45,7 @@ export default async function TimesheetsPage() {
   return (
     <TimesheetEntry
       hasCoachProfile={user?.coachId != null}
+      entryMode={entryMode}
       initialPeriod={period}
       initialEntries={entries}
     />
