@@ -452,8 +452,18 @@ elsewhere. And **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
 file**: an `email` column + an optional `full name` (→ the **Full Name** field,
 not the Nickname), parsed client-side into rows by the Vitest-locked
 `lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy ExcelJS, flexible
-header detection or headerless `email,name`; one role + shared initial password,
-dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
+header detection or headerless `email,name`; one role + shared initial password).
+**When the upload overlaps existing emails the operator is asked: Overwrite or
+Skip** (a dialog on Create; no prompt when there are no collisions). The
+overwrite/skip decision is the pure, Vitest-locked `planBulkUsers`
+(`lib/users/bulk-plan.ts`): in-file dups are skipped (first wins); **overwrite**
+resets the existing account's role + shared password (+ full name when the row
+has one) but **never the actor's own account and only accounts the actor
+outranks** (hierarchy scope, server-authoritative via `listUsers` so a
+hierarchy-hidden higher-ranked account falls through to a safe skip); **skip**
+(the default) leaves existing accounts untouched. Overwrites are audited
+`user.bulk_update` (creates stay `user.bulk_create`). Launcher **category
+visibility** (swim / fit / marketing) lives in the
 same permissions matrix: each role has **default categories**, and the page's "User overrides"
 tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
 `getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
