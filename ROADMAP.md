@@ -31,15 +31,32 @@ What's left, in order:
 ## P1 — Observability follow-ups (v1 shipped in PR #148)
 
 In-app error log is live: `app_errors` + `/system/errors`, server sink +
-browser reporter, optional Sentry via `SENTRY_DSN`. Remaining:
+browser reporter, optional Sentry via `SENTRY_DSN`.
 
-- **Route error boundaries** (`app/error.tsx`, `app/global-error.tsx`): a
-  render crash should show a friendly retry page and self-report, instead of
-  the default white screen.
+- ✅ **Route error boundaries** + ✅ **unseen-error badge** — shipped in **#172**
+  (`app/error.tsx`, `app/global-error.tsx`, launcher System-card count).
 - **Set `SENTRY_DSN` in prod or decide not to** — the in-app log works either
-  way; Sentry adds alerting + grouping.
-- **Surface unseen-error count** somewhere a super_admin already looks
-  (launcher System card badge), so the page gets visited without a habit.
+  way; Sentry adds alerting + grouping. (still open)
+
+## Active queue (2026-06-13 — full detail + decisions in `HANDOFF.md`)
+
+Operator feedback batched faster than build; do **one PR at a time**, in order.
+
+- **A. Clock-in entry redesign** — branch `claude/clockin-entry-redesign` (pushed,
+  validator done): auto-lock Lesson/Shift by `coaches.jobRole`; lesson = start/end
+  + multiple (classType, hours) lines whose sum ≈ span (±0.25 h) or it blocks.
+- **B. Launcher notification badges** — per-module pending-approval count on each
+  card's icon corner (Clock-in → timesheets to review, Lesson Plan → plans to
+  review); reuse/reposition the #172 errors badge.
+- **C. Center-scoped approvals** — `users.managedCenters`; admins approve only
+  their branch's requests (super_admin = all). Filter the review queues by the
+  request's center.
+- **D. Permissions / User-overrides redesign** — full name, search + per-column
+  sort/filter, bulk check/uncheck filtered rows, move category control off the
+  Roles tab, rename "User overrides", drop the Visibility column.
+- **Marketing visibility** — owner unticks "Optimum Marketing" for staff/supervisor
+  on `/system/permissions` (no code); root cause: all roles default to all 3
+  launcher categories + the Marketing card has no capability gate.
 
 ## Backlog (unordered — pick with the owner)
 

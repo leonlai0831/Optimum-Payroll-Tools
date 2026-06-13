@@ -17,6 +17,13 @@ roles + a capability matrix (see "Auth"); the original shared password is long g
 > the implementation diverged from that plan, this file reflects **the code**, not the proposal
 > (see "Divergences from the original plan").
 
+> **Pending work / next session:** the active backlog (in-progress branch + the
+> operator decisions behind each item) lives in **`HANDOFF.md`**, with intent in
+> **`ROADMAP.md`**. As of 2026-06-13 that's: A) Clock-in entry redesign (branch
+> `claude/clockin-entry-redesign` — validator done), B) per-module launcher
+> notification badges, C) center-scoped approvals, D) Permissions/User-overrides
+> redesign, plus the Marketing-card visibility (owner config, no code).
+
 ## Goal & decisions
 
 Re-develop the legacy HTML tool — which had no real persistence (some `localStorage`) and a

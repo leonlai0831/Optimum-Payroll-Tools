@@ -1,98 +1,155 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-13**, end of a long
-continuation session). `main` is green: **vitest 483/483**, typecheck + lint
+continuation session). `main` is green: **vitest 493/493**, typecheck + lint
 clean, `next build` OK. Read `CLAUDE.md` for architecture + the frozen Settings
 IA rules; read `AGENTS.md` before touching Next.js APIs.
 
-## This session (2026-06-13, continuation) — merged to `main` as #164–#168
+## This session (2026-06-13, continuation 2) — merged to `main` as #170–#172
 
-Five PRs, each its own branch off `main`, all squash-merged:
+Three PRs, each its own branch off `main`, all squash-merged after a `/code-review`
+pass + gstack browser QA:
 
-1. **#164 — Users page overhaul + KPI auto-compute Phase 1 + System card.**
-   - **Bulk add users → CSV/Excel upload** (was pasted `email,name` lines):
-     parsed client-side (PapaParse / lazy ExcelJS) into a grid, then rows by the
-     pure, Vitest-locked `lib/users/bulk-parse.ts`. The uploaded **name maps to
-     the Full Name (legal) field**, not the Nickname. CSV-template download + preview.
-   - **System Setting launcher → ONE card** (`/system/users`, `cap:manage_users`);
-     fixed `system/layout.tsx` passing `isSuperAdmin` as a literal `true` (a
-     `manage_users`-only holder used to see the super-admin tabs).
-   - **Users table**: Full Name column **sortable** + de-capitalized headers,
-     **"Linked Workforce"** (was "Linked Employee"), inline edits **STAGED +
-     saved via a Save button** (no auto-save), wider/​balanced column widths.
-   - Login email placeholder → "Enter your email".
-   - **KPI auto-compute Phase 1**: a staged Student Progress delivery → a
-     reviewable **draft KPI run** in one click. `lib/kpi/build-run.ts`
-     (`buildRunCoaches`, Vitest-locked, bit-identical to the client `computeCoach`)
-     does merge + v11.1 scoring + carry-over server-side; `POST
-     /api/kpi/ingests/[id]/compute` always saves `status:"draft"`; a **"Compute
-     KPI draft"** button on a pending delivery jumps to the existing `RunReview`.
-2. **#165 — KPI draft inputs.** Teaching allowance now comes from the WORK
-   month's saved **Allowance run** (`listAllowanceRuns(period)` → `linkAllowance`
-   per coach, like the dashboard), falling back to profile carry-over — **no
-   manual allowance editor** (the operator always keys allowance before KPI).
-   `RunReview` gained a **Position select + a supervisor's group center & hours
-   (/40)** editor (entered by hand — allowance + clock-in only track *teaching*
-   hours; a supervisor's real hours are longer).
-3. **#166 — Auto-link accuracy + link uniqueness.** Auto-link was mis-linking
-   most accounts (3 logins → one coach). Now **precision-first** (`lib/users/
-   autolink.ts`): match on the **Full Name first, then Nickname**, by cleaned-name
-   → token-set → multi-token subset; link only a **unique** top-tier coach (ties
-   skipped), each coach once. The AI pass is gated by **`sharesNameSignal`** (must
-   share a real name token — kills hallucinated links for signal-less accounts).
-   **One workforce profile ↔ one login enforced**: auto-link skips already-linked
-   coaches; `PATCH /api/users/[id]` 409s on a duplicate link.
-4. **#167 — Readable Linked-Workforce picker** (`EmployeeCombobox`): wider
-   dropdown (was locked to the narrow column), **full names** (no truncation) with
-   the coach's **center** as a sub-label, search spans the center, trigger tooltip.
-5. **#168 — Ingest push as one JSON object.** `POST /api/ingest/kpi` JSON body now
-   also accepts a **`csv` string field** (raw CSV text, same parser), so
-   periodLabel + label + data fit one JSON object — no query params. The old
-   `text/csv` body + query-param mode stays for backward compat; `csv` wins over
-   `rows`. (Operator relayed a REST concern from the push-API developer; example
-   curls were shared with them.)
+1. **#170 — Bulk add: overwrite-or-skip on existing emails.** When a CSV/Excel
+   bulk-add overlaps existing emails, Create pops a dialog (Overwrite / Skip);
+   pure Vitest-locked `lib/users/bulk-plan.ts` (`planBulkUsers`) decides
+   create/overwrite/skip. Overwrite resets role + shared password (+ full name)
+   but **never the actor's own account and only accounts the actor outranks**;
+   server-authoritative via `listUsers`. `POST /api/users/bulk` takes
+   `mode:"skip"|"overwrite"` (default skip); overwrites audited `user.bulk_update`.
+2. **#171 — User-management list + self-service.** `/system/users`: **Linked
+   Workforce sortable**; **filter bar** (Role / Active / Linked-vs-unlinked);
+   **super_admin can edit a sign-in Email inline** (re-gated in the PATCH route;
+   duplicate → clean 400). `EmployeeCombobox` **greys + locks a profile already
+   linked to another account** (shows that account's email). `/account`
+   self-service gained **Nickname** editing (full name + role stay admin-only;
+   email/password still require the current password); `PATCH /api/users/me`
+   accepts `newDisplayName`.
+3. **#172 — Observability + DB constraint + confirm-email.**
+   - **Route error boundaries** `app/error.tsx` + `app/global-error.tsx` (friendly
+     retry, **self-report to `/api/errors`** — fills the gap that React render
+     errors never reach `window.onerror`; global-error does a hard reload).
+   - **Unseen-error badge** on the launcher **System** card (`countAppErrors`,
+     super_admin only, clears on "Clear all"; guarded so a failing count can't
+     crash the launcher).
+   - **One-login-per-profile DB backstop**: partial UNIQUE index on
+     `users.coach_id` AND `users.gym_staff_id` (WHERE NOT NULL). **Migration 0038**
+     auto-dedups first — keeps the **ACTIVE** login per profile (else earliest),
+     NULLs the rest, audited `user.dedup_links`; idempotent/re-run-safe;
+     Vitest-locked (`db.test.ts`).
+   - **Confirm-new-email**: a re-type "Confirm new email" field on `/account` +
+     a confirm dialog when a super_admin rewrites a sign-in email in the user list.
 
-**Operator decisions baked in this session:**
-- **Compute is NEVER automatic on upload/push.** A delivery is only STAGED; the
-  owner reviews + edits the month's database on `/progress`, then the explicit
-  "Compute KPI draft" sends it to KPI. An unreviewed month must never become a run.
-- Bulk-uploaded / AI-link names key off the **Full Name** (legal), not Nickname.
+Also this session (NOT a feature PR):
+- **Pre-commit `/code-review` hook** added to the project (`.claude/settings.json`,
+  `PreToolUse`/Bash): injects a reminder to run `/code-review` on the staged diff
+  before any `git commit` (non-blocking). Lives in the repo so it persists.
+- **gstack works in this sandbox** (the old "no Playwright" note is half-wrong) —
+  see the bridge recipe under Environment notes.
 
-## Open / in-progress — NOT done
+## Open / in-progress — THE BACKLOG (operator decisions baked in)
 
-- **Pre-existing wrong auto-links are NOT auto-cleaned.** The new logic prevents
-  recurrence, but old duplicate/wrong links from before #166 remain — the operator
-  should set them to "none" and re-run AI auto-link. A DB-level UNIQUE constraint
-  on `users.coachId` (partial, WHERE NOT NULL) could be a follow-up once the
-  existing duplicates are cleaned (a dedup migration step would be needed first).
-- **Optional picker nicety (not built):** mark coaches already linked to another
-  account in the `EmployeeCombobox` (grey + "linked to <email>"), to guide manual
-  linking on top of the server-side 409.
-- **Real-device QA** on the new/changed surfaces (clock-in entry/review/schedules,
-  Users page incl. bulk-add file upload + staged-save + picker, the Compute-KPI-
-  draft → RunReview supervisor flow) — all build/typecheck/CI-verified only
-  (sandbox can't run Playwright; e2e specs only cover /login + /kpi).
+> The operator queued these faster than they could be built; do them **one clean
+> PR at a time**, in roughly this order. C and D overlap (both touch
+> `/system/permissions`); B's counts get refined by C.
 
-## Earlier the same day (already on `main` before this session)
+**A. Clock-in entry redesign — branch `claude/clockin-entry-redesign` (pushed, NOT merged).**
+ - DONE: `parseTimesheetSession` + `SESSION_HOURS_TOLERANCE` (±0.25 h) in
+   `lib/timesheet/validate.ts`, Vitest-locked (`validate.test.ts`, 12 pass).
+ - **#1 auto-mode (by position):** `app/(app)/timesheets/page.tsx` should fetch the
+   signed-in user's coach `jobRole` (`getCoach(user.coachId)`) and pass it to
+   `components/timesheet-entry.tsx`, which **locks the mode** —
+   `jobRole === "front_desk"` → Front-desk Shift, else → Lesson — and **drops the
+   free Lesson/Shift toggle**.
+ - **#2 lesson session (start/end + multiple class lines):** `POST /api/timesheets`
+   should accept a lesson session `{ periodLabel, date, center, startTime, endTime,
+   lines: [{classType, hours}], note }`, validate via `parseTimesheetSession`, and
+   **insert one timesheet row per line** (the `timesheets` table already has
+   startTime/endTime/classType/hours cols — no schema change); keep the shift path
+   (`parseTimesheetEntry`). Redesign the lesson form into a **multi-line
+   (classType, hours) editor** with start/end + a live "sum vs span" indicator that
+   blocks submit unless within ±0.25 h.
+ - Decisions: multi-class-type per window; ±0.25 h tolerance; mode auto-locked by
+   `coaches.jobRole` (`"instructor" | "front_desk"`).
 
-- **Clock-in / Timesheet** module built end-to-end (P1–P4); see the CLAUDE.md
-  chapter. Freelancer schedule carries no class type; reconcile matches on date only.
-- **Production DB outage fixed** (`lib/db/index.ts`): concurrent-race retry,
-  `reconcileSchema` skips "already gone" + `DROP COLUMN IF EXISTS`, journal
-  backfill. Migrations run to **0037**.
-- Mascot oval goggles (#150); #147 pm-skills bootstrap; #148 landed via #151
-  (idle auto-logout, in-app error log, freelancer raw-account KPI binding, CC pin);
-  vendored `skill-creator` + `find-skills`.
+**B. Launcher notification badges (per-module pending-approval counts).** A red count
+ on each module card's **ICON top-right** (phone-notification style) for items
+ awaiting *this user's* approval: **Clock-in** = timesheets `submitted` awaiting
+ review (`review_timesheet`), **Lesson Plan** = plans `submitted` awaiting review
+ (`review_lesson_plans`). **Reposition the existing System-card errors badge** to
+ the icon corner to match. The `Tool.badge` + `ToolCard` infra already exists in
+ `app/(app)/page.tsx` (today it renders next to the chevron). Capability-gated;
+ **super_admin sees all**; counts become **center-scoped once C lands**.
+
+**C. Center-scoped approvals (admin approves only their branch).** super_admin = all
+ (confirmed by operator). Full code map done this session:
+ - Store `users.managedCenters` (jsonb `string[]`, mirror `visibleCategories`;
+   NULL/empty → role default; super_admin → all). Add per-role defaults to
+   `PermissionConfig` + an `effectiveAdminCenters()` resolver in `lib/auth/types.ts`;
+   expose on `CurrentUser` in `lib/auth/session.ts`.
+ - Assign on `/system/users` (or the Permissions page) — multi-select of
+   `AllowanceConfig.centers`.
+ - Enforce by **filtering review queues by the request's center**: timesheet review
+   (`timesheets.center`, `app/api/timesheets/review` + `listTimesheetsForReview`),
+   lesson-plan review (`lessonPlans.center`, `app/api/lesson-plans`), and **validate
+   on KPI finalize** (`coaches.center`, `app/api/runs/[id]`). Center fields already
+   exist on every entity.
+
+**D. Permissions / User-overrides redesign (`/system/permissions`).** Six asks:
+ 1. show **Full Name** (not just nickname/email);
+ 2. **search + per-column sort/filter**;
+ 3. **bulk check/uncheck the filtered rows** at once;
+ 4. move the launcher-category control **off the Roles tab** — manage category
+    visibility per-user (the Roles tab's categories can be removed);
+ 5. **rename "User overrides"** to something clearer;
+ 6. drop the **Visibility** column.
+ (Overlaps C — the per-admin center assignment likely lives on this same page.)
+
+**#3 Marketing visibility — owner action, NO code.** Swim staff see the "Optimum
+ Marketing" card because `DEFAULT_PERMISSION_CONFIG.categories` grants **all three**
+ categories to every role and the Marketing KPI card has **no capability gate**.
+ Owner unticks "Optimum Marketing" for staff/supervisor on
+ `/system/permissions → Role defaults`. (If a code default is wanted later: drop
+ `marketing` from the role defaults so it's opt-in.)
+
+**Carried over (largely handled, verify):** pre-#166 wrong auto-links — #172's
+ DB UNIQUE now prevents new dupes and 0038 dedups existing ones (keeping the active
+ login); **verify the dedup kept the intended links** and re-run AI auto-link for
+ any orphaned active accounts. Real-device QA: this session gstack-QA'd #170/#171/#172
+ surfaces; the clock-in redesign (A) and C/D are unbuilt → QA when built.
 
 ## Environment notes (Claude Code on the web)
 
 - `npm install` + `npx next typegen` before `npm run typecheck`/`build` in a fresh
-  container (RouteContext types are generated). PGlite backs tests (`memory://`);
-  run `npm run db:generate` after a schema change.
-- Merging via the GitHub MCP API **bypasses branch protection** here (admin) —
-  squash-merge worked for every PR even with checks mid-flight (still: confirm CI
-  green first). **Force-pushing any branch is blocked** by the auto-mode classifier.
-  After each squash-merge, **cut the next branch from fresh `origin/main`** (fetch
-  first); to reuse a merged branch you'd need a force-push, which is blocked, so a
-  fresh branch + new PR per change is the working pattern (the operator approved it).
-- Playwright browsers + remote branch deletion aren't available in the sandbox.
+  container. PGlite backs tests (`memory://`); run `npm run db:generate` after a
+  schema change. **Migrations run to 0038.**
+- **gstack DOES run here** (the binary is prebuilt; `bun` present). gstack's bundled
+  Playwright wants Chromium rev **1208** but the sandbox ships rev **1194** at
+  `/opt/pw-browsers`, and `npx playwright install` is network-blocked. Bridge it:
+  `mkdir -p /opt/pw-browsers/chromium_headless_shell-1208/chrome-headless-shell-linux64`,
+  `ln -sf /opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell
+  …/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell`,
+  `touch …/chromium_headless_shell-1208/{INSTALLATION_COMPLETE,DEPENDENCIES_VALIDATED}`,
+  then run the binary with **`CI=1`** (bumps the 8s→30s startup wait; `--no-sandbox`
+  auto-added for root). Drive: start `npm run dev`, log in `admin@local` / `swim123`,
+  `$B goto … / snapshot -i / fill / click / upload <sel> <file> / screenshot`. Note a
+  fresh daemon resets `@e` refs — `snapshot` in one step, `fill/click` in the next.
+- Merging via the GitHub MCP API **bypasses branch protection** here (admin);
+  still confirm CI green first. **Force-push is blocked** → fresh branch + new PR per
+  change; after a squash-merge, cut the next branch from fresh `origin/main` (fetch).
+- A project **pre-commit hook** (`.claude/settings.json`) injects a `/code-review`
+  reminder on `git commit` — review the staged diff before committing.
+
+## Earlier history (already on `main`)
+
+- **2026-06-13 continuation 1 (#164–#168):** Users page overhaul + bulk-add via
+  file upload; KPI auto-compute Phase 1 (`buildRunCoaches`, draft-only) pulling the
+  WORK month's Allowance run; auto-link precision rewrite + `sharesNameSignal`;
+  readable `EmployeeCombobox`; ingest push as one JSON object (`csv` field).
+  Decisions: compute is NEVER automatic on upload/push; bulk/AI names key off the
+  **Full Name**.
+- **Clock-in / Timesheet** module built end-to-end (P1–P4) — see the CLAUDE.md
+  chapter. Freelancer schedule carries no class type; reconcile matches on date only.
+- **Prod DB outage fix** (`lib/db/index.ts`): concurrent-race retry,
+  `reconcileSchema` skips "already exists"/"already gone" + `DROP COLUMN IF EXISTS`,
+  journal backfill. Idle auto-logout, in-app error log, vendored skills.
