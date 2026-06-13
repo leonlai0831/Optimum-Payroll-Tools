@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, Clock, FileText, Plus, Printer, Save, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { StaffCombobox } from "@/components/staff-combobox";
@@ -59,6 +59,7 @@ export function AllowanceCalculator({
   const [teachingRows, setTeachingRows] = useState<TeachingHoursRow[]>(
     initial?.input.teachingRows ?? [],
   );
+  const [loadMsg, setLoadMsg] = useState<string | null>(null);
   const [otherItems, setOtherItems] = useState<OtherAllowanceItem[]>(
     initial?.input.otherItems ?? [],
   );
@@ -411,9 +412,41 @@ export function AllowanceCalculator({
               ))}
             </div>
           )}
-          <Button variant="outline" className="mt-3 px-3 py-1.5 text-xs" onClick={addTeachingRow}>
-            <Plus className="h-3.5 w-3.5" /> Add center
-          </Button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={addTeachingRow}>
+              <Plus className="h-3.5 w-3.5" /> Add center
+            </Button>
+            <Button
+              variant="outline"
+              className="px-3 py-1.5 text-xs"
+              disabled={coachId == null}
+              title={coachId == null ? "Pick a coach first" : "Pull this month's approved clock-in teaching hours"}
+              onClick={async () => {
+                if (coachId == null) return;
+                setLoadMsg(null);
+                try {
+                  const res = await fetch(
+                    `/api/timesheets/aggregate?mode=allowance&coachId=${coachId}&period=${period}`,
+                  );
+                  const json = await res.json();
+                  if (!res.ok) throw new Error(json.error ?? "Failed to load");
+                  const next = json.teachingRows as TeachingHoursRow[];
+                  setTeachingRows(next);
+                  dirty();
+                  setLoadMsg(
+                    next.length
+                      ? `Loaded ${next.length} center${next.length === 1 ? "" : "s"} from approved clock-ins.`
+                      : "No approved clock-in hours for this month.",
+                  );
+                } catch (e) {
+                  setLoadMsg(e instanceof Error ? e.message : "Failed to load");
+                }
+              }}
+            >
+              <Clock className="h-3.5 w-3.5" /> Load from clock-in
+            </Button>
+          </div>
+          {loadMsg && <p className="mt-2 text-[11px] text-brand">{loadMsg}</p>}
         </Card>
 
         {/* 3. Other */}

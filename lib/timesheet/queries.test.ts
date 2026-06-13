@@ -114,4 +114,32 @@ describe("Timesheet DB layer (PGlite in-memory)", () => {
     expect(await queries.reviewTimesheets([e1.id, e2.id], "request_changes", "redo", 99)).toBe(0);
     expect((await queries.getTimesheetEntry(e1.id))!.status).toBe("approved");
   });
+
+  it("loads only APPROVED teaching hours into allowance teachingRows", async () => {
+    const e1 = await queries.createTimesheetEntry(lesson({ coachId: 41, periodLabel: "2026-11", date: "2026-11-02", classType: "low", hours: 2 }));
+    const e2 = await queries.createTimesheetEntry(lesson({ coachId: 41, periodLabel: "2026-11", date: "2026-11-03", classType: "youngSwimmer", hours: 1 }));
+    // A third entry stays submitted (unapproved) → must not count.
+    await queries.createTimesheetEntry(lesson({ coachId: 41, periodLabel: "2026-11", date: "2026-11-04", classType: "high", hours: 5 }));
+    await queries.submitTimesheetsForPeriod(41, "2026-11");
+    await queries.reviewTimesheets([e1.id, e2.id], "approve", "", 1);
+
+    expect(await queries.getApprovedTeachingRows(41, "2026-11")).toEqual([
+      { center: "PK", normalH: 2, ysH: 1, precompH: 0 },
+    ]);
+  });
+
+  it("loads approved freelancer hours reconciled against the fixed schedule", async () => {
+    // Monday PK low; June 2026 has 5 Mondays (1/8/15/22/29).
+    await queries.replaceFreelancerSchedule(42, [
+      { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", classType: "low", effectiveFrom: null, effectiveTo: null },
+    ]);
+    const e = await queries.createTimesheetEntry(lesson({ coachId: 42, periodLabel: "2026-06", date: "2026-06-08", classType: "low", hours: 2 }));
+    await queries.submitTimesheetsForPeriod(42, "2026-06");
+    await queries.reviewTimesheets([e.id], "approve", "", 1);
+
+    const { centerRows } = await queries.getApprovedFreelancerRows(42, "2026-06");
+    const pk = centerRows.find((r) => r.center === "PK")!;
+    expect(pk.fixedHours).toBe(2);
+    expect(pk.absent).toBe(true); // the other 4 scheduled Mondays were missed
+  });
 });
