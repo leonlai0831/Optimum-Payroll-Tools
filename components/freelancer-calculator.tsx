@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Link2, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Clock, Link2, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { CenterSelect } from "@/components/center-select";
 import { ConfirmModal } from "@/components/modal";
@@ -173,6 +173,7 @@ export function FreelancerCalculator({
   );
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [loadMsg, setLoadMsg] = useState<string | null>(null);
   // A duplicate-save warning awaiting the operator's confirmation (modal copy).
   const [pendingSave, setPendingSave] = useState<{
     title: string;
@@ -589,19 +590,53 @@ export function FreelancerCalculator({
             })}
           </div>
         )}
-        <Button
-          variant="outline"
-          className="mt-3 px-3 py-1.5 text-xs"
-          onClick={() => {
-            setCenterRows((r) => [
-              ...r,
-              { center: "", replacedHours: 0, fixedHours: 0, absent: false, _key: nextFlKey() },
-            ]);
-            dirty();
-          }}
-        >
-          <Plus className="h-3.5 w-3.5" /> Add center
-        </Button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="px-3 py-1.5 text-xs"
+            onClick={() => {
+              setCenterRows((r) => [
+                ...r,
+                { center: "", replacedHours: 0, fixedHours: 0, absent: false, _key: nextFlKey() },
+              ]);
+              dirty();
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add center
+          </Button>
+          <Button
+            variant="outline"
+            className="px-3 py-1.5 text-xs"
+            disabled={coachId == null}
+            title={coachId == null ? "Pick a freelancer first" : "Pull this month's approved clock-in hours"}
+            onClick={async () => {
+              if (coachId == null) return;
+              setLoadMsg(null);
+              try {
+                const res = await fetch(
+                  `/api/timesheets/aggregate?mode=freelancer&coachId=${coachId}&period=${period}`,
+                );
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.error ?? "Failed to load");
+                const rows = (
+                  json.centerRows as { center: string; replacedHours: number; fixedHours: number; absent: boolean }[]
+                ).map((r) => ({ ...r, _key: nextFlKey() }));
+                setCenterRows(rows);
+                dirty();
+                setLoadMsg(
+                  rows.length
+                    ? `Loaded ${rows.length} center${rows.length === 1 ? "" : "s"} from approved clock-ins.`
+                    : "No approved clock-in hours for this month.",
+                );
+              } catch (e) {
+                setLoadMsg(e instanceof Error ? e.message : "Failed to load");
+              }
+            }}
+          >
+            <Clock className="h-3.5 w-3.5" /> Load from clock-in
+          </Button>
+        </div>
+        {loadMsg && <p className="mt-2 text-[11px] text-brand">{loadMsg}</p>}
         <p className="mt-2 text-[11px] text-gray-400">
           Marking any center absent removes the attendance bonus (+
           {config.attendanceBonus * 100}% on fixed hours) for the whole month.

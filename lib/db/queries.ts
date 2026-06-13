@@ -109,7 +109,10 @@ import {
   type AllowanceResult,
   type AllowanceTier,
   type OtherAllowanceItem,
+  type TeachingHoursRow,
 } from "@/lib/allowance/types";
+import { aggregateTeaching } from "@/lib/timesheet/aggregate";
+import { reconcileFreelancer, type ReconcileResult } from "@/lib/timesheet/reconcile";
 import { previousPeriod } from "@/lib/allowance/period";
 import { DEFAULT_FREELANCER_CONFIG } from "@/lib/freelancer/defaults";
 import {
@@ -3361,6 +3364,51 @@ export async function replaceFreelancerSchedule(
       await tx.insert(freelancerSchedules).values(slots.map((s) => ({ ...s, coachId })));
     }
   });
+}
+
+/* --------------------- load approved clock-ins into the calculators -------------------- */
+
+/**
+ * Approved teaching (lesson) hours for a coach's month → allowance
+ * `teachingRows`, ready to seed the Staff Allowance calculator. Only `approved`
+ * entries count; `shift` and unreviewed entries are ignored.
+ */
+export async function getApprovedTeachingRows(
+  coachId: number,
+  period: string,
+): Promise<TeachingHoursRow[]> {
+  const entries = await listTimesheetsForCoach(coachId, period);
+  return aggregateTeaching(
+    entries
+      .filter((e) => e.status === "approved" && e.entryType === "lesson")
+      .map((e) => ({ center: e.center, entryType: "lesson" as const, classType: e.classType, hours: e.hours })),
+  );
+}
+
+/**
+ * Approved hours for a freelancer's month, reconciled against their fixed
+ * schedule → `FreelancerCenterRow[]` (fixed / replaced / absent) + the absence
+ * list, ready to seed the Freelancer Payment calculator. Only `approved`
+ * entries count.
+ */
+export async function getApprovedFreelancerRows(
+  coachId: number,
+  period: string,
+): Promise<ReconcileResult> {
+  const [entries, schedule] = await Promise.all([
+    listTimesheetsForCoach(coachId, period),
+    listFreelancerSchedule(coachId),
+  ]);
+  const year = Number(period.slice(0, 4));
+  const month = Number(period.slice(5, 7));
+  return reconcileFreelancer(
+    schedule.map((s) => ({ weekday: s.weekday, center: s.center, classType: s.classType })),
+    entries
+      .filter((e) => e.status === "approved")
+      .map((e) => ({ date: e.date, center: e.center, classType: e.classType, hours: e.hours })),
+    year,
+    month,
+  );
 }
 
 /**
