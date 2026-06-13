@@ -20,9 +20,41 @@ roles + a capability matrix (see "Auth"); the original shared password is long g
 > **Pending work / next session:** the active backlog (in-progress branch + the
 > operator decisions behind each item) lives in **`HANDOFF.md`**, with intent in
 > **`ROADMAP.md`**. As of 2026-06-13 that's: A) Clock-in entry redesign (branch
-> `claude/clockin-entry-redesign` — validator done), B) per-module launcher
-> notification badges, C) center-scoped approvals, D) Permissions/User-overrides
-> redesign, plus the Marketing-card visibility (owner config, no code).
+> `claude/clockin-entry-redesign` — validator done), B) notification badges on
+> launcher cards AND section-nav tabs, C) center-scoped approvals,
+> D) Permissions/User-overrides redesign, E) list-control standardization
+> (Search/Sort/Filter/select-all via a shared kit), plus the Marketing-card
+> visibility (owner config, no code).
+
+## Development SOP — per-feature loop (follow EVERY session)
+
+Standing operator instruction (2026-06-13): when working through the backlog, run
+this loop **per feature** and **do not stop until every queued task is done** — or
+until the conversation's token budget runs low (step 4). Keep the existing **one
+clean PR at a time** rule; each pass through the loop is one PR.
+
+1. **Build → review → test.** Implement ONE feature on its branch, then review and
+   test it before doing anything else: run the `/code-review` skill on the diff and
+   address its findings, plus `npm run lint`, `npm run typecheck`, `npm test`, and a
+   `npm run build` / browser QA when the change warrants. A red check means it is
+   NOT done — fix it, don't move on.
+2. **Auto-merge when clean.** Once review + tests pass **and CI is green on the
+   PR**, merge it — this is standing authorization, no need to ask per-PR. Never
+   merge a red or still-pending PR: confirm CI green first (merging here bypasses
+   branch protection, so the green check is the real gate).
+3. **Update the docs after every merge.** Refresh `HANDOFF.md` (move the item from
+   backlog → shipped, record the PR #), `ROADMAP.md` (intent / what's left),
+   `CLAUDE.md` (architecture as built), and any other doc / "memory" that drifted.
+   Docs must match `main` before the next feature starts.
+4. **Check the token budget, then continue or hand off.** If there is comfortably
+   enough conversation budget left for another full build→review→merge→docs cycle,
+   cut a fresh branch from the updated `main` and loop back to step 1 with the next
+   backlog item. If not, **stop and tell the operator to open a new conversation** —
+   leave `HANDOFF.md` current so the next session resumes cleanly.
+
+Repeat steps 1–4 until the backlog is empty or step 4 pauses for budget. Hard /
+irreversible / outward-facing actions outside this loop still get confirmed first;
+the per-PR auto-merge above is the one standing exception.
 
 ## Goal & decisions
 
