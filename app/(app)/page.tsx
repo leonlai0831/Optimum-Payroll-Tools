@@ -3,6 +3,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   ClipboardList,
+  Clock,
   Dumbbell,
   HandCoins,
   ScrollText,
@@ -92,6 +93,13 @@ const TOOLS: Tool[] = [
     subtitle: "Class planning · actual & replacement lessons",
     icon: ClipboardList,
     cap: "edit_lesson_plans",
+  },
+  {
+    href: "/timesheets",
+    title: "Clock-in",
+    subtitle: "Log teaching hours · instructors & freelancers",
+    icon: Clock,
+    cap: "submit_timesheet",
   },
   {
     title: "Admin KPI Bonus",

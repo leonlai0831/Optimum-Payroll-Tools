@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   ClipboardList,
+  Clock,
   Dumbbell,
   History,
   Home,
@@ -47,6 +48,7 @@ const NAVS: Record<
   | "commission"
   | "assessment"
   | "lesson"
+  | "timesheet"
   | "system",
   SectionConfig
 > = {
@@ -63,6 +65,18 @@ const NAVS: Record<
     items: [
       { href: "/lesson-plans", label: "New plan", icon: ClipboardList, exact: true },
       { href: "/lesson-plans/history", label: "History", icon: History },
+    ],
+  },
+  timesheet: {
+    title: "Clock-in",
+    items: [
+      { href: "/timesheets", label: "My timesheet", icon: Clock, exact: true, requires: { cap: "submit_timesheet" } },
+      {
+        href: "/timesheets/schedules",
+        label: "Schedules",
+        icon: CalendarDays,
+        requires: { cap: "manage_freelancer_schedule" },
+      },
     ],
   },
   allowance: {
