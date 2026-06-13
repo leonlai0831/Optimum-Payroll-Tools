@@ -181,6 +181,22 @@ superseded is read-only), discard (status flip, pending-only), or "Load into cal
 compute → save flow; filename shows the ingest label). Saving threads `ingestId` through
 `POST /api/runs`, which marks the ingest `imported` + links `importedRunId`.
 
+**Auto-compute → draft KPI run (pending-only, `run_kpi`).** Next to "Load into
+calculator", **"Compute KPI draft"** (`POST /api/kpi/ingests/[id]/compute`) does the
+merge + v11.1 scoring **server-side** and creates a run in one click, then jumps to its
+review screen — the server-side equivalent of load → save, without the manual step. The
+engine is the pure, Vitest-locked `buildRunCoaches` (`lib/kpi/build-run.ts`): faithful to
+the dashboard (deterministic + known-alias + best-effort AI merge; the classifier's
+`defaultInclude` picks scoring accounts; center = most-common; carry-over allowance + last
+management assessment + latest assessment %; only allowance-AND-teaching groups appear,
+ranked by finalScore). It is **always saved `status:"draft"`** — the name merge is
+payroll-critical and management assessment / supervisor group hours aren't in the CSV — so a
+manager reviews + finalizes (`finalize_kpi`) on the existing `RunReview` screen. Persists
+exactly like the dashboard save (`createRun` + `importKpiIngest`, same per-period advisory
+lock + closed-month guards); a 409 returns the existing draft's `runId` to redirect to. This
+is **Phase 1** of dropping the manual KPI Calculator — extending `RunReview` with allowance /
+supervisor-group-hours editors and an auto-trigger on upload are the next phases.
+
 ## Freelancer Payment (`lib/freelancer`, `/freelancer`)
 
 Monthly pay for freelance swim instructors, faithful to the operator's
