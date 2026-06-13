@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
+import { attentionBadges } from "@/lib/nav/badges";
 import { SectionNav } from "@/components/section-nav";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,16 @@ export default async function SystemLayout({ children }: Readonly<{ children: Re
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
   if (user.role !== "super_admin" && !caps.has("manage_users")) redirect("/");
+  const badges = await attentionBadges(user, caps);
 
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="system" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
+      <SectionNav
+        section="system"
+        caps={[...caps]}
+        isSuperAdmin={user.role === "super_admin"}
+        badges={badges}
+      />
       {children}
     </div>
   );

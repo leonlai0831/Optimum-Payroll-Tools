@@ -16,13 +16,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { CountBadge } from "@/components/count-badge";
 import { SplashWave } from "@/components/splash-wave";
 import { HeroMascot } from "@/components/hero-mascot";
 import { HubStripeBand } from "@/components/hub-stripe-band";
 import { ArrivalSlide } from "@/components/arrival-slide";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
-import { countAppErrors } from "@/lib/db/queries";
+import { attentionBadges, launcherBadgeCount } from "@/lib/nav/badges";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { TOOL_CATEGORY_LABELS, type Capability } from "@/lib/auth/types";
 import type { Brand } from "@/components/brand-shell";
@@ -155,32 +156,33 @@ function ToolCard({ tool }: { tool: Tool }) {
       )}
     >
       <div className="flex items-start justify-between">
-        <div
-          className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
-            disabled
-              ? "bg-gray-100 text-gray-400"
-              : "bg-brand-light text-brand group-hover:bg-brand group-hover:text-white",
-          )}
-        >
-          <Icon className="h-6 w-6" />
+        <div className="relative">
+          <div
+            className={cn(
+              "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
+              disabled
+                ? "bg-gray-100 text-gray-400"
+                : "bg-brand-light text-brand group-hover:bg-brand group-hover:text-white",
+            )}
+          >
+            <Icon className="h-6 w-6" />
+          </div>
+          {/* Phone-notification style: the count sits on the icon's top-right
+              corner. The section nav then shows which tab it belongs to. */}
+          {!disabled && tool.badge ? (
+            <CountBadge
+              count={tool.badge}
+              className="absolute -right-1.5 -top-1.5 shadow-card"
+              title={`${tool.badge} item${tool.badge === 1 ? "" : "s"} awaiting your attention`}
+            />
+          ) : null}
         </div>
         {disabled ? (
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-400">
             Soon
           </span>
         ) : (
-          <div className="flex items-center gap-2">
-            {tool.badge ? (
-              <span
-                className="nums inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-bold text-white"
-                title={`${tool.badge} unreviewed error${tool.badge === 1 ? "" : "s"} · open System → Errors`}
-              >
-                {tool.badge > 99 ? "99+" : tool.badge}
-              </span>
-            ) : null}
-            <ChevronRight className="h-5 w-5 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-brand" />
-          </div>
+          <ChevronRight className="h-5 w-5 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-brand" />
         )}
       </div>
       <div className="mt-3 text-base font-bold text-gray-900">{tool.title}</div>
@@ -224,23 +226,16 @@ export default async function HubPage() {
       // purely by cap/superAdmin above (e.g. hierarchy-scoped manage_users).
       (isSuperAdmin || tool.brand === "system" || visibleBrands.has(tool.brand ?? "swim")),
   );
-  // Unreviewed-error badge on the System card — only a super_admin can see (and
-  // act on) the Errors tab, so only they get the count. Clears when they hit
-  // "Clear all" on /system/errors. Best-effort: the badge is non-critical, so a
-  // failing count must never take down the launcher (ironically for the one role
-  // that triages errors).
-  let errorCount = 0;
-  if (isSuperAdmin) {
-    try {
-      errorCount = await countAppErrors();
-    } catch {
-      errorCount = 0;
-    }
-  }
-  const badgedTools =
-    errorCount > 0
-      ? tools.map((t) => (t.brand === "system" ? { ...t, badge: errorCount } : t))
-      : tools;
+  // Attention badges: each card shows the sum of its section's items awaiting
+  // THIS user (System → unreviewed errors, Clock-in → timesheets to review,
+  // Lesson Plan → plans to review); the section nav then points at the exact tab.
+  // Gated per source inside attentionBadges + best-effort, so a failing count
+  // never takes down the launcher.
+  const badges = user ? await attentionBadges(user, caps).catch(() => ({})) : {};
+  const badgedTools = tools.map((t) => {
+    const n = launcherBadgeCount(t.href, badges);
+    return n > 0 ? { ...t, badge: n } : t;
+  });
   // The user's own profile is not a category tool — it stays reachable in its
   // own group even when every brand category is hidden for the account.
   const profileTool: Tool | null =

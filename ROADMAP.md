@@ -46,14 +46,13 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   (no toggle); a lesson is a start/end session with multiple (classType, hours)
   lines whose sum ≈ span (±0.25 h) or it blocks, persisted one row per line.
   Pure parsing Vitest-locked (`parseTimesheetSession` + `sessionToEntries`).
-- **B. Notification badges — launcher cards AND section-nav tabs** (merged with the
-  operator's "drill-down" ask, 2026-06-13): one shared per-destination count helper
-  (`lib/nav/badges.ts`) + a shared `<CountBadge>` lights up BOTH the launcher card
-  icon corner AND the matching tab inside the section, so a count tells you which
-  tab to open. Sources: System → Errors (`countAppErrors`), Clock-in → Review
-  (submitted timesheets, `review_timesheet`), Lesson Plan → History (submitted
-  plans, `review_lesson_plans`). Capability-gated; super_admin = all; counts gain a
-  center filter for free once C lands. (Absorbs the old "launcher badges" item.)
+- ✅ **B. Notification badges — launcher cards AND section-nav tabs** — DONE: one
+  shared count helper (`lib/nav/badges.ts` → `attentionBadges` + `launcherBadgeCount`,
+  Vitest-locked) + a shared `<CountBadge>` light up BOTH the launcher card icon corner
+  AND the matching tab. Sources: System → Errors (`countAppErrors`), Clock-in → Review
+  (`countTimesheetsForReview`), Lesson Plan → History (`countLessonPlansForReview`).
+  Capability-gated (super_admin = all); best-effort; non-reviewers run zero queries.
+  Counts gain a center filter for free once C lands.
 - **C. Center-scoped approvals** — `users.managedCenters`; admins approve only
   their branch's requests (super_admin = all). Filter the review queues by the
   request's center.

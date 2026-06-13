@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { canSeeCategory } from "@/lib/auth/types";
+import { attentionBadges } from "@/lib/nav/badges";
 import { SectionNav } from "@/components/section-nav";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +21,16 @@ export default async function LessonPlansLayout({
   if (!canSeeCategory(user, "swim")) redirect("/");
   const caps = await getCapabilities(user);
   if (!caps.has("edit_lesson_plans") && !caps.has("review_lesson_plans")) redirect("/");
+  const badges = await attentionBadges(user, caps);
 
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="lesson" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
+      <SectionNav
+        section="lesson"
+        caps={[...caps]}
+        isSuperAdmin={user.role === "super_admin"}
+        badges={badges}
+      />
       {children}
     </div>
   );

@@ -3132,6 +3132,17 @@ export async function submitLessonPlan(id: number): Promise<void> {
     .where(eq(lessonPlans.id, id));
 }
 
+/** How many lesson plans are awaiting review (`submitted`) — drives the Lesson
+ *  Plan launcher/section badge. */
+export async function countLessonPlansForReview(): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ n: count() })
+    .from(lessonPlans)
+    .where(eq(lessonPlans.status, "submitted"));
+  return row?.n ?? 0;
+}
+
 /** Record a review outcome: approve, or send back with a note. */
 export async function reviewLessonPlan(
   id: number,
@@ -3298,6 +3309,18 @@ export async function listTimesheetsForReview(
     .leftJoin(coaches, eq(timesheets.coachId, coaches.id))
     .where(and(...conditions))
     .orderBy(asc(coaches.canonicalName), asc(timesheets.date), asc(timesheets.id));
+}
+
+/** How many timesheet entries are awaiting review (`submitted`) — drives the
+ *  Clock-in launcher/section "Review" badge. Optionally scoped to a period. */
+export async function countTimesheetsForReview(periodLabel?: string): Promise<number> {
+  const db = await getDb();
+  const conditions = [
+    eq(timesheets.status, "submitted"),
+    ...(periodLabel != null ? [eq(timesheets.periodLabel, periodLabel)] : []),
+  ];
+  const [row] = await db.select({ n: count() }).from(timesheets).where(and(...conditions));
+  return row?.n ?? 0;
 }
 
 /**
