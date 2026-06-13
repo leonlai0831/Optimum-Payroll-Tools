@@ -33,12 +33,20 @@ screen. Reuses the existing draft → review → finalize chain + the `finalize_
 capability (both already built). **No schema change.** See the new auto-compute
 paragraph in CLAUDE.md's Student Progress chapter.
 
-**Remaining KPI auto-compute phases (NOT built):** extend `RunReview` with
-**teaching-allowance + supervisor group/center-hours editors** (today it only
-edits the mgmt assessment + account merge, so supervisors and allowance-less
-coaches can't be completed there); and an **auto-trigger on upload** (today it's
-an explicit button — deliberately, to avoid surprising the API-push path + the
-duplicate-draft / ingest-lifecycle questions).
+**KPI auto-compute follow-ups — DONE (next PR, branch `claude/adoring-cori-j40av8`):**
+- Teaching allowance now comes from the WORK month's saved **Allowance run**
+  (`listAllowanceRuns(period)` → `linkAllowance` per coach, like the dashboard),
+  falling back to profile carry-over. No manual allowance editor — the operator
+  always keys allowance before KPI.
+- `RunReview` now edits **Position (Instructor / Pool Supervisor) + a supervisor's
+  group center & hours (/40)** — entered by hand because allowance + clock-in only
+  track *teaching* hours; a supervisor's actual supervision hours are longer.
+
+**Operator decision (2026-06-13): NO auto-trigger on upload/push.** A delivery is
+only STAGED; the owner reviews + edits the month's database (add/delete rows), and
+only the explicit "Compute KPI draft" (after saving) sends it to the KPI module —
+an unreviewed month must never become a run. So the earlier "auto-trigger" idea is
+**off the table by design**, not a pending phase.
 
 ## This session (2026-06-13) — shipped to `main`
 
