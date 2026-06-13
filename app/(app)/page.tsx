@@ -6,7 +6,6 @@ import {
   Clock,
   Dumbbell,
   HandCoins,
-  ScrollText,
   ShieldCheck,
   TrendingUp,
   Trophy,
@@ -117,29 +116,16 @@ const TOOLS: Tool[] = [
     brand: "fit",
   },
   {
+    // One launcher entry for the whole System Setting section — the section nav
+    // exposes Users / Audit log / Errors / Permissions as tabs. Gated on
+    // manage_users (hierarchy-scoped): a non-super-admin holder lands on the
+    // Users tab (the only one their nav shows); super_admin holds the cap
+    // implicitly and sees every tab.
     href: "/system/users",
-    title: "Users",
-    subtitle: "Accounts, roles & staff links",
+    title: "System Setting",
+    subtitle: "Users, audit log & permissions",
     icon: UserCog,
-    // Hierarchy-scoped: a manage_users holder administers only roles below
-    // their own (the other System cards stay super_admin-only).
     cap: "manage_users",
-    brand: "system",
-  },
-  {
-    href: "/system/audit",
-    title: "Audit log",
-    subtitle: "History of sensitive changes",
-    icon: ScrollText,
-    superAdmin: true,
-    brand: "system",
-  },
-  {
-    href: "/system/permissions",
-    title: "Permissions",
-    subtitle: "Role capabilities, launcher categories & user overrides",
-    icon: ShieldCheck,
-    superAdmin: true,
     brand: "system",
   },
 ];

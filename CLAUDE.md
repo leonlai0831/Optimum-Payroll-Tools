@@ -423,8 +423,12 @@ their own role, sees same-rank accounts **read-only** ("View only" rows; 403 on 
 sees higher-ranked accounts at all (lists filter them; direct API access 404s so existence doesn't
 leak). Creating and role-assignment are limited to roles below the actor's own. super_admin is
 all-access, incl. over fellow super_admins (last-active-super-admin safeguards still apply).
-`/system/users` (page, layout, section-nav tab, launcher card) is gated on `manage_users`, not
+`/system/users` (page, layout, section-nav tab) is gated on `manage_users`, not
 `super_admin` — the other System pages (Audit log, Errors, Permissions) stay super_admin-only.
+The **launcher** shows a **single "System Setting" card** (`href:/system/users`,
+`cap:manage_users`, brand `system`) for the whole section — the section nav then exposes
+Users / Audit log / Errors / Permissions as tabs (the super_admin-only ones hidden for a
+non-super-admin `manage_users` holder, who lands on Users).
 
 Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
 `swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,
