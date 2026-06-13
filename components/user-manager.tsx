@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown, Eye, EyeOff, KeyRound, Plus, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
-import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
+import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { EmployeeCombobox } from "@/components/employee-combobox";
@@ -246,7 +246,10 @@ export function UserManager({
     <div className="space-y-4">
       {/* No assignable role below the actor's own → nothing they could create. */}
       {roleOptions.length > 0 && (
-        <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
+        <div className="flex flex-wrap items-start gap-2">
+          <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
+          <BulkAddUsers roleOptions={roleOptions} />
+        </div>
       )}
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
@@ -723,5 +726,132 @@ function AddUser({
         </Button>
       </div>
     </Card>
+  );
+}
+
+/** Bulk-create accounts from pasted "email, name" lines — all one role + a
+ *  shared initial password. Existing/duplicate emails are skipped + reported. */
+function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [role, setRole] = useState<Role>(roleOptions[roleOptions.length - 1] ?? "staff");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const parsed = useMemo(
+    () =>
+      text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const comma = line.indexOf(",");
+          return {
+            email: (comma === -1 ? line : line.slice(0, comma)).trim(),
+            displayName: comma === -1 ? "" : line.slice(comma + 1).trim(),
+          };
+        })
+        .filter((r) => r.email),
+    [text],
+  );
+  const validCount = parsed.filter((r) => /.+@.+\..+/.test(r.email)).length;
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/users/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ users: parsed, role, password }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        created?: number;
+        skipped?: { email: string; reason: string }[];
+      };
+      if (!res.ok) throw new Error(json.error ?? "Bulk add failed");
+      const skipped = json.skipped ?? [];
+      toast.success(`Created ${json.created ?? 0}${skipped.length ? `, skipped ${skipped.length}` : ""}.`);
+      setText("");
+      setPassword("");
+      setOpen(false);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <UserPlus className="h-4 w-4" /> Bulk add
+      </Button>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={busy ? () => {} : () => setOpen(false)}
+      title="Bulk add users"
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={busy || validCount === 0 || password.length < 6}>
+            {busy ? <Spinner /> : <Plus className="h-4 w-4" />} Create {validCount || ""}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-gray-600">
+          One per line: <code className="rounded bg-gray-100 px-1">email, name</code> (name optional).
+          All get the role + shared initial password below; existing emails are skipped. Link them to a
+          coach afterwards with <strong>AI auto-link</strong>.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="bulk-role">Role</Label>
+            <Select id="bulk-role" className="mt-1" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              {roleOptions.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="bulk-pw">Shared initial password</Label>
+            <PasswordInput
+              id="bulk-pw"
+              className="mt-1"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="≥ 6 chars"
+            />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="bulk-text">Accounts</Label>
+          <Textarea
+            id="bulk-text"
+            className="mt-1 h-44 font-mono text-xs"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={"darren@example.com, Darren Lee\nevi@example.com, Evi Chow"}
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            {validCount} valid email{validCount === 1 ? "" : "s"} detected.
+          </p>
+        </div>
+      </div>
+    </Modal>
   );
 }
