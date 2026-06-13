@@ -419,7 +419,7 @@ role default (no SQL for the matrix). The `users` table carries both a
 **`displayName` (the everyday "Nickname")** and an admin-only **`fullName`**
 (legal name, migration 0037 — the PATCH route rejects a `fullName` change from a
 non-admin). `/system/users` has list search + **sortable columns (incl. Full
-Name)**; inline edits (Nickname / Full Name / Role / Linked Employee / Active)
+Name)**; inline edits (Nickname / Full Name / Role / Linked Workforce / Active)
 are **STAGED per row and committed together with a Save button** (no auto-save on
 blur — `components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row;
 the password reset stays an immediate one-off). It also has a searchable

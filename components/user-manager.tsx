@@ -385,7 +385,7 @@ export function UserManager({
                 <SortTh label="Role" col="role" sort={sort} onSort={toggleSort} />
                 {/* normal-case: a plain <th> inherits the thead's uppercase; the
                     SortTh columns don't (their label sits in a <button>). */}
-                <th className="px-4 py-2 text-left normal-case">Linked Employee</th>
+                <th className="px-4 py-2 text-left normal-case">Linked Workforce</th>
                 <SortTh label="Active" col="active" sort={sort} onSort={toggleSort} center />
                 <th className="px-4 py-2"></th>
               </tr>
@@ -634,7 +634,7 @@ function UserEntry({
             {roleSelect("mt-1")}
           </label>
           <label className="block sm:col-span-2">
-            <span className="text-overline text-muted">Linked employee</span>
+            <span className="text-overline text-muted">Linked Workforce</span>
             {linkSelect("mt-1")}
           </label>
         </div>
@@ -670,10 +670,13 @@ function UserEntry({
         {user.email}
         {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
       </td>
-      <td className="px-4 py-2">{nameInput("w-36 py-1 text-xs")}</td>
-      <td className="px-4 py-2">{fullNameInput("w-64 py-1 text-xs")}</td>
+      {/* Widths net out to the pre-Full-Name layout that fit: Full Name gets the
+          extra room it needed, clawed back from Nickname + Linked Workforce, so
+          the table doesn't overflow its container (the action column stays in view). */}
+      <td className="px-4 py-2">{nameInput("w-32 py-1 text-xs")}</td>
+      <td className="px-4 py-2">{fullNameInput("w-48 py-1 text-xs")}</td>
       <td className="px-4 py-2">{roleSelect("w-36 py-1 text-xs")}</td>
-      <td className="px-4 py-2">{linkSelect("w-44 py-1 text-xs")}</td>
+      <td className="px-4 py-2">{linkSelect("w-40 py-1 text-xs")}</td>
       <td className="px-4 py-2 text-center">
         <input
           type="checkbox"
@@ -847,7 +850,7 @@ function AddUser({
           </Select>
         </div>
         <div>
-          <Label htmlFor="u-coach">Linked employee</Label>
+          <Label htmlFor="u-coach">Linked Workforce</Label>
           <EmployeeCombobox
             className="mt-1"
             coaches={coaches}
