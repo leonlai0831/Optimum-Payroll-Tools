@@ -2,7 +2,7 @@
 
 /**
  * The Optimum swimmer mascot as a poseable SVG rig, drawn to match
- * `public/logo-mark.png` (blue swim cap, rounded-square yellow goggles, big
+ * `public/logo-mark.png` (smooth blue swim cap, oval yellow goggles, big
  * pupils, open smile, yellow arms). It peeks over the sign-in card's top edge
  * and reacts to the form:
  *
@@ -45,36 +45,37 @@ export function LoginMascot({
       aria-hidden
       focusable="false"
     >
-      {/* Cap — the big blue dome, with the logo's little crest bump. */}
+      {/* Cap — the big blue dome, smooth like the logo's (no crest bump). */}
       <path
         d="M 18 76 C 14 38 32 14 60 14 C 88 14 106 38 102 76 Z"
         fill="var(--color-brand)"
       />
-      <path d="M 52 15 C 54 8 66 8 68 15 Z" fill="var(--color-brand)" />
       {/* Face — warm white, emerging from under the cap. */}
       <path
         d="M 24 76 C 24 52 38 42 60 42 C 82 42 96 52 96 76 Z"
         fill="#fdf8f0"
       />
       {/* Goggle strap behind the lenses. */}
-      <rect x="16" y="50" width="88" height="7" rx="3.5" fill="var(--color-accent)" />
-      {/* Lenses: the logo's rounded-SQUARE yellow frames (not circles), white
-          glass, big brown pupils. */}
+      <rect x="16" y="50.5" width="88" height="7" rx="3.5" fill="var(--color-accent)" />
+      {/* Lenses: the logo's OVAL yellow frames — clearly wider than tall
+          (~4:3), with the bridge and strap centered on the lens midline so
+          the silhouette doesn't read top-heavy. White glass, big brown
+          pupils. */}
       <g className="mascot-eyes">
-        <rect x="28.5" y="40.5" width="27" height="27" rx="9" fill="var(--color-accent)" />
-        <rect x="64.5" y="40.5" width="27" height="27" rx="9" fill="var(--color-accent)" />
-        <rect x="52" y="50" width="16" height="6" rx="3" fill="var(--color-accent)" />
-        <rect x="33.5" y="45.5" width="17" height="17" rx="5.5" fill="#ffffff" />
-        <rect x="69.5" y="45.5" width="17" height="17" rx="5.5" fill="#ffffff" />
+        <ellipse cx="42" cy="54" rx="16" ry="12" fill="var(--color-accent)" />
+        <ellipse cx="78" cy="54" rx="16" ry="12" fill="var(--color-accent)" />
+        <rect x="52" y="51" width="16" height="6" rx="3" fill="var(--color-accent)" />
+        <ellipse cx="42" cy="54" rx="11.5" ry="7.5" fill="#ffffff" />
+        <ellipse cx="78" cy="54" rx="11.5" ry="7.5" fill="#ffffff" />
         <g
           className="mascot-pupils"
           style={{ transform: `translate(${px}px, ${py}px)` }}
         >
           <g className="mascot-blink">
-            <circle cx="42" cy="55" r="4.6" fill="#4a3325" />
-            <circle cx="78" cy="55" r="4.6" fill="#4a3325" />
-            <circle cx="43.6" cy="53.2" r="1.5" fill="#ffffff" />
-            <circle cx="79.6" cy="53.2" r="1.5" fill="#ffffff" />
+            <circle cx="42" cy="54" r="4.6" fill="#4a3325" />
+            <circle cx="78" cy="54" r="4.6" fill="#4a3325" />
+            <circle cx="43.6" cy="52.2" r="1.5" fill="#ffffff" />
+            <circle cx="79.6" cy="52.2" r="1.5" fill="#ffffff" />
           </g>
         </g>
       </g>

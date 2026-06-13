@@ -422,6 +422,31 @@ export const auditLog = pgTable("audit_log", {
 ]);
 
 /**
+ * Captured application errors (server + browser), powering `/system/errors`
+ * so production failures are visible in-app without an external service —
+ * Sentry forwarding (lib/observability.ts) stays optional on top. Server
+ * errors arrive via the observability sink / `onRequestError`; client errors
+ * via the rate-limited `POST /api/errors`. `userId` is nullable with no FK
+ * and `userEmail` snapshots the reporter, mirroring the audit log.
+ */
+export const appErrors = pgTable("app_errors", {
+  id: serial("id").primaryKey(),
+  source: text("source").$type<"server" | "client">().notNull(),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  /** Where it happened: a URL path for client errors, "METHOD path" for server ones. */
+  path: text("path"),
+  userId: integer("user_id"),
+  userEmail: text("user_email").default("").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // The /system/errors feed orders by created_at desc; the retention trim
+  // deletes by created_at too.
+  index("app_errors_created_idx").on(t.createdAt.desc()),
+]);
+
+/**
  * A finalized (locked) allowance month. One row per locked `periodLabel`; the
  * row's presence means the month is closed — saves/edits/deletes of that
  * month's allowance records are rejected until it's unlocked (row removed).
@@ -506,6 +531,7 @@ export const freelancerSchedules = pgTable("freelancer_schedules", {
 ]);
 
 export type AuditLogRecord = typeof auditLog.$inferSelect;
+export type AppErrorRecord = typeof appErrors.$inferSelect;
 export type AllowancePeriodLockRecord = typeof allowancePeriodLocks.$inferSelect;
 export type UserRecord = typeof users.$inferSelect;
 export type PermissionConfigRecord = typeof permissionConfig.$inferSelect;

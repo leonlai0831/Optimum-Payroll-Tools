@@ -47,7 +47,12 @@ export function positionGroupOf(position: FreelancerPosition): PositionGroup {
 export const RESULT_POSITIONS = ["T1", "T2", "T3", "T4", "I1"] as const satisfies
   readonly FreelancerPosition[];
 
-/** Admin positions that never earn the commitment bonus. */
+/**
+ * Admin positions that never earn the commitment bonus. CC is NOT here: the
+ * May 2026 batch shows the operator pays CC the hours-based commitment (the
+ * 0-result column, like PA/T0) — re-confirmed by the operator on 2026-06-12
+ * after a brief same-day ruling the other way; see calc.test.ts.
+ */
 export const NO_COMMITMENT_POSITIONS = ["A1", "A2", "A3"] as const satisfies
   readonly FreelancerPosition[];
 

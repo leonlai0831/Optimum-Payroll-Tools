@@ -1,10 +1,11 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-12**, second session of
-the day, session end). `main` holds PRs #136–#145 — everything from both
-2026-06-12 sessions is merged. Full suite 411 passing. Read `CLAUDE.md` for
-architecture + the frozen Settings IA rules; read `AGENTS.md` before touching
-Next.js APIs.
+Snapshot for the next session (last updated **2026-06-12**, THIRD session of
+the day). `main` holds PRs #136–#145; **PR #148 (this session) is an open
+draft** carrying everything below. Full suite 421 passing. Read `CLAUDE.md`
+for architecture + the frozen Settings IA rules; read `AGENTS.md` before
+touching Next.js APIs. `ROADMAP.md` was rewritten this session — the June
+payroll go-live plan and the open CC decision live there.
 
 ## What's on `main` now
 
@@ -62,6 +63,33 @@ Operator also reported the hub ribbon "misplaced on resize" — that turned out
 to be browser zoom (narrower effective viewport → legs re-anchor at
 `vw − 150` and thread behind the cards), confirmed not a bug.
 
+### Third 2026-06-12 session — PR #148 (open draft)
+
+All on branch `claude/keen-allen-rd0y1l`, operator-directed live during the
+session:
+
+1. **Mascot redraw**: oval goggles (16×12 frames / 11.5×7.5 glass, bridge +
+   strap + pupils centered on the lens midline) + the crest bump removed —
+   two rounds, the operator rejected the first oval pass as "egg-shaped".
+2. **CC commitment rule**: briefly added `CC` to `NO_COMMITMENT_POSITIONS`
+   on the operator's instruction, then REVERTED the same day when the May
+   tally proved the operator pays CC commitment — see the open items.
+3. **Idle auto-logout (10 min)**: `lib/auth/idle.ts` policy (unit-tested),
+   `lastSeenAt` in the session, `POST/GET /api/auth/touch` heartbeat,
+   `components/idle-logout.tsx` in the (app) layout (multi-tab-safe: asks the
+   server before logging out). Sessions from before this deploy lack
+   `lastSeenAt` → everyone re-logs-in once.
+4. **Error tracking**: `app_errors` table (migration 0033) + always-on server
+   capture (error-log sink + `onRequestError` → DB; Sentry stays optional on
+   top), browser reporter in the root layout → rate-limited proxy-exempt
+   `POST /api/errors`, super_admin `/system/errors` page with audited
+   Clear-all, 30-day opportunistic retention. See CLAUDE.md "Error tracking
+   & logs" (the sink-recursion rule matters: `recordAppError` must never log).
+5. **May tally verification** (read-only, Drive MCP + repo engine) — results
+   in the open items below; full report was at `/tmp/freelancer-tally-report.md`
+   in the session container (regenerate by re-running the check; the method
+   is described in the open items).
+
 ## Open / needs attention
 
 - **Visual QA on real devices** (everything above is in production): login
@@ -70,16 +98,35 @@ to be browser zoom (narrower effective viewport → legs re-anchor at
   along the visible segments (right margin, grid gaps). Mascot hero position
   knobs: the wrapper classes in `components/hero-mascot.tsx`
   (`bottom-6 right-6 w-12 sm:bottom-8 sm:right-10 sm:w-16`).
-- **Remember-last-email on the login page** still deliberately left out
-  (localStorage on shared devices leaks who signed in) — pending Leon's call.
-- **CC bonus semantics are an assumption**: CC gets the hours-based commitment
-  bonus and no student result (like PA/T0). The operator only specified rates
-  (RM26/42) — **confirm with Leon**; if CC should earn no bonuses at all, edit
-  `NO_COMMITMENT_POSITIONS` in `lib/freelancer/types.ts`.
+- **Remember-last-email: DECIDED — not doing it** (Leon, 2026-06-12;
+  localStorage on shared devices leaks who signed in). Instead the login got
+  stricter: **10-minute idle auto-logout** shipped (see session notes below).
+- **CC bonus semantics — RESOLVED (2026-06-12, twice).** Leon first said CC
+  earns no commitment; the May tally check then showed the operator DID pay
+  it (CHUAH SHAN YI "(PRE COM)": CC rate 42/h group B × 66h → 15% commitment
+  + 20% attendance = RM 3,515.40 + 226.80, exactly the Excel). Confronted
+  with that example, Leon ruled **May practice is correct** → CC stays OUT
+  of `NO_COMMITMENT_POSITIONS` (hours-based commitment via the 0-result
+  column, like PA/T0; no student result; attendance applies). Locked by
+  `calc.test.ts` with the May numbers — with this rule the sampled May
+  records match **22/22 at RM 0.00**. Note for imports: the summary never
+  says "CC" — CC work hides inside I1 rows via an in-file rate override, so
+  it can't be detected by position.
 - **One-time data load**: Leon still needs to run Workforce → Payees →
   "Import summary file" with `05-2026 Payment Summary.xlsx` (Drive:
-  Optimum Management/Freelancer/Freelancer Payment/Year 2026/05-2026) to seed
-  the ~180 freelancer profiles, then spot-check against the Excel.
+  Optimum Management/Freelancer/Freelancer Payment/Year 2026/05-2026/PV) to
+  seed the ~207 freelancer profiles, then spot-check against the Excel.
+- **May tally check DONE (2026-06-12, read-only, via Drive MCP)**: the repo
+  engine reproduces the operator's real May payouts **to the cent** — summary
+  internally consistent (5 entity sections sum to their TOTALs, grand total
+  RM 245,759.30 across 208 source workbooks / 207 people), and a 21-person /
+  22-record sample covering every position, both center groups, both APRIL
+  late submissions, absences, extras and the multi-file merge matched at
+  delta RM 0.00 on every per-entity amount (22/22 with the final CC rule —
+  the one transient mismatch was the same-day CC experiment, since
+  reverted). Rate table + commitment matrix embedded in the workbooks are
+  identical to `lib/freelancer/defaults.ts`. The system is numerically ready
+  for the June parallel run.
 - **External developer** (`optimummarketing`, write collaborator) builds on
   branch `claude/staff-income-report`; his KPI push integration is live and
   its API contract must stay stable (locked by `app/api/ingest/kpi` tests).

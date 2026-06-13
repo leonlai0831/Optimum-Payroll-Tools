@@ -239,6 +239,13 @@
       "when": 1781335951131,
       "tag": "0033_sad_barracuda",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1781339049552,
+      "tag": "0034_thick_maginty",
+      "breakpoints": true
     }
   ]
 }
