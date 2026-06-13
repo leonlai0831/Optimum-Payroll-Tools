@@ -2707,7 +2707,14 @@ export async function deleteUser(id: number): Promise<void> {
  * brand-new capability can't have been intentionally revoked. Extend when adding
  * default-granted capabilities that must reach existing deployments.
  */
-const BACKFILL_CAPS: Capability[] = ["finalize_kpi", "edit_lesson_plans", "review_lesson_plans"];
+const BACKFILL_CAPS: Capability[] = [
+  "finalize_kpi",
+  "edit_lesson_plans",
+  "review_lesson_plans",
+  "submit_timesheet",
+  "review_timesheet",
+  "manage_freelancer_schedule",
+];
 
 /**
  * Migrate-on-read for the stored permission matrix (the same trick as the

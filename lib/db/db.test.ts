@@ -397,7 +397,30 @@ describe("DB layer (PGlite in-memory)", () => {
       expect.arrayContaining(["swim_view_staff", "fit_view_staff", "swim_view_settings", "fit_view_settings"]),
     );
     expect(DEFAULT_PERMISSION_CONFIG.capabilities.supervisor).not.toContain("swim_edit_staff");
-    expect(DEFAULT_PERMISSION_CONFIG.capabilities.staff).toEqual(["view_own", "edit_lesson_plans"]);
+    expect(DEFAULT_PERMISSION_CONFIG.capabilities.staff).toEqual([
+      "view_own",
+      "edit_lesson_plans",
+      "submit_timesheet",
+    ]);
+  });
+
+  it("backfills the timesheet capabilities onto stored matrices per role defaults", () => {
+    const normalized = queries.normalizePermissionConfig({
+      admin: ["run_kpi"],
+      supervisor: ["run_kpi"],
+      staff: ["view_own"],
+    });
+    // submit_timesheet → staff + supervisor + admin; review_timesheet &
+    // manage_freelancer_schedule → supervisor + admin only.
+    for (const role of ["admin", "supervisor", "staff"] as const) {
+      expect(normalized.capabilities[role]).toContain("submit_timesheet");
+    }
+    for (const role of ["admin", "supervisor"] as const) {
+      expect(normalized.capabilities[role]).toContain("review_timesheet");
+      expect(normalized.capabilities[role]).toContain("manage_freelancer_schedule");
+    }
+    expect(normalized.capabilities.staff).not.toContain("review_timesheet");
+    expect(normalized.capabilities.staff).not.toContain("manage_freelancer_schedule");
   });
 
   it("lists distinct CSV account names across runs, sorted and trimmed", async () => {

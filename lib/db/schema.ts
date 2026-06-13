@@ -40,6 +40,7 @@ import type {
   FreelancerInput,
   FreelancerResult,
 } from "@/lib/freelancer/types";
+import type { SlotType, TimesheetClassType, TimesheetEntryType } from "@/lib/timesheet/types";
 
 /** Singleton active configuration (one row, id = 1). */
 export const config = pgTable("config", {
@@ -432,6 +433,78 @@ export const allowancePeriodLocks = pgTable("allowance_period_locks", {
   lockedAt: timestamp("locked_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * One clock-in (timesheet) entry. Two modes by role: `lesson` (instructor — a
+ * class of a given type + duration) and `shift` (front-desk freelancer — a
+ * start–end span, no class type). Approved entries feed payroll: instructor
+ * lesson hours → allowance teachingRows; freelancer hours → the freelancer
+ * engine after schedule reconciliation (fixed / replaced / absence).
+ * `slotType` is normally DERIVED for freelancers (null here) and may be set as
+ * an admin override. Reconciliation + aggregation live in lib/timesheet
+ * (unit-locked). Review workflow mirrors lesson plans; rows are never hard-deleted.
+ */
+export const timesheets = pgTable("timesheets", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coach_id").notNull(),
+  /** Work month "YYYY-MM" the entry belongs to. */
+  periodLabel: text("period_label").notNull(),
+  /** Work date "YYYY-MM-DD". */
+  date: text("date").notNull(),
+  center: text("center").notNull(),
+  entryType: text("entry_type").$type<TimesheetEntryType>().notNull(),
+  /** Class type for `lesson` entries; null for `shift`. */
+  classType: text("class_type").$type<TimesheetClassType>(),
+  /** Shift start/end "HH:MM" (front-desk `shift` entries); null for lessons. */
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  /** Billable hours — the single source for aggregation. */
+  hours: real("hours").notNull(),
+  /** Admin override of the schedule-derived fixed/replaced split; null = derive. */
+  slotType: text("slot_type").$type<SlotType>(),
+  // Review workflow (mirrors lesson plans). No CHECK constraint, so widening the
+  // union later is a types-only change.
+  status: text("status")
+    .$type<"draft" | "submitted" | "approved" | "changes_requested">()
+    .default("draft")
+    .notNull(),
+  reviewNote: text("review_note").default("").notNull(),
+  reviewedBy: integer("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  // Calculator load + review queue filter by coach/month and by status.
+  index("timesheets_coach_period_idx").on(t.coachId, t.periodLabel),
+  index("timesheets_status_idx").on(t.status),
+]);
+
+/**
+ * A freelancer's fixed weekly schedule — the validator that classifies their
+ * clock-ins into fixed (on-schedule) vs replaced (off-schedule) and surfaces
+ * absences (a scheduled slot with no clock-in), auto-deriving the
+ * attendance-bonus forfeit. Recurring by weekday; `classType` is null for
+ * front-desk shifts. Matching uses weekday + center + classType (not the
+ * times). Maintained by `manage_freelancer_schedule` holders; freelancer-only.
+ */
+export const freelancerSchedules = pgTable("freelancer_schedules", {
+  id: serial("id").primaryKey(),
+  coachId: integer("coach_id").notNull(),
+  weekday: integer("weekday").notNull(), // 0 = Sunday … 6 = Saturday
+  startTime: text("start_time").default("").notNull(),
+  endTime: text("end_time").default("").notNull(),
+  center: text("center").notNull(),
+  /** Class type for teaching freelancers; null for front-desk shifts. */
+  classType: text("class_type").$type<TimesheetClassType>(),
+  /** Effective window "YYYY-MM-DD"; null = open-ended. */
+  effectiveFrom: text("effective_from"),
+  effectiveTo: text("effective_to"),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index("freelancer_schedules_coach_idx").on(t.coachId),
+]);
+
 export type AuditLogRecord = typeof auditLog.$inferSelect;
 export type AllowancePeriodLockRecord = typeof allowancePeriodLocks.$inferSelect;
 export type UserRecord = typeof users.$inferSelect;
@@ -453,3 +526,5 @@ export type TeachingRunRecord = typeof teachingRuns.$inferSelect;
 export type GymStaffRecord = typeof gymStaff.$inferSelect;
 export type GymNoteRecord = typeof gymNotes.$inferSelect;
 export type LessonPlanRecord = typeof lessonPlans.$inferSelect;
+export type TimesheetRecord = typeof timesheets.$inferSelect;
+export type FreelancerScheduleRecord = typeof freelancerSchedules.$inferSelect;
