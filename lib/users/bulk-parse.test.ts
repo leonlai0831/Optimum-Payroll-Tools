@@ -8,8 +8,8 @@ describe("rowsFromGrid", () => {
       ["evi@example.com", "Evi Chow"],
     ]);
     expect(rows).toEqual([
-      { email: "darren@example.com", displayName: "Darren Lee" },
-      { email: "evi@example.com", displayName: "Evi Chow" },
+      { email: "darren@example.com", name: "Darren Lee" },
+      { email: "evi@example.com", name: "Evi Chow" },
     ]);
   });
 
@@ -20,17 +20,17 @@ describe("rowsFromGrid", () => {
       ["Evi Chow", "evi@example.com", ""],
     ]);
     expect(rows).toEqual([
-      { email: "darren@example.com", displayName: "Darren Lee" },
-      { email: "evi@example.com", displayName: "Evi Chow" },
+      { email: "darren@example.com", name: "Darren Lee" },
+      { email: "evi@example.com", name: "Evi Chow" },
     ]);
   });
 
-  it("prefers a display name / nickname column over a plain name", () => {
+  it("prefers a full-name column over a nickname", () => {
     const rows = rowsFromGrid([
-      ["Email", "Full Name", "Nickname"],
-      ["a@b.com", "Alexander Tan", "Alex"],
+      ["Email", "Nickname", "Full Name"],
+      ["a@b.com", "Alex", "Alexander Tan"],
     ]);
-    expect(rows).toEqual([{ email: "a@b.com", displayName: "Alex" }]);
+    expect(rows).toEqual([{ email: "a@b.com", name: "Alexander Tan" }]);
   });
 
   it("trims whitespace and skips blank rows", () => {
@@ -41,8 +41,8 @@ describe("rowsFromGrid", () => {
       ["ben@example.com"],
     ]);
     expect(rows).toEqual([
-      { email: "amy@example.com", displayName: "Amy" },
-      { email: "ben@example.com", displayName: "" },
+      { email: "amy@example.com", name: "Amy" },
+      { email: "ben@example.com", name: "" },
     ]);
   });
 
@@ -52,7 +52,7 @@ describe("rowsFromGrid", () => {
       ["", "No Email"],
       ["c@d.com", "Cara"],
     ]);
-    expect(rows).toEqual([{ email: "c@d.com", displayName: "Cara" }]);
+    expect(rows).toEqual([{ email: "c@d.com", name: "Cara" }]);
   });
 
   it("does not treat a data email as a header", () => {
@@ -64,7 +64,7 @@ describe("rowsFromGrid", () => {
 
   it("coerces numeric cells to text", () => {
     const rows = rowsFromGrid([["Email", "Name"], ["x@y.com", 12345 as unknown as string]]);
-    expect(rows).toEqual([{ email: "x@y.com", displayName: "12345" }]);
+    expect(rows).toEqual([{ email: "x@y.com", name: "12345" }]);
   });
 
   it("returns nothing for an empty grid", () => {
@@ -76,9 +76,9 @@ describe("rowsFromGrid", () => {
 describe("countValid", () => {
   it("counts only well-formed emails", () => {
     const n = countValid([
-      { email: "ok@example.com", displayName: "" },
-      { email: "not-an-email", displayName: "" },
-      { email: "also.ok@sub.domain.io", displayName: "" },
+      { email: "ok@example.com", name: "" },
+      { email: "not-an-email", name: "" },
+      { email: "also.ok@sub.domain.io", name: "" },
     ]);
     expect(n).toBe(2);
   });

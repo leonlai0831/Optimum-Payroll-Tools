@@ -2643,6 +2643,8 @@ export async function createUser(input: {
   password: string;
   role: Role;
   displayName?: string;
+  /** Legal/full name (admin-only field). Empty by default. */
+  fullName?: string;
   coachId?: number | null;
   gymStaffId?: number | null;
   /** Explicit launcher-category override; omitted/null = inherit role default. */
@@ -2658,6 +2660,7 @@ export async function createUser(input: {
     .values({
       email,
       displayName: input.displayName?.trim() ?? "",
+      fullName: input.fullName?.trim() ?? "",
       passwordHash: hashPassword(input.password),
       role: input.role,
       coachId: input.coachId ?? null,
