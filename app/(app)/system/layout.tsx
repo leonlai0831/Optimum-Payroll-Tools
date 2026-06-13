@@ -20,7 +20,7 @@ export default async function SystemLayout({ children }: Readonly<{ children: Re
 
   return (
     <div className="fade-in space-y-4">
-      <SectionNav section="system" caps={[...caps]} isSuperAdmin />
+      <SectionNav section="system" caps={[...caps]} isSuperAdmin={user.role === "super_admin"} />
       {children}
     </div>
   );

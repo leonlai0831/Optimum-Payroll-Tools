@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as {
-    users?: { email?: string; displayName?: string }[];
+    users?: { email?: string; name?: string }[];
     role?: string;
     password?: string;
   };
@@ -54,7 +54,8 @@ export async function POST(req: Request) {
     }
     seen.add(key);
     try {
-      await createUser({ email, password, role, displayName: r.displayName });
+      // The uploaded name is the person's full/legal name → Full Name field.
+      await createUser({ email, password, role, fullName: r.name });
       created.push(email);
     } catch (e) {
       skipped.push({ email, reason: e instanceof Error ? e.message : "failed" });

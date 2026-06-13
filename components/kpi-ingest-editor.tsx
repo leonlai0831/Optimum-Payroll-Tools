@@ -13,6 +13,7 @@ import {
   Search,
   Trash2,
   TriangleAlert,
+  Wand2,
 } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
 import { ConfirmModal } from "@/components/modal";
@@ -222,7 +223,7 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
 
   const [query, setQuery] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [busy, setBusy] = useState<"save" | "load" | "discard" | null>(null);
+  const [busy, setBusy] = useState<"save" | "load" | "compute" | "discard" | null>(null);
   // Discard awaits confirmation in the accessible ConfirmModal (not window.confirm).
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
@@ -337,6 +338,38 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
       // Persist pending edits first so the calculator scores exactly these rows.
       if (dirty && !(await saveRows())) return;
       router.push(`/kpi?ingest=${ingest.id}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Auto-compute a draft KPI run from this delivery (server-side merge + scoring)
+   * and jump straight to its review screen — the one-click alternative to loading
+   * it into the calculator and saving by hand. A 409 with a `runId` means a draft
+   * already exists for the month, so we route there instead of erroring out.
+   */
+  async function onCompute() {
+    setBusy("compute");
+    try {
+      // Score exactly the rows on screen — persist any pending edits first.
+      if (dirty && !(await saveRows())) return;
+      const res = await fetch(`/api/kpi/ingests/${ingest.id}/compute`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        runId?: number;
+      };
+      if (!res.ok) {
+        if (body.runId != null) {
+          toast.info(body.error || "A draft already exists — opening it.");
+          router.push(`/kpi/history/${body.runId}`);
+          return;
+        }
+        toast.error(body.error || "Could not compute the draft run.");
+        return;
+      }
+      toast.success("Draft KPI run computed — review the management scores.");
+      router.push(`/kpi/history/${body.runId}`);
     } finally {
       setBusy(null);
     }
@@ -520,7 +553,10 @@ export function KpiIngestEditor({ ingest }: { ingest: IngestDetail }) {
               </Button>
               {pending && (
                 <>
-                  <Button onClick={onLoad} disabled={busy !== null}>
+                  <Button onClick={onCompute} disabled={busy !== null}>
+                    {busy === "compute" ? <Spinner /> : <Wand2 className="h-4 w-4" />} Compute KPI draft
+                  </Button>
+                  <Button variant="outline" onClick={onLoad} disabled={busy !== null}>
                     {busy === "load" ? <Spinner /> : <Calculator className="h-4 w-4" />} Load into calculator
                   </Button>
                   <Button variant="danger" onClick={() => setConfirmDiscard(true)} disabled={busy !== null}>

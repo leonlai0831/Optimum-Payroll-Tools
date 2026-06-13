@@ -181,6 +181,22 @@ superseded is read-only), discard (status flip, pending-only), or "Load into cal
 compute → save flow; filename shows the ingest label). Saving threads `ingestId` through
 `POST /api/runs`, which marks the ingest `imported` + links `importedRunId`.
 
+**Auto-compute → draft KPI run (pending-only, `run_kpi`).** Next to "Load into
+calculator", **"Compute KPI draft"** (`POST /api/kpi/ingests/[id]/compute`) does the
+merge + v11.1 scoring **server-side** and creates a run in one click, then jumps to its
+review screen — the server-side equivalent of load → save, without the manual step. The
+engine is the pure, Vitest-locked `buildRunCoaches` (`lib/kpi/build-run.ts`): faithful to
+the dashboard (deterministic + known-alias + best-effort AI merge; the classifier's
+`defaultInclude` picks scoring accounts; center = most-common; carry-over allowance + last
+management assessment + latest assessment %; only allowance-AND-teaching groups appear,
+ranked by finalScore). It is **always saved `status:"draft"`** — the name merge is
+payroll-critical and management assessment / supervisor group hours aren't in the CSV — so a
+manager reviews + finalizes (`finalize_kpi`) on the existing `RunReview` screen. Persists
+exactly like the dashboard save (`createRun` + `importKpiIngest`, same per-period advisory
+lock + closed-month guards); a 409 returns the existing draft's `runId` to redirect to. This
+is **Phase 1** of dropping the manual KPI Calculator — extending `RunReview` with allowance /
+supervisor-group-hours editors and an auto-trigger on upload are the next phases.
+
 ## Freelancer Payment (`lib/freelancer`, `/freelancer`)
 
 Monthly pay for freelance swim instructors, faithful to the operator's
@@ -402,12 +418,20 @@ gates everything else. Clock-in adds three capabilities — `submit_timesheet`
 role default (no SQL for the matrix). The `users` table carries both a
 **`displayName` (the everyday "Nickname")** and an admin-only **`fullName`**
 (legal name, migration 0037 — the PATCH route rejects a `fullName` change from a
-non-admin). `/system/users` has list search + sortable columns, a searchable
+non-admin). `/system/users` has list search + **sortable columns (incl. Full
+Name)**; inline edits (Nickname / Full Name / Role / Linked Workforce / Active)
+are **STAGED per row and committed together with a Save button** (no auto-save on
+blur — `components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row;
+the password reset stays an immediate one-off). It also has a searchable
 linked-employee picker (`components/employee-combobox.tsx`), **AI auto-link**
 (`POST /api/users/auto-link` → deterministic `getCleanName` unique match + a
 Claude pass, `lib/users/autolink.ts` + `matchUsersToCoaches`; reversible,
-audited), and **bulk add** (`POST /api/users/bulk` — paste `email,name` lines,
-one role + shared initial password, dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
+audited), and **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
+file**: an `email` column + an optional `full name` (→ the **Full Name** field,
+not the Nickname), parsed client-side into rows by the Vitest-locked
+`lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy ExcelJS, flexible
+header detection or headerless `email,name`; one role + shared initial password,
+dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
 same permissions matrix: each role has **default categories**, and the page's "User overrides"
 tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
 `getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
@@ -420,8 +444,12 @@ their own role, sees same-rank accounts **read-only** ("View only" rows; 403 on 
 sees higher-ranked accounts at all (lists filter them; direct API access 404s so existence doesn't
 leak). Creating and role-assignment are limited to roles below the actor's own. super_admin is
 all-access, incl. over fellow super_admins (last-active-super-admin safeguards still apply).
-`/system/users` (page, layout, section-nav tab, launcher card) is gated on `manage_users`, not
+`/system/users` (page, layout, section-nav tab) is gated on `manage_users`, not
 `super_admin` — the other System pages (Audit log, Errors, Permissions) stay super_admin-only.
+The **launcher** shows a **single "System Setting" card** (`href:/system/users`,
+`cap:manage_users`, brand `system`) for the whole section — the section nav then exposes
+Users / Audit log / Errors / Permissions as tabs (the super_admin-only ones hidden for a
+non-super-admin `manage_users` holder, who lands on Users).
 
 Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
 `swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,

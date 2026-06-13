@@ -1,17 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, Eye, EyeOff, KeyRound, Plus, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
-import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { ArrowUpDown, Download, Eye, EyeOff, FileUp, KeyRound, Plus, Save, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
+import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { EmployeeCombobox } from "@/components/employee-combobox";
 import { useToast } from "@/components/toast";
 import { ROLE_LABELS, ROLES, canManageUserRole, type Role } from "@/lib/auth/types";
+import { countValid, rowsFromGrid, type ParsedUserRow } from "@/lib/users/bulk-parse";
 import { cn } from "@/lib/utils";
 
-type SortCol = "email" | "displayName" | "role" | "active";
+type SortCol = "email" | "displayName" | "fullName" | "role" | "active";
+
+/** The inline-editable fields of a user row — staged as drafts, saved on demand. */
+type DraftFields = {
+  displayName: string;
+  fullName: string;
+  role: Role;
+  coachId: number | null;
+  gymStaffId: number | null;
+  active: boolean;
+};
 
 export interface SafeUser {
   id: number;
@@ -130,9 +141,10 @@ export function UserManager({
   // component — the page filters them out server-side.
   const roleOptions = ROLES.filter((r) => canManageUserRole(actorRole, r));
   const [busyIds, setBusyIds] = useState<ReadonlySet<number>>(new Set());
-  // Nickname (display-name) + full-name drafts keyed by user id; saved on blur.
-  const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
-  const [fullNameDrafts, setFullNameDrafts] = useState<Record<number, string>>({});
+  // Every inline edit is STAGED per user id and committed together with the
+  // Save button — nothing auto-saves on blur/change.
+  const [drafts, setDrafts] = useState<Record<number, Partial<DraftFields>>>({});
+  const [saving, setSaving] = useState(false);
   // Full (legal) name is admin-only to edit (the API enforces it too).
   const canEditFullName = actorRole === "admin" || actorRole === "super_admin";
   const [deleteTarget, setDeleteTarget] = useState<SafeUser | null>(null);
@@ -188,6 +200,7 @@ export function UserManager({
     });
   }
 
+  /** One-off immediate PATCH for non-staged actions (the password reset). */
   async function patchUser(id: number, body: Record<string, unknown>): Promise<boolean> {
     setBusy(id, true);
     try {
@@ -208,6 +221,81 @@ export function UserManager({
     } finally {
       setBusy(id, false);
     }
+  }
+
+  /** Effective value of each editable field = staged draft over the stored value. */
+  function effective(u: SafeUser): DraftFields {
+    const d = drafts[u.id] ?? {};
+    return {
+      displayName: "displayName" in d ? d.displayName! : u.displayName,
+      fullName: "fullName" in d ? d.fullName! : u.fullName,
+      role: "role" in d ? d.role! : u.role,
+      coachId: "coachId" in d ? d.coachId! : u.coachId,
+      gymStaffId: "gymStaffId" in d ? d.gymStaffId! : u.gymStaffId,
+      active: "active" in d ? d.active! : u.active,
+    };
+  }
+  function setField(id: number, patch: Partial<DraftFields>) {
+    setDrafts((m) => ({ ...m, [id]: { ...m[id], ...patch } }));
+  }
+  /** The fields that differ from the stored row (the PATCH body), or null if clean. */
+  function changedFields(u: SafeUser): Partial<DraftFields> | null {
+    const e = effective(u);
+    const out: Partial<DraftFields> = {};
+    if (e.displayName.trim() !== u.displayName.trim()) out.displayName = e.displayName.trim();
+    if (e.fullName.trim() !== u.fullName.trim()) out.fullName = e.fullName.trim();
+    if (e.role !== u.role) out.role = e.role;
+    if (e.coachId !== u.coachId || e.gymStaffId !== u.gymStaffId) {
+      out.coachId = e.coachId;
+      out.gymStaffId = e.gymStaffId;
+    }
+    if (e.active !== u.active) out.active = e.active;
+    return Object.keys(out).length > 0 ? out : null;
+  }
+
+  // All rows with unsaved edits (recomputed each render — cheap for this list).
+  const dirty = users
+    .map((u) => ({ u, patch: changedFields(u) }))
+    .filter((x): x is { u: SafeUser; patch: Partial<DraftFields> } => x.patch != null);
+
+  /** Commit every staged row — one PATCH each; keep failures so they can be fixed. */
+  async function saveAll() {
+    if (dirty.length === 0 || saving) return;
+    setSaving(true);
+    const savedIds: number[] = [];
+    const failures: string[] = [];
+    for (const { u, patch } of dirty) {
+      try {
+        const res = await fetch(`/api/users/${u.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) {
+          const d = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(d.error || "Update failed");
+        }
+        savedIds.push(u.id);
+      } catch (e) {
+        failures.push(`${u.email}: ${e instanceof Error ? e.message : "failed"}`);
+      }
+    }
+    if (savedIds.length > 0) {
+      setDrafts((m) => {
+        const next = { ...m };
+        for (const id of savedIds) delete next[id];
+        return next;
+      });
+    }
+    setSaving(false);
+    if (failures.length > 0) {
+      toast.error(
+        `Saved ${savedIds.length}, ${failures.length} failed — ${failures[0]}${failures.length > 1 ? " …" : ""}`,
+      );
+    } else {
+      toast.success(`Saved ${savedIds.length} change${savedIds.length === 1 ? "" : "s"}.`);
+    }
+    if (savedIds.length > 0) router.refresh();
   }
 
   async function removeUser(user: SafeUser) {
@@ -235,19 +323,13 @@ export function UserManager({
     // Same-rank accounts (incl. the actor's own) are view-only; only rows
     // ranked strictly below the actor are editable (super_admin edits all).
     readOnly: !canManageUserRole(actorRole, u.role),
-    busy: busyIds.has(u.id),
-    name: nameDrafts[u.id] ?? u.displayName,
-    onNameChange: (v: string) => setNameDrafts((m) => ({ ...m, [u.id]: v })),
-    onNameBlur: (v: string) => {
-      if (v.trim() !== u.displayName.trim()) void patchUser(u.id, { displayName: v.trim() });
-    },
-    fullName: fullNameDrafts[u.id] ?? u.fullName,
+    busy: busyIds.has(u.id) || saving,
     canEditFullName,
-    onFullNameChange: (v: string) => setFullNameDrafts((m) => ({ ...m, [u.id]: v })),
-    onFullNameBlur: (v: string) => {
-      if (v.trim() !== u.fullName.trim()) void patchUser(u.id, { fullName: v.trim() });
-    },
-    onPatch: (body: Record<string, unknown>) => void patchUser(u.id, body),
+    // Effective (draft-over-stored) values + a single staging callback; rows
+    // never PATCH on their own — the Save button commits them.
+    values: effective(u),
+    isDirty: changedFields(u) != null,
+    onField: (patch: Partial<DraftFields>) => setField(u.id, patch),
     onResetPassword: () => setPwTarget(u),
     onDelete: () => setDeleteTarget(u),
   });
@@ -299,9 +381,11 @@ export function UserManager({
               <tr>
                 <SortTh label="Email" col="email" sort={sort} onSort={toggleSort} />
                 <SortTh label="Nickname" col="displayName" sort={sort} onSort={toggleSort} />
-                <th className="px-4 py-2 text-left">Full name</th>
+                <SortTh label="Full Name" col="fullName" sort={sort} onSort={toggleSort} />
                 <SortTh label="Role" col="role" sort={sort} onSort={toggleSort} />
-                <th className="px-4 py-2 text-left">Linked employee</th>
+                {/* normal-case: a plain <th> inherits the thead's uppercase; the
+                    SortTh columns don't (their label sits in a <button>). */}
+                <th className="px-4 py-2 text-left normal-case">Linked Workforce</th>
                 <SortTh label="Active" col="active" sort={sort} onSort={toggleSort} center />
                 <th className="px-4 py-2"></th>
               </tr>
@@ -314,6 +398,27 @@ export function UserManager({
           </table>
         </DesktopTable>
       </Card>
+
+      {/* Staged-edit Save bar — appears only with unsaved changes. Inline edits
+          never auto-save; this commits them all (one PATCH per row). */}
+      {dirty.length > 0 && (
+        <div className="sticky bottom-2 z-30">
+          <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 shadow-lg">
+            <span className="nums text-xs font-medium text-amber-700">
+              {dirty.length} unsaved {dirty.length === 1 ? "change" : "changes"}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDrafts({})} disabled={saving}>
+                Discard
+              </Button>
+              <Button size="sm" onClick={saveAll} disabled={saving}>
+                {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save {dirty.length}{" "}
+                change{dirty.length === 1 ? "" : "s"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {pwTarget && (
         <ResetPasswordModal
@@ -407,14 +512,10 @@ function UserEntry({
   isSelf,
   readOnly,
   busy,
-  name,
-  onNameChange,
-  onNameBlur,
-  fullName,
+  values,
+  isDirty,
   canEditFullName,
-  onFullNameChange,
-  onFullNameBlur,
-  onPatch,
+  onField,
   onResetPassword,
   onDelete,
 }: {
@@ -427,24 +528,23 @@ function UserEntry({
   /** Same-rank account: render every field disabled, no actions (API enforces too). */
   readOnly: boolean;
   busy: boolean;
-  name: string;
-  onNameChange: (value: string) => void;
-  onNameBlur: (value: string) => void;
-  fullName: string;
+  /** Effective (draft-over-stored) field values shown in the inputs. */
+  values: DraftFields;
+  /** This row has unsaved staged edits (subtle highlight). */
+  isDirty: boolean;
   /** Full (legal) name is admin-only — non-admins see it read-only. */
   canEditFullName: boolean;
-  onFullNameChange: (value: string) => void;
-  onFullNameBlur: (value: string) => void;
-  onPatch: (body: Record<string, unknown>) => void;
+  /** Stage a field change (no network until Save). */
+  onField: (patch: Partial<DraftFields>) => void;
   onResetPassword: () => void;
   onDelete: () => void;
 }) {
   const roleSelect = (className: string) => (
     <Select
       className={className}
-      value={user.role}
+      value={values.role}
       disabled={busy || readOnly}
-      onChange={(e) => onPatch({ role: e.target.value })}
+      onChange={(e) => onField({ role: e.target.value as Role })}
     >
       {roleOptions.map((r) => (
         <option key={r} value={r}>
@@ -452,8 +552,8 @@ function UserEntry({
         </option>
       ))}
       {/* A read-only row's role sits at the actor's own rank, outside roleOptions. */}
-      {!roleOptions.includes(user.role) && (
-        <option value={user.role}>{ROLE_LABELS[user.role]}</option>
+      {!roleOptions.includes(values.role) && (
+        <option value={values.role}>{ROLE_LABELS[values.role]}</option>
       )}
     </Select>
   );
@@ -462,19 +562,18 @@ function UserEntry({
       className={className}
       coaches={coaches}
       gymStaff={gymStaff}
-      value={linkToken(user)}
+      value={linkToken({ coachId: values.coachId, gymStaffId: values.gymStaffId })}
       disabled={busy || readOnly}
-      onChange={(token) => onPatch(parseLinkToken(token))}
+      onChange={(token) => onField(parseLinkToken(token))}
     />
   );
   const nameInput = (className: string) => (
     <Input
       className={className}
-      value={name}
+      value={values.displayName}
       disabled={busy || readOnly}
       placeholder="—"
-      onChange={(e) => onNameChange(e.target.value)}
-      onBlur={() => onNameBlur(name)}
+      onChange={(e) => onField({ displayName: e.target.value })}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
@@ -483,12 +582,11 @@ function UserEntry({
   const fullNameInput = (className: string) => (
     <Input
       className={className}
-      value={fullName}
+      value={values.fullName}
       disabled={busy || readOnly || !canEditFullName}
       placeholder={canEditFullName ? "Full name" : "—"}
       title={canEditFullName ? undefined : "Only an admin can edit the full name"}
-      onChange={(e) => onFullNameChange(e.target.value)}
-      onBlur={() => onFullNameBlur(fullName)}
+      onChange={(e) => onField({ fullName: e.target.value })}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
@@ -502,7 +600,7 @@ function UserEntry({
 
   if (layout === "card") {
     return (
-      <div className={cn("p-4", busy && "opacity-60")}>
+      <div className={cn("p-4", busy && "opacity-60", isDirty && "bg-indigo-50/40")}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 truncate font-medium text-gray-800">
             {user.email}
@@ -515,9 +613,9 @@ function UserEntry({
               <input
                 type="checkbox"
                 className="h-5 w-5 accent-indigo-600"
-                checked={user.active}
+                checked={values.active}
                 disabled={busy || readOnly}
-                onChange={(e) => onPatch({ active: e.target.checked })}
+                onChange={(e) => onField({ active: e.target.checked })}
               />
             </label>
           </div>
@@ -536,7 +634,7 @@ function UserEntry({
             {roleSelect("mt-1")}
           </label>
           <label className="block sm:col-span-2">
-            <span className="text-overline text-muted">Linked employee</span>
+            <span className="text-overline text-muted">Linked Workforce</span>
             {linkSelect("mt-1")}
           </label>
         </div>
@@ -567,23 +665,26 @@ function UserEntry({
   }
 
   return (
-    <tr className={busy ? "opacity-60" : undefined}>
+    <tr className={cn(busy && "opacity-60", isDirty && "bg-indigo-50/40")}>
       <td className="px-4 py-2 font-medium text-gray-800">
         {user.email}
         {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
       </td>
-      <td className="px-4 py-2">{nameInput("w-36 py-1 text-xs")}</td>
-      <td className="px-4 py-2">{fullNameInput("w-40 py-1 text-xs")}</td>
+      {/* Widths net out to the pre-Full-Name layout that fit: Full Name gets the
+          extra room it needed, clawed back from Nickname + Linked Workforce, so
+          the table doesn't overflow its container (the action column stays in view). */}
+      <td className="px-4 py-2">{nameInput("w-32 py-1 text-xs")}</td>
+      <td className="px-4 py-2">{fullNameInput("w-48 py-1 text-xs")}</td>
       <td className="px-4 py-2">{roleSelect("w-36 py-1 text-xs")}</td>
-      <td className="px-4 py-2">{linkSelect("w-44 py-1 text-xs")}</td>
+      <td className="px-4 py-2">{linkSelect("w-40 py-1 text-xs")}</td>
       <td className="px-4 py-2 text-center">
         <input
           type="checkbox"
           className="h-4 w-4 accent-indigo-600"
-          checked={user.active}
+          checked={values.active}
           disabled={busy || readOnly}
-          onChange={(e) => onPatch({ active: e.target.checked })}
-          title={user.active ? "Active" : "Inactive"}
+          onChange={(e) => onField({ active: e.target.checked })}
+          title={values.active ? "Active" : "Inactive"}
         />
       </td>
       <td className="px-4 py-2">
@@ -749,7 +850,7 @@ function AddUser({
           </Select>
         </div>
         <div>
-          <Label htmlFor="u-coach">Linked employee</Label>
+          <Label htmlFor="u-coach">Linked Workforce</Label>
           <EmployeeCombobox
             className="mt-1"
             coaches={coaches}
@@ -768,37 +869,102 @@ function AddUser({
   );
 }
 
-/** Bulk-create accounts from pasted "email, name" lines — all one role + a
+/** Read an uploaded CSV or Excel file into a cell grid, then into user rows.
+ *  CSV → PapaParse, Excel → ExcelJS (both lazy-loaded, as on the dashboard).
+ *  Throws a human message on an unreadable file. */
+async function parseUserFile(file: File): Promise<ParsedUserRow[]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    const ws = wb.worksheets[0];
+    if (!ws) throw new Error("The workbook has no sheets.");
+    const grid: string[][] = [];
+    ws.eachRow((row) => {
+      // row.values is 1-indexed (index 0 is empty); flatten cell objects to text.
+      const vals = (row.values as unknown[]).slice(1);
+      grid.push(vals.map(excelCellText));
+    });
+    return rowsFromGrid(grid);
+  }
+  // CSV / plain text.
+  const Papa = (await import("papaparse")).default;
+  const text = await file.text();
+  const res = Papa.parse<string[]>(text, { skipEmptyLines: true });
+  if (res.errors.length && res.data.length === 0) {
+    throw new Error("Could not read the file as CSV.");
+  }
+  return rowsFromGrid(res.data);
+}
+
+/** Flatten an ExcelJS cell value (string | number | rich text | hyperlink |
+ *  formula result | …) to plain text. */
+function excelCellText(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (typeof o.text === "string") return o.text; // hyperlink cell
+    if (Array.isArray(o.richText)) return o.richText.map((t) => String((t as { text?: string }).text ?? "")).join("");
+    if ("result" in o) return o.result == null ? "" : String(o.result); // formula
+    return "";
+  }
+  return String(v);
+}
+
+/** Bulk-create accounts from an uploaded CSV/Excel file — all one role + a
  *  shared initial password. Existing/duplicate emails are skipped + reported. */
 function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
   const router = useRouter();
   const toast = useToast();
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
+  const [filename, setFilename] = useState("");
+  const [parsed, setParsed] = useState<ParsedUserRow[]>([]);
+  const [parseError, setParseError] = useState("");
   const [role, setRole] = useState<Role>(roleOptions[roleOptions.length - 1] ?? "staff");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"parse" | "submit" | null>(null);
 
-  const parsed = useMemo(
-    () =>
-      text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const comma = line.indexOf(",");
-          return {
-            email: (comma === -1 ? line : line.slice(0, comma)).trim(),
-            displayName: comma === -1 ? "" : line.slice(comma + 1).trim(),
-          };
-        })
-        .filter((r) => r.email),
-    [text],
-  );
-  const validCount = parsed.filter((r) => /.+@.+\..+/.test(r.email)).length;
+  const validCount = countValid(parsed);
+
+  function reset() {
+    setFilename("");
+    setParsed([]);
+    setParseError("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function onFile(file: File) {
+    setBusy("parse");
+    setParseError("");
+    setParsed([]);
+    setFilename(file.name);
+    try {
+      const rows = await parseUserFile(file);
+      setParsed(rows);
+      if (rows.length === 0) {
+        setParseError("No email rows found — the file needs an email in the first column or an 'email' header.");
+      }
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : "Could not read the file.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = "email,full name\ndarren@example.com,Darren Lee\nevi@example.com,Evi Chow\n";
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bulk-users-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function submit() {
-    setBusy(true);
+    setBusy("submit");
     try {
       const res = await fetch("/api/users/bulk", {
         method: "POST",
@@ -813,15 +979,20 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
       if (!res.ok) throw new Error(json.error ?? "Bulk add failed");
       const skipped = json.skipped ?? [];
       toast.success(`Created ${json.created ?? 0}${skipped.length ? `, skipped ${skipped.length}` : ""}.`);
-      setText("");
+      reset();
       setPassword("");
       setOpen(false);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Bulk add failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
+  }
+
+  function close() {
+    reset();
+    setOpen(false);
   }
 
   if (!open) {
@@ -835,25 +1006,26 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
   return (
     <Modal
       open
-      onClose={busy ? () => {} : () => setOpen(false)}
+      onClose={busy ? () => {} : close}
       title="Bulk add users"
       size="lg"
       footer={
         <>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+          <Button variant="outline" onClick={close} disabled={busy != null}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy || validCount === 0 || password.length < 6}>
-            {busy ? <Spinner /> : <Plus className="h-4 w-4" />} Create {validCount || ""}
+          <Button onClick={submit} disabled={busy != null || validCount === 0 || password.length < 6}>
+            {busy === "submit" ? <Spinner /> : <Plus className="h-4 w-4" />} Create {validCount || ""}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
         <p className="text-sm text-gray-600">
-          One per line: <code className="rounded bg-gray-100 px-1">email, name</code> (name optional).
-          All get the role + shared initial password below; existing emails are skipped. Link them to a
-          coach afterwards with <strong>AI auto-link</strong>.
+          Upload a <strong>CSV or Excel</strong> file with an <code className="rounded bg-gray-100 px-1">email</code>{" "}
+          column (and an optional <code className="rounded bg-gray-100 px-1">full name</code>). All get the role +
+          shared initial password below; existing emails are skipped. Link them to a coach afterwards with{" "}
+          <strong>AI auto-link</strong>.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -878,17 +1050,54 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
           </div>
         </div>
         <div>
-          <Label htmlFor="bulk-text">Accounts</Label>
-          <Textarea
-            id="bulk-text"
-            className="mt-1 h-44 font-mono text-xs"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={"darren@example.com, Darren Lee\nevi@example.com, Evi Chow"}
+          <div className="flex items-center justify-between">
+            <Label>Accounts file</Label>
+            <button
+              type="button"
+              onClick={downloadTemplate}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
+            >
+              <Download className="h-3.5 w-3.5" /> CSV template
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onFile(f);
+            }}
           />
-          <p className="mt-1 text-xs text-gray-400">
-            {validCount} valid email{validCount === 1 ? "" : "s"} detected.
-          </p>
+          <button
+            type="button"
+            disabled={busy != null}
+            onClick={() => fileRef.current?.click()}
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm font-medium text-gray-600 transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
+          >
+            {busy === "parse" ? (
+              <>
+                <Spinner /> Reading {filename}…
+              </>
+            ) : (
+              <>
+                <FileUp className="h-5 w-5" />
+                {filename ? `Replace file — ${filename}` : "Choose a CSV or Excel file"}
+              </>
+            )}
+          </button>
+          {parseError ? (
+            <p className="mt-1 text-xs text-red-500">{parseError}</p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-400">
+              {filename && parsed.length > 0
+                ? `${validCount} valid email${validCount === 1 ? "" : "s"} detected${
+                    parsed.length !== validCount ? ` (${parsed.length - validCount} without a valid email)` : ""
+                  }.`
+                : "First column is the email; a full-name column is optional."}
+            </p>
+          )}
         </div>
       </div>
     </Modal>

@@ -62,8 +62,9 @@ export default async function ProgressMonthsPage() {
       </h1>
       <p className="text-sm text-gray-500">
         Each month&apos;s student database, delivered by the external system or uploaded by hand.
-        Review and edit a delivery, then load it into the KPI calculator — every delivery stays
-        viewable here forever.
+        Review and edit a delivery, then either <strong>compute a draft KPI run</strong> from it in
+        one click (auto-merge + score, then review the management scores) or load it into the
+        calculator by hand — every delivery stays viewable here forever.
       </p>
 
       {months.length === 0 ? (
