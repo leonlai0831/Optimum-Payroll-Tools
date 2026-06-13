@@ -38,6 +38,8 @@ export interface SafeUser {
 export interface CoachOption {
   id: number;
   name: string;
+  /** Sub-label shown in the picker to tell similar names apart (e.g. the center). */
+  subtitle?: string;
 }
 export type GymStaffOption = CoachOption;
 
