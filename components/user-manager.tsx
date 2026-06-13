@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, Eye, EyeOff, KeyRound, Plus, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
-import { Button, Card, Input, Label, Select, Spinner, Textarea } from "@/components/ui";
+import { ArrowUpDown, Download, Eye, EyeOff, FileUp, KeyRound, Plus, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
+import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { EmployeeCombobox } from "@/components/employee-combobox";
 import { useToast } from "@/components/toast";
 import { ROLE_LABELS, ROLES, canManageUserRole, type Role } from "@/lib/auth/types";
+import { countValid, rowsFromGrid, type ParsedUserRow } from "@/lib/users/bulk-parse";
 import { cn } from "@/lib/utils";
 
 type SortCol = "email" | "displayName" | "role" | "active";
@@ -768,37 +769,102 @@ function AddUser({
   );
 }
 
-/** Bulk-create accounts from pasted "email, name" lines — all one role + a
+/** Read an uploaded CSV or Excel file into a cell grid, then into user rows.
+ *  CSV → PapaParse, Excel → ExcelJS (both lazy-loaded, as on the dashboard).
+ *  Throws a human message on an unreadable file. */
+async function parseUserFile(file: File): Promise<ParsedUserRow[]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    const ws = wb.worksheets[0];
+    if (!ws) throw new Error("The workbook has no sheets.");
+    const grid: string[][] = [];
+    ws.eachRow((row) => {
+      // row.values is 1-indexed (index 0 is empty); flatten cell objects to text.
+      const vals = (row.values as unknown[]).slice(1);
+      grid.push(vals.map(excelCellText));
+    });
+    return rowsFromGrid(grid);
+  }
+  // CSV / plain text.
+  const Papa = (await import("papaparse")).default;
+  const text = await file.text();
+  const res = Papa.parse<string[]>(text, { skipEmptyLines: true });
+  if (res.errors.length && res.data.length === 0) {
+    throw new Error("Could not read the file as CSV.");
+  }
+  return rowsFromGrid(res.data);
+}
+
+/** Flatten an ExcelJS cell value (string | number | rich text | hyperlink |
+ *  formula result | …) to plain text. */
+function excelCellText(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (typeof o.text === "string") return o.text; // hyperlink cell
+    if (Array.isArray(o.richText)) return o.richText.map((t) => String((t as { text?: string }).text ?? "")).join("");
+    if ("result" in o) return o.result == null ? "" : String(o.result); // formula
+    return "";
+  }
+  return String(v);
+}
+
+/** Bulk-create accounts from an uploaded CSV/Excel file — all one role + a
  *  shared initial password. Existing/duplicate emails are skipped + reported. */
 function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
   const router = useRouter();
   const toast = useToast();
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
+  const [filename, setFilename] = useState("");
+  const [parsed, setParsed] = useState<ParsedUserRow[]>([]);
+  const [parseError, setParseError] = useState("");
   const [role, setRole] = useState<Role>(roleOptions[roleOptions.length - 1] ?? "staff");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"parse" | "submit" | null>(null);
 
-  const parsed = useMemo(
-    () =>
-      text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const comma = line.indexOf(",");
-          return {
-            email: (comma === -1 ? line : line.slice(0, comma)).trim(),
-            displayName: comma === -1 ? "" : line.slice(comma + 1).trim(),
-          };
-        })
-        .filter((r) => r.email),
-    [text],
-  );
-  const validCount = parsed.filter((r) => /.+@.+\..+/.test(r.email)).length;
+  const validCount = countValid(parsed);
+
+  function reset() {
+    setFilename("");
+    setParsed([]);
+    setParseError("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function onFile(file: File) {
+    setBusy("parse");
+    setParseError("");
+    setParsed([]);
+    setFilename(file.name);
+    try {
+      const rows = await parseUserFile(file);
+      setParsed(rows);
+      if (rows.length === 0) {
+        setParseError("No email rows found — the file needs an email in the first column or an 'email' header.");
+      }
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : "Could not read the file.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = "email,name\ndarren@example.com,Darren Lee\nevi@example.com,Evi Chow\n";
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bulk-users-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function submit() {
-    setBusy(true);
+    setBusy("submit");
     try {
       const res = await fetch("/api/users/bulk", {
         method: "POST",
@@ -813,15 +879,20 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
       if (!res.ok) throw new Error(json.error ?? "Bulk add failed");
       const skipped = json.skipped ?? [];
       toast.success(`Created ${json.created ?? 0}${skipped.length ? `, skipped ${skipped.length}` : ""}.`);
-      setText("");
+      reset();
       setPassword("");
       setOpen(false);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Bulk add failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
+  }
+
+  function close() {
+    reset();
+    setOpen(false);
   }
 
   if (!open) {
@@ -835,25 +906,26 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
   return (
     <Modal
       open
-      onClose={busy ? () => {} : () => setOpen(false)}
+      onClose={busy ? () => {} : close}
       title="Bulk add users"
       size="lg"
       footer={
         <>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+          <Button variant="outline" onClick={close} disabled={busy != null}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy || validCount === 0 || password.length < 6}>
-            {busy ? <Spinner /> : <Plus className="h-4 w-4" />} Create {validCount || ""}
+          <Button onClick={submit} disabled={busy != null || validCount === 0 || password.length < 6}>
+            {busy === "submit" ? <Spinner /> : <Plus className="h-4 w-4" />} Create {validCount || ""}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
         <p className="text-sm text-gray-600">
-          One per line: <code className="rounded bg-gray-100 px-1">email, name</code> (name optional).
-          All get the role + shared initial password below; existing emails are skipped. Link them to a
-          coach afterwards with <strong>AI auto-link</strong>.
+          Upload a <strong>CSV or Excel</strong> file with an <code className="rounded bg-gray-100 px-1">email</code>{" "}
+          column (and an optional <code className="rounded bg-gray-100 px-1">name</code>). All get the role + shared
+          initial password below; existing emails are skipped. Link them to a coach afterwards with{" "}
+          <strong>AI auto-link</strong>.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -878,17 +950,54 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
           </div>
         </div>
         <div>
-          <Label htmlFor="bulk-text">Accounts</Label>
-          <Textarea
-            id="bulk-text"
-            className="mt-1 h-44 font-mono text-xs"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={"darren@example.com, Darren Lee\nevi@example.com, Evi Chow"}
+          <div className="flex items-center justify-between">
+            <Label>Accounts file</Label>
+            <button
+              type="button"
+              onClick={downloadTemplate}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
+            >
+              <Download className="h-3.5 w-3.5" /> CSV template
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onFile(f);
+            }}
           />
-          <p className="mt-1 text-xs text-gray-400">
-            {validCount} valid email{validCount === 1 ? "" : "s"} detected.
-          </p>
+          <button
+            type="button"
+            disabled={busy != null}
+            onClick={() => fileRef.current?.click()}
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm font-medium text-gray-600 transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
+          >
+            {busy === "parse" ? (
+              <>
+                <Spinner /> Reading {filename}…
+              </>
+            ) : (
+              <>
+                <FileUp className="h-5 w-5" />
+                {filename ? `Replace file — ${filename}` : "Choose a CSV or Excel file"}
+              </>
+            )}
+          </button>
+          {parseError ? (
+            <p className="mt-1 text-xs text-red-500">{parseError}</p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-400">
+              {filename && parsed.length > 0
+                ? `${validCount} valid email${validCount === 1 ? "" : "s"} detected${
+                    parsed.length !== validCount ? ` (${parsed.length - validCount} without a valid email)` : ""
+                  }.`
+                : "First column is the email; a name/nickname column is optional."}
+            </p>
+          )}
         </div>
       </div>
     </Modal>

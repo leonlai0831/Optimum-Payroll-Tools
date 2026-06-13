@@ -406,8 +406,11 @@ non-admin). `/system/users` has list search + sortable columns, a searchable
 linked-employee picker (`components/employee-combobox.tsx`), **AI auto-link**
 (`POST /api/users/auto-link` → deterministic `getCleanName` unique match + a
 Claude pass, `lib/users/autolink.ts` + `matchUsersToCoaches`; reversible,
-audited), and **bulk add** (`POST /api/users/bulk` — paste `email,name` lines,
-one role + shared initial password, dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
+audited), and **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
+file**: an `email` column + optional `name`, parsed client-side into rows by the
+Vitest-locked `lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy
+ExcelJS, flexible header detection or headerless `email,name`; one role + shared
+initial password, dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
 same permissions matrix: each role has **default categories**, and the page's "User overrides"
 tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
 `getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
