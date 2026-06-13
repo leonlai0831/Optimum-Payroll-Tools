@@ -1,1 +1,1 @@
-ALTER TABLE "freelancer_schedules" DROP COLUMN "class_type";
+ALTER TABLE "freelancer_schedules" DROP COLUMN IF EXISTS "class_type";

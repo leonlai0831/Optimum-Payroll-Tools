@@ -61,6 +61,25 @@ function isMigrationRaceError(err: unknown): boolean {
 }
 
 /**
+ * SQLSTATEs for "object does not exist" (column/table/object). The mirror of
+ * ALREADY_EXISTS_CODES: a DROP/ALTER whose target is already gone is a no-op for
+ * reconcileSchema's purpose (make the DB match the migrations), so it's skipped
+ * just like an already-existing CREATE — otherwise replaying a `DROP COLUMN`
+ * after the column is gone wedges startup.
+ */
+const DOES_NOT_EXIST_CODES = new Set(["42703", "42P01", "42704"]);
+
+function isDoesNotExistError(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let depth = 0; cur != null && depth < 6; depth++) {
+    const e = cur as { code?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && DOES_NOT_EXIST_CODES.has(e.code)) return true;
+    cur = e.cause;
+  }
+  return false;
+}
+
+/**
  * Re-apply every migration statement individually, skipping only "already
  * exists" (matched by SQLSTATE code). Used when the migration journal is out of
  * sync with a database whose objects were created out-of-band (e.g. via
@@ -79,8 +98,11 @@ async function reconcileSchema(db: Pick<DB, "execute">): Promise<void> {
       try {
         await db.execute(sql.raw(statement));
       } catch (err) {
-        if (!isAlreadyExistsError(err)) throw err;
-        logger.warn("reconcileSchema skipped an already-existing object", {
+        // Skip both directions of "no change needed": an object that already
+        // exists (CREATE/ADD) AND one that's already gone (DROP/ALTER). Anything
+        // else is a genuine failure and must surface.
+        if (!isAlreadyExistsError(err) && !isDoesNotExistError(err)) throw err;
+        logger.warn("reconcileSchema skipped a no-op (object already exists or already gone)", {
           statement,
           err,
         });
