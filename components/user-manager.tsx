@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, Eye, EyeOff, KeyRound, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowUpDown, Eye, EyeOff, KeyRound, Plus, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
@@ -155,6 +155,26 @@ export function UserManager({
     setSort((s) => (s.col === col ? { col, dir: s.dir === 1 ? -1 : 1 } : { col, dir: 1 }));
   }
 
+  const [linking, setLinking] = useState(false);
+  async function autoLink() {
+    setLinking(true);
+    try {
+      const res = await fetch("/api/users/auto-link", { method: "POST" });
+      const json = (await res.json()) as { error?: string; linked?: number };
+      if (!res.ok) throw new Error(json.error ?? "Auto-link failed");
+      toast.success(
+        json.linked
+          ? `Linked ${json.linked} account${json.linked === 1 ? "" : "s"} to a coach by name.`
+          : "No new matches — already linked, or no confident name match.",
+      );
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Auto-link failed");
+    } finally {
+      setLinking(false);
+    }
+  }
+
   function setBusy(id: number, on: boolean) {
     setBusyIds((prev) => {
       const next = new Set(prev);
@@ -234,14 +254,25 @@ export function UserManager({
             User accounts ·{" "}
             {visible.length === users.length ? users.length : `${visible.length} / ${users.length}`}
           </span>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search email or name…"
-              className="w-56 max-w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={autoLink}
+              disabled={linking}
+              title="Match unlinked accounts to a coach profile by name"
+            >
+              {linking ? <Spinner /> : <Sparkles className="h-4 w-4" />} AI auto-link
+            </Button>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search email or name…"
+                className="w-56 max-w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
           </div>
         </div>
         <MobileCards>
