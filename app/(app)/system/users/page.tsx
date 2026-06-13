@@ -30,6 +30,7 @@ export default async function UsersPage() {
       id: u.id,
       email: u.email,
       displayName: u.displayName,
+      fullName: u.fullName,
       role: u.role,
       coachId: u.coachId,
       gymStaffId: u.gymStaffId,
