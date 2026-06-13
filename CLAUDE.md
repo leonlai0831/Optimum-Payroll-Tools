@@ -451,9 +451,14 @@ token subset, and links a user only when **exactly one** coach reaches that top 
 (`matchUsersToCoaches`, fed the full name) handles the remainder, then every AI match
 is gated by `sharesNameSignal` (must share a real name token — kills hallucinated
 links for signal-less accounts like a phone-number email). **One workforce profile ↔
-one login is enforced:** auto-link skips coaches already linked to any account, and
-the link PATCH (`/api/users/[id]`) 409s if a coach/gym-staff record is already linked
-elsewhere. And **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
+one login is enforced at three layers:** auto-link skips coaches already linked to any
+account; the link PATCH (`/api/users/[id]`) 409s if a coach/gym-staff record is already
+linked elsewhere; and a **partial UNIQUE index on `users.coach_id` AND `users.gym_staff_id`
+(WHERE NOT NULL, migration 0038)** is the DB backstop. 0038 first **auto-dedups** any
+historical duplicates (keeps the **ACTIVE** login per profile, else the earliest — never
+orphans the live operator for a stale account — NULLs the rest, audited as
+`user.dedup_links`) so it's safe to auto-apply on a cold start; re-run-safe (idempotent).
+And **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
 file**: an `email` column + an optional `full name` (→ the **Full Name** field,
 not the Nickname), parsed client-side into rows by the Vitest-locked
 `lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy ExcelJS, flexible
@@ -492,7 +497,11 @@ non-super-admin `manage_users` holder, who lands on Users).
 + `PATCH /api/users/me` let a user edit **their own Nickname, sign-in Email, and
 password** — never their **Full Name or Role** (those stay admin-controlled; Role is
 shown read-only). Email/password changes require re-entering the **current password**
-(stolen-cookie defense); a Nickname-only change does not. Linked in the nav for everyone.
+(stolen-cookie defense); a Nickname-only change does not. **Changing the email requires
+re-typing it in a "Confirm new email" field** (a typo would lock you out — login is
+email-keyed, no recovery flow). Linked in the nav for everyone. (The super_admin inline
+email edit on `/system/users` gets the same guard via a **confirm dialog on Save** when a
+staged change rewrites a sign-in email.)
 
 Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
 `swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,
@@ -548,6 +557,14 @@ per-page-load dedupe on the client. `/system/errors` (super_admin) lists capture
 (source badge, path, reporter, collapsible stack) with an audited "Clear all"; rows older than
 30 days trim opportunistically on insert. `recordAppError` MUST stay silent on failure — it
 runs inside the error sink, so logging its own failure at error level would recurse.
+
+**Route error boundaries** (`app/error.tsx` + `app/global-error.tsx`): a render crash shows a
+friendly retry page instead of a white screen and **self-reports to `POST /api/errors`** — this
+fills a real gap, since React render errors are swallowed into the boundary and never reach the
+`window.onerror` listener in `error-reporter.tsx`. `global-error.tsx` replaces the root layout, so
+it ships its own `<html>/<body>` + inline styles. **Unseen-error badge:** the launcher **System
+Setting** card shows a red count of `countAppErrors()` for a super_admin (the only role that can
+open the Errors tab); it clears to 0 on "Clear all".
 
 ## Environment variables
 

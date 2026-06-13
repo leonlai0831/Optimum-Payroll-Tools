@@ -20,6 +20,7 @@ export function AccountForm({
   const toast = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newEmail, setNewEmail] = useState(email);
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [newDisplayName, setNewDisplayName] = useState(displayName);
   const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,10 @@ export function AccountForm({
   const dirty = emailChanged || nameChanged || passwordChanged;
   // Current password is only needed for the security-sensitive fields.
   const needsCurrentPassword = emailChanged || passwordChanged;
+  // Changing your sign-in email means logging in with it next time, so a typo
+  // would lock you out — require re-typing the new email to confirm.
+  const emailConfirmed =
+    !emailChanged || newEmail.trim().toLowerCase() === confirmEmail.trim().toLowerCase();
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +57,7 @@ export function AccountForm({
       toast.success("Account updated.");
       setCurrentPassword("");
       setNewPassword("");
+      setConfirmEmail("");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -90,6 +96,25 @@ export function AccountForm({
             required
           />
         </div>
+        {emailChanged && (
+          <div>
+            <Label htmlFor="acc-confirm-email">Confirm new email</Label>
+            <Input
+              id="acc-confirm-email"
+              type="email"
+              autoComplete="off"
+              value={confirmEmail}
+              onChange={(e) => setConfirmEmail(e.target.value)}
+              className="mt-1"
+              placeholder="Re-type the new email"
+              required
+            />
+            <p className="mt-1 text-xs text-amber-600">
+              You&rsquo;ll sign in with this email from now on — make sure it&rsquo;s correct.
+              {confirmEmail.length > 0 && !emailConfirmed && " The two emails don't match yet."}
+            </p>
+          </div>
+        )}
         <div>
           <Label htmlFor="acc-new-password">New password</Label>
           <Input
@@ -119,7 +144,10 @@ export function AccountForm({
           </div>
         )}
         <div className="flex justify-end">
-          <Button type="submit" disabled={busy || !dirty || (needsCurrentPassword && !currentPassword)}>
+          <Button
+            type="submit"
+            disabled={busy || !dirty || (needsCurrentPassword && !currentPassword) || !emailConfirmed}
+          >
             {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save changes
           </Button>
         </div>

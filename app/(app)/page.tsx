@@ -22,6 +22,7 @@ import { HubStripeBand } from "@/components/hub-stripe-band";
 import { ArrivalSlide } from "@/components/arrival-slide";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
+import { countAppErrors } from "@/lib/db/queries";
 import { getCapabilities } from "@/lib/auth/permissions";
 import { TOOL_CATEGORY_LABELS, type Capability } from "@/lib/auth/types";
 import type { Brand } from "@/components/brand-shell";
@@ -38,6 +39,8 @@ type Tool = {
   superAdmin?: boolean;
   /** Which brand this tool belongs to on the launcher. Defaults to swim. */
   brand?: Brand;
+  /** Optional count pill (e.g. unreviewed errors on the System card). */
+  badge?: number;
 };
 
 const TOOLS: Tool[] = [
@@ -167,7 +170,17 @@ function ToolCard({ tool }: { tool: Tool }) {
             Soon
           </span>
         ) : (
-          <ChevronRight className="h-5 w-5 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-brand" />
+          <div className="flex items-center gap-2">
+            {tool.badge ? (
+              <span
+                className="nums inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[11px] font-bold text-white"
+                title={`${tool.badge} unreviewed error${tool.badge === 1 ? "" : "s"} · open System → Errors`}
+              >
+                {tool.badge > 99 ? "99+" : tool.badge}
+              </span>
+            ) : null}
+            <ChevronRight className="h-5 w-5 text-gray-300 transition-all group-hover:translate-x-0.5 group-hover:text-brand" />
+          </div>
         )}
       </div>
       <div className="mt-3 text-base font-bold text-gray-900">{tool.title}</div>
@@ -211,6 +224,23 @@ export default async function HubPage() {
       // purely by cap/superAdmin above (e.g. hierarchy-scoped manage_users).
       (isSuperAdmin || tool.brand === "system" || visibleBrands.has(tool.brand ?? "swim")),
   );
+  // Unreviewed-error badge on the System card — only a super_admin can see (and
+  // act on) the Errors tab, so only they get the count. Clears when they hit
+  // "Clear all" on /system/errors. Best-effort: the badge is non-critical, so a
+  // failing count must never take down the launcher (ironically for the one role
+  // that triages errors).
+  let errorCount = 0;
+  if (isSuperAdmin) {
+    try {
+      errorCount = await countAppErrors();
+    } catch {
+      errorCount = 0;
+    }
+  }
+  const badgedTools =
+    errorCount > 0
+      ? tools.map((t) => (t.brand === "system" ? { ...t, badge: errorCount } : t))
+      : tools;
   // The user's own profile is not a category tool — it stays reachable in its
   // own group even when every brand category is hidden for the account.
   const profileTool: Tool | null =
@@ -257,7 +287,7 @@ export default async function HubPage() {
         />
       </section>
 
-      {tools.length === 0 && !profileTool ? (
+      {badgedTools.length === 0 && !profileTool ? (
         <Card className="p-6 text-sm text-gray-500">
           No tools are available for your account yet. An admin can adjust your
           role&apos;s permissions or your category visibility.
@@ -265,7 +295,7 @@ export default async function HubPage() {
       ) : (
         <>
           {BRAND_GROUPS.map(({ brand, label }) => {
-            const group = tools.filter((t) => (t.brand ?? "swim") === brand);
+            const group = badgedTools.filter((t) => (t.brand ?? "swim") === brand);
             if (group.length === 0) return null;
             return (
               // data-brand re-skins this group's cards (the Fit group renders black/yellow).

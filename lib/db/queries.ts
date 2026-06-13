@@ -3525,6 +3525,14 @@ export async function recordAppError(entry: AppErrorEntry): Promise<void> {
   }
 }
 
+/** Count of captured errors (drives the launcher System-card badge; clears to 0
+ *  when a super_admin hits "Clear all" on /system/errors). */
+export async function countAppErrors(): Promise<number> {
+  const db = await getDb();
+  const [row] = await db.select({ n: count() }).from(appErrors);
+  return row?.n ?? 0;
+}
+
 /** Most recent captured errors first. */
 export async function listAppErrors(limit = 300): Promise<AppErrorRecord[]> {
   const db = await getDb();

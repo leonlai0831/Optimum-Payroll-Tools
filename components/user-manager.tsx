@@ -176,6 +176,9 @@ export function UserManager({
   const canEditEmail = actorRole === "super_admin";
   const [deleteTarget, setDeleteTarget] = useState<SafeUser | null>(null);
   const [pwTarget, setPwTarget] = useState<SafeUser | null>(null);
+  // Set when Save includes a sign-in email change — confirmed first (a wrong
+  // email locks that person out).
+  const [emailConfirm, setEmailConfirm] = useState<{ from: string; to: string }[] | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
@@ -362,6 +365,16 @@ export function UserManager({
     if (savedIds.length > 0) router.refresh();
   }
 
+  /** Save click: confirm first if any staged change rewrites a sign-in email. */
+  function onSaveClick() {
+    if (saving) return;
+    const emailChanges = dirty
+      .filter(({ patch }) => patch.email !== undefined)
+      .map(({ u, patch }) => ({ from: u.email, to: patch.email! }));
+    if (emailChanges.length > 0) setEmailConfirm(emailChanges);
+    else void saveAll();
+  }
+
   async function removeUser(user: SafeUser) {
     setDeleteTarget(null);
     setBusy(user.id, true);
@@ -526,7 +539,7 @@ export function UserManager({
               <Button variant="outline" size="sm" onClick={() => setDrafts({})} disabled={saving}>
                 Discard
               </Button>
-              <Button size="sm" onClick={saveAll} disabled={saving}>
+              <Button size="sm" onClick={onSaveClick} disabled={saving}>
                 {saving ? <Spinner /> : <Save className="h-4 w-4" />} Save {dirty.length}{" "}
                 change{dirty.length === 1 ? "" : "s"}
               </Button>
@@ -555,6 +568,21 @@ export function UserManager({
         message="This cannot be undone. The account loses access immediately; any linked employee record stays."
         confirmLabel="Delete user"
         busy={deleteTarget !== null && busyIds.has(deleteTarget.id)}
+      />
+      <ConfirmModal
+        open={emailConfirm !== null}
+        onClose={() => setEmailConfirm(null)}
+        onConfirm={() => {
+          setEmailConfirm(null);
+          void saveAll();
+        }}
+        title={emailConfirm && emailConfirm.length === 1 ? "Change sign-in email?" : "Change sign-in emails?"}
+        message={
+          emailConfirm && emailConfirm.length === 1
+            ? `${emailConfirm[0].from} will sign in with ${emailConfirm[0].to} from now on. A wrong address locks them out. Continue and save all staged changes?`
+            : `${emailConfirm?.length ?? 0} accounts will get a new sign-in email and must use it to sign in. Continue and save all staged changes?`
+        }
+        confirmLabel="Change & save"
       />
     </div>
   );

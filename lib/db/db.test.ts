@@ -295,6 +295,23 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(profile!.kpi.some((p) => p.period === "2027-05" && p.payout === 900)).toBe(true);
   });
 
+  it("enforces one-login-per-workforce-profile at the DB (partial unique index, 0038)", async () => {
+    // No FK on coach_id, so an arbitrary id exercises the index directly.
+    await queries.createUser({ email: "link-a@opt.page", password: "pw", role: "staff", coachId: 910001 });
+    // A second login pointed at the same coach must be rejected by the index.
+    await expect(
+      queries.createUser({ email: "link-b@opt.page", password: "pw", role: "staff", coachId: 910001 }),
+    ).rejects.toThrow();
+    // Same rule for gym-staff links.
+    await queries.createUser({ email: "gym-a@opt.page", password: "pw", role: "staff", gymStaffId: 920001 });
+    await expect(
+      queries.createUser({ email: "gym-b@opt.page", password: "pw", role: "staff", gymStaffId: 920001 }),
+    ).rejects.toThrow();
+    // Unlinked accounts (NULL) are exempt — many may coexist.
+    await queries.createUser({ email: "none-a@opt.page", password: "pw", role: "staff" });
+    await queries.createUser({ email: "none-b@opt.page", password: "pw", role: "staff" });
+  });
+
   it("backfills finalize_kpi for admin but not supervisor/staff", () => {
     // Old flat stored shape (pre-categories) — must still normalize.
     const normalized = queries.normalizePermissionConfig({
