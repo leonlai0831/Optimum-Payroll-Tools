@@ -304,7 +304,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     onFocus={() => setEmailFocused(true)}
                     onBlur={() => setEmailFocused(false)}
-                    placeholder="you@optimumtrain.page"
+                    placeholder="Enter your email"
                   />
                   {/* One-tap domain completion. mousedown (not click) applies it
                       BEFORE the input would blur, so the chip can't vanish
