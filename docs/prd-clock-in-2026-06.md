@@ -3,7 +3,7 @@
 > 用 [pm-skills](https://github.com/deanpeters/Product-Manager-Skills) 的 `write-prd`
 > / `prd-development` skill 写成。承接 `docs/jtbd-2026-06.md`(第二类用户 + 「打卡系统」一节)。
 >
-> - 日期:2026-06-13 · 状态:**草案 — 新增「前台」角色后,余 1 个待决(前台工时 → 津贴换算,§10);其余已定**
+> - 日期:2026-06-13 · 状态:**Open Questions 全部已决 — 可进 user-story / 排期 / 开发(唯一残留:前台「应到工时」标准值,开发时定)**
 > - 范围由运营 2026-06-13 的四点回答锁定(见各节标注的 Q1–Q4)
 
 ---
@@ -53,7 +53,7 @@
      (Low/Med/High/Adult → `normalH`、Young Swimmer → `ysH`、Precomp/Lifesaving → `precompH`)。
      **出勤部分(`opHours`/`leaveHours`)v1 不由打卡产生**(仍手工/另系统)。**不改费率表**。
    - → **Freelancer**:按 `中心 + 固定/替补` 汇总小时(费率只按职位 × 中心组,与班型无关)。
-   - → **Allowance(前台 A1–A3)**:按月汇总**实到工时** → 喂其 attendance-only 津贴(**换算方式见 §10 待决**)。
+   - → **Allowance(前台 A1–A3)**:已审核 `shift` 工时合计 = **实到** → ÷ **应到工时** → 出勤率 → 现有 met/perfect bracket(§10 已决 A,不改津贴模型)。
 5. 运营在 Allowance / Freelancer 计算器里**「从打卡载入」**(类比 KPI 的 `?ingest=` 载入),工时预填、可改。
 
 **数据模型(建议)**:新表 `timesheets`:`coachId, date, center, entryType('lesson'|'shift'), classType?, slotType?(fixed|replaced), startTime?, endTime?, hours, status, note, reviewedBy, reviewedAt`。教练 = `lesson`(带 classType/slotType);前台 = `shift`(带 startTime/endTime,hours 由起讫推导,classType/slotType 为空)。状态机同教案;不硬删,审计留痕。
@@ -83,8 +83,8 @@
 - ❌ **喂 KPI Bonus**:KPI 学生进度数据走另一套系统,两边不共享(Q3)。
 - ❌ **学生到课记录**:另有学生 attendance 系统(Q1)。
 - ⚠️ **教练津贴出勤(opHours/leaveHours)+ freelancer absent 标记**:v1 不由打卡产生,仍手工/另系统(已决)。
-- ⚠️ **前台 A1–A3 实到工时 → attendance 津贴的换算**:见 §10 待决(可能需排班/应到工时)。
-- ❌ 排班/课表生成、薪资以外的报表。
+- ❌ **排班/课表生成**:v1 不做真实排班表;前台「应到工时」用**可配置的月度标准值**(§10),不是逐日排班。
+- ❌ 薪资以外的报表。
 
 ## 9. Dependencies & Risks
 
@@ -94,7 +94,7 @@
   - ~~班型↔费率对不上~~ → **已解决**:7 类并进现有 3 档费率,不改费率表,payroll 风险消除。
   - *采纳率低(员工不打卡)* → 手机优先 UX、提交截止提醒;必要时 admin 代录。
   - ~~固定/替补未捕获~~ → **已解决**:逐条标记固定/替补(§10),freelancer 计费可算准。
-  - *前台工时 → 津贴换算未定(§10)* → 决定前台能否闭环到发薪;否则 v1 前台只到「记录 + 审核」。
+  - ~~前台工时 → 津贴换算未定~~ → **已解决(A)**:实到 ÷ 应到 → 出勤率(§10);残留依赖 = 「应到工时」标准值来源,开发时与运营定。
 
 ## 10. Open Questions
 
@@ -115,16 +115,15 @@
 - **审核粒度**:admin 可**逐条**审,也可**多选勾选批量**审(approve/reject)。
 - **覆盖角色**:打卡同时服务**教练**(lesson 模式)与**前台 A1–A3**(shift 模式,无班型)。
 
-### 🟡 新待决(前台带出)— 前台实到工时 → 津贴换算
+### ✅ 已决(2026-06-13)— 前台实到工时 → 津贴换算
 
-前台 A1–A3 津贴是「只算 attendance」的**百分比模型**(bracket:met 95–100% / perfect 100%),
-分母是「应到工时」。前台打卡只给「实到的几点到几点」。如何换算成津贴?
+选 **(A)**:前台**实到工时 ÷ 应到工时 → 出勤率 → 现有 met/perfect bracket**(沿用已验证的津贴引擎,不改模型)。
 
-- **(A)** 维护前台「应到工时 / 排班」,实到 ÷ 应到 → 出勤率 → 现有 bracket(改动小,但需排班来源)。
-- **(B)** 前台改「实到工时 × 时薪」计酬(需新增前台时薪,改津贴模型)。
-- **(C)** v1 前台打卡只做**记录 + 审核**,实际津贴仍手工算(最窄,但未闭环到发薪)。
+- 实到工时 = 该前台当月**已审核** `shift` 打卡小时合计。
+- 「应到工时」来源 → **建议**:可配置的**月度标准应到工时**(按中心/职级设默认,可按人覆盖),在 Staff → Settings 维护。
+  ⚠️ 具体默认值与维护位置在**开发时与运营最终确认**(唯一残留实现细节,不阻塞设计)。
 
-**定了这条 → 全部 Open Question 关闭,可进 user-story / 排期 / 开发。**
+**全部 Open Question 关闭 → 可进 user-story / 排期 / 开发。**
 
 ---
 
