@@ -1,6 +1,7 @@
 import { classifyAccount } from "./classify";
 import { computeCoach } from "./coach";
 import { appearsInLeaderboard } from "./leaderboard";
+import { linkAllowance, type AllowanceLinkRec } from "./allowance-link";
 import { buildGroups, uniqueInstructorNames, type KnownCoach } from "./merge";
 import type { AppConfig, InstructorRow } from "./types";
 import type { AccountForMatch } from "@/lib/ai/anthropic";
@@ -16,14 +17,22 @@ export interface BuildRunCoachProfile {
   lastMgmtAssessment: number | null;
 }
 
+/** A saved allowance record for the WORK month, linked onto a coach by name/id. */
+export interface BuildRunAllowanceRec extends AllowanceLinkRec {
+  /** The computed teaching allowance — the KPI payout base. */
+  teaching: number;
+}
+
 export interface BuildRunInput {
   rows: InstructorRow[];
   config: AppConfig;
   coaches: BuildRunCoachProfile[];
   /** AI same-person clusters (best-effort; [] without an API key). */
   aiClusters?: string[][];
-  /** Period overlays the caller resolves, keyed by coachId. */
-  allowanceByCoachId?: Record<number, number>;
+  /** The period's saved Allowance run — the authoritative teaching allowance,
+   *  linked per coach exactly like the dashboard (overrides profile carry-over). */
+  allowanceRecs?: BuildRunAllowanceRec[];
+  /** Latest assessment final %, keyed by coachId. */
   assessmentByCoachId?: Record<number, number>;
 }
 
@@ -70,7 +79,7 @@ export function buildRunCoaches(input: BuildRunInput): RunCoach[] {
     config,
     coaches,
     aiClusters = [],
-    allowanceByCoachId = {},
+    allowanceRecs = [],
     assessmentByCoachId = {},
   } = input;
 
@@ -98,10 +107,13 @@ export function buildRunCoaches(input: BuildRunInput): RunCoach[] {
     const center = mostCommon(
       g.accounts.map((a) => rows.find((r) => r.Instructor === a)?.Center ?? ""),
     );
-    const allowance =
-      coachId != null && allowanceByCoachId[coachId] != null
-        ? allowanceByCoachId[coachId]
-        : profile?.lastAllowance ?? null;
+    // Teaching allowance: the period's saved Allowance run is authoritative
+    // (linked by id → exact → normalized name → alias, like the dashboard); fall
+    // back to the profile's carry-over only when nothing links.
+    const linkedAllowance = allowanceRecs.length
+      ? linkAllowance(allowanceRecs, { coachId, canonicalName: g.canonicalName, accounts: g.accounts }).rec
+      : null;
+    const allowance = linkedAllowance ? linkedAllowance.teaching : profile?.lastAllowance ?? null;
     const mgmt =
       coachId != null && assessmentByCoachId[coachId] != null
         ? assessmentByCoachId[coachId]

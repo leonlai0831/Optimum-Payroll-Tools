@@ -187,15 +187,24 @@ merge + v11.1 scoring **server-side** and creates a run in one click, then jumps
 review screen — the server-side equivalent of load → save, without the manual step. The
 engine is the pure, Vitest-locked `buildRunCoaches` (`lib/kpi/build-run.ts`): faithful to
 the dashboard (deterministic + known-alias + best-effort AI merge; the classifier's
-`defaultInclude` picks scoring accounts; center = most-common; carry-over allowance + last
-management assessment + latest assessment %; only allowance-AND-teaching groups appear,
-ranked by finalScore). It is **always saved `status:"draft"`** — the name merge is
-payroll-critical and management assessment / supervisor group hours aren't in the CSV — so a
-manager reviews + finalizes (`finalize_kpi`) on the existing `RunReview` screen. Persists
-exactly like the dashboard save (`createRun` + `importKpiIngest`, same per-period advisory
-lock + closed-month guards); a 409 returns the existing draft's `runId` to redirect to. This
-is **Phase 1** of dropping the manual KPI Calculator — extending `RunReview` with allowance /
-supervisor-group-hours editors and an auto-trigger on upload are the next phases.
+`defaultInclude` picks scoring accounts; center = most-common; only allowance-AND-teaching
+groups appear, ranked by finalScore). **Teaching allowance comes from the WORK month's saved
+Allowance run** (`listAllowanceRuns(period)`, linked per coach via `linkAllowance` — id →
+exact → normalized name → alias, exactly like the dashboard; the operator always keys
+allowance before KPI, so no manual allowance editor), falling back to the profile's
+carry-over only when nothing links; management assessment carries over from the profile,
+overlaid by the latest assessment %. It is **always saved `status:"draft"`** — the name merge
+is payroll-critical and management assessment / supervisor group hours aren't in the CSV — so a
+manager reviews + finalizes (`finalize_kpi`) on the `RunReview` screen. `RunReview` edits the
+management assessment, the account merge, **the Position (Instructor / Pool Supervisor) and a
+supervisor's group center + hours (/40)** — the supervision hours are entered by hand because
+allowance + clock-in only track *teaching* hours (a supervisor's actual hours are longer).
+Persists exactly like the dashboard save (`createRun` + `importKpiIngest`, same per-period
+advisory lock + closed-month guards); a 409 returns the existing draft's `runId` to redirect
+to. **Compute is NEVER automatic on upload/push (operator decision 2026-06-13):** a delivery
+is only STAGED, the owner reviews + edits the month's database (add/delete rows) on
+`/progress`, and only the explicit "Compute KPI draft" (which saves pending edits first) sends
+it to the KPI module — so an unreviewed month can never become a run.
 
 ## Freelancer Payment (`lib/freelancer`, `/freelancer`)
 

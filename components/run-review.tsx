@@ -10,13 +10,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import { ConfirmModal } from "@/components/modal";
 import { SearchableSelect } from "@/components/searchable-select";
 import { useToast } from "@/components/toast";
 import { computeCoach } from "@/lib/kpi/coach";
 import type { AppConfig, InstructorRow } from "@/lib/kpi/types";
-import type { RunCoach } from "@/lib/types";
+import type { GroupConfig, Position, RunCoach } from "@/lib/types";
 import { cn, rm } from "@/lib/utils";
 
 export interface ReviewRun {
@@ -65,10 +65,13 @@ function recomputeRow(rc: RunCoach, rows: InstructorRow[], config: AppConfig): R
 export function RunReview({
   run,
   assessmentByCoach,
+  centers,
 }: {
   run: ReviewRun;
   /** coachId → latest assessment final % — auto-fills + locks that coach's Mgmt %. */
   assessmentByCoach: Record<number, number>;
+  /** Configured center codes — options for a supervisor's group-hours editor. */
+  centers: string[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -123,6 +126,33 @@ export function RunReview({
       const next = [...prev];
       next[idx] = recomputeRow(
         { ...next[idx].rc, mgmtAssessment: mgmt },
+        run.csvRows,
+        run.configSnapshot,
+      );
+      return next;
+    });
+  }
+
+  /** Switch a coach between Instructor and Pool Supervisor; recompute. A
+   *  supervisor needs group/center hours (entered below) — not in the CSV. */
+  function setPosition(idx: number, position: Position) {
+    setRows((prev) => {
+      const next = [...prev];
+      next[idx] = recomputeRow(
+        { ...next[idx].rc, position },
+        run.csvRows,
+        run.configSnapshot,
+      );
+      return next;
+    });
+  }
+
+  /** Set a supervisor's group config (center + hours, weighted /40); recompute. */
+  function setGroupConfig(idx: number, gc: GroupConfig) {
+    setRows((prev) => {
+      const next = [...prev];
+      next[idx] = recomputeRow(
+        { ...next[idx].rc, groupConfig: gc },
         run.csvRows,
         run.configSnapshot,
       );
@@ -270,6 +300,17 @@ export function RunReview({
                 </span>
               )}
               <div className="ml-auto flex items-center gap-1.5">
+                {/* Position drives the supervisor group-score average; not in the CSV. */}
+                <Select
+                  aria-label={`Position for ${r.rc.canonicalName}`}
+                  value={r.rc.position}
+                  onChange={(e) => setPosition(idx, e.target.value as Position)}
+                  className="w-28 py-1 text-xs"
+                  disabled={empty}
+                >
+                  <option value="Instructor">Instructor</option>
+                  <option value="Pool Supervisor">Supervisor</option>
+                </Select>
                 <label className="text-xs text-gray-500" htmlFor={`mgmt-${idx}`}>
                   Mgmt&nbsp;%
                 </label>
@@ -290,6 +331,54 @@ export function RunReview({
                 )}
               </div>
             </div>
+
+            {/* Supervisor group score = (personal + center group) / 2 — needs the
+                supervision hours (longer than the CSV/clock-in teaching hours), so
+                they're entered by hand here. Weighted /40. */}
+            {!empty && r.rc.position === "Pool Supervisor" && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
+                <span className="text-[11px] uppercase tracking-wide text-gray-400">
+                  Group hours
+                </span>
+                <Select
+                  aria-label={`Group center for ${r.rc.canonicalName}`}
+                  value={r.rc.groupConfig?.center1 ?? ""}
+                  onChange={(e) =>
+                    setGroupConfig(idx, {
+                      center1: e.target.value,
+                      hours1: r.rc.groupConfig?.hours1 ?? 40,
+                      center2: r.rc.groupConfig?.center2,
+                      hours2: r.rc.groupConfig?.hours2,
+                    })
+                  }
+                  className="w-40 py-1 text-xs"
+                >
+                  <option value="">— select center —</option>
+                  {centers.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  type="number"
+                  min={0}
+                  max={40}
+                  aria-label={`Group hours for ${r.rc.canonicalName}`}
+                  value={r.rc.groupConfig?.hours1 ?? 40}
+                  onChange={(e) =>
+                    setGroupConfig(idx, {
+                      center1: r.rc.groupConfig?.center1 ?? "",
+                      hours1: Number(e.target.value),
+                      center2: r.rc.groupConfig?.center2,
+                      hours2: r.rc.groupConfig?.hours2,
+                    })
+                  }
+                  className="w-20 py-1 text-xs"
+                />
+                <span className="text-[11px] text-gray-400">/ 40 hrs</span>
+              </div>
+            )}
 
             {/* Class-data linkage: accounts merged into this coach — add or remove. */}
             <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-2">

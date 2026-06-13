@@ -101,17 +101,43 @@ describe("buildRunCoaches", () => {
     expect(out[0].isComplete).toBe(false);
   });
 
-  it("overlays the period allowance + latest assessment by coachId", () => {
+  it("uses the period Allowance run (over carry-over) + latest assessment", () => {
     const rows = [ROW()];
     const out = buildRunCoaches({
       rows,
       config: makeConfig(),
       coaches: [profile({ lastAllowance: 500, lastMgmtAssessment: 70 })],
-      allowanceByCoachId: { 1: 1200 },
+      // Linked by coachId — the saved allowance wins over the profile carry-over.
+      allowanceRecs: [{ coachId: 1, canonicalName: "COBYS", teaching: 1200 }],
       assessmentByCoachId: { 1: 90 },
     });
     expect(out[0].teachingAllowance).toBe(1200);
     expect(out[0].mgmtAssessment).toBe(90);
+  });
+
+  it("links the period allowance by name when the group has no coachId", () => {
+    const rows = [ROW({ Instructor: "NEWBIE [BK]" })];
+    // No coach profile (so no carry-over, no coachId), but an allowance record
+    // exists under the same base name — it should link by normalized name.
+    const out = buildRunCoaches({
+      rows,
+      config: makeConfig(),
+      coaches: [],
+      allowanceRecs: [{ coachId: null, canonicalName: "NEWBIE", teaching: 900 }],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].teachingAllowance).toBe(900);
+  });
+
+  it("falls back to the profile carry-over when no allowance record links", () => {
+    const rows = [ROW()];
+    const out = buildRunCoaches({
+      rows,
+      config: makeConfig(),
+      coaches: [profile({ lastAllowance: 777 })],
+      allowanceRecs: [{ coachId: 99, canonicalName: "SOMEONE ELSE", teaching: 1200 }],
+    });
+    expect(out[0].teachingAllowance).toBe(777);
   });
 
   it("ranks by finalScore desc with a deterministic name tie-break", () => {

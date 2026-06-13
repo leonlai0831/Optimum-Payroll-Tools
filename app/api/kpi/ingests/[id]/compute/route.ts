@@ -8,12 +8,18 @@ import {
   getLatestAssessmentFinalByCoach,
   importKpiIngest,
   isKpiPeriodClosed,
+  listAllowanceRuns,
   listCoaches,
   listRuns,
   recordAudit,
 } from "@/lib/db/queries";
 import { matchInstructorNames } from "@/lib/ai/anthropic";
-import { accountsForMatch, buildRunCoaches, type BuildRunCoachProfile } from "@/lib/kpi/build-run";
+import {
+  accountsForMatch,
+  buildRunCoaches,
+  type BuildRunAllowanceRec,
+  type BuildRunCoachProfile,
+} from "@/lib/kpi/build-run";
 
 export const dynamic = "force-dynamic";
 
@@ -79,10 +85,13 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/kpi/ingests/[i
     );
   }
 
-  const [config, coachRecords, assessmentMap] = await Promise.all([
+  const [config, coachRecords, assessmentMap, allowanceRuns] = await Promise.all([
     getConfig(),
     listCoaches(),
     getLatestAssessmentFinalByCoach(),
+    // The WORK month's saved Allowance run — the authoritative teaching
+    // allowance (always keyed before KPI runs). Linked per coach in build-run.
+    listAllowanceRuns(ingest.periodLabel),
   ]);
 
   // Best-effort AI same-person clustering — degrades to [] without an API key,
@@ -105,8 +114,24 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/kpi/ingests/[i
   const assessmentByCoachId: Record<number, number> = Object.fromEntries(
     [...assessmentMap.entries()].map(([coachId, pct]) => [coachId, Math.round(pct)]),
   );
+  // Enrich each allowance record with its coach profile's CSV-account aliases so
+  // a short KPI name (VASSEN) still links to a full allowance name (VASSENTHAN).
+  const aliasById = new Map(coachRecords.map((c) => [c.id, c.aliases ?? []]));
+  const allowanceRecs: BuildRunAllowanceRec[] = allowanceRuns.map((r) => ({
+    coachId: r.coachId,
+    canonicalName: r.canonicalName,
+    aliases: r.coachId != null ? aliasById.get(r.coachId) ?? [] : [],
+    teaching: r.teaching,
+  }));
 
-  const coachResults = buildRunCoaches({ rows, config, coaches, aiClusters, assessmentByCoachId });
+  const coachResults = buildRunCoaches({
+    rows,
+    config,
+    coaches,
+    aiClusters,
+    allowanceRecs,
+    assessmentByCoachId,
+  });
   if (coachResults.length === 0) {
     return NextResponse.json(
       {

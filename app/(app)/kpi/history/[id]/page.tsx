@@ -85,6 +85,7 @@ export default async function RunDetailPage({
             coachResults: run.coachResults,
           }}
           assessmentByCoach={assessmentByCoach}
+          centers={allowanceConfig.centers}
         />
       </>
     );
