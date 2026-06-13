@@ -434,7 +434,9 @@ Name)**; inline edits (Nickname / Full Name / Role / Linked Workforce / Active)
 are **STAGED per row and committed together with a Save button** (no auto-save on
 blur — `components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row;
 the password reset stays an immediate one-off). It also has a searchable
-linked-employee picker (`components/employee-combobox.tsx`), **AI auto-link**
+linked-employee picker (`components/employee-combobox.tsx` — its dropdown is wider
+than the column and shows each coach's **full name + center sub-label**, so similar
+"MUHAMMAD …" names stay distinguishable), **AI auto-link**
 (`POST /api/users/auto-link`, reversible + audited) and **bulk add**. Auto-link is
 **precision-first** (`lib/users/autolink.ts`, Vitest-locked — a wrong link decides
 who can clock in / be paid): a deterministic pass matches on the **Full Name first,
