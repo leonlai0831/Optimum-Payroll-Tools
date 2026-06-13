@@ -90,7 +90,10 @@ export async function matchInstructorNames(
 
 export interface UserForLink {
   id: number;
+  /** Everyday nickname. */
   name: string;
+  /** Legal/full name — the strongest matching signal. */
+  fullName?: string;
   email: string;
 }
 export interface CoachForLink {
@@ -103,9 +106,9 @@ You get a list of unlinked accounts (id, display name, email) and a list of coac
 Return, for each account you can confidently match, the coach id it belongs to.
 
 Rules:
-- Match only when confident it's the same person — handle case, extra spaces, branch suffixes like "[BK]", reversed name order (e.g. "Lee Darren" vs "Darren Lee"), and an email whose local-part contains the name. This controls who can submit timesheets, so a wrong match is costly: when unsure, leave the account out.
+- Match only when confident it's the same person — handle case, extra spaces, branch suffixes like "[BK]", reversed name order (e.g. "Lee Darren" vs "Darren Lee"), and an email whose local-part contains the name. This controls who can submit timesheets / be paid, so a wrong match is costly: when unsure, leave the account out. An account with NO name signal (e.g. a phone-number email and a generic nickname) must be left unmatched — never guess.
 - Each account maps to at most one coach, and each coach to at most one account.
-- The display name is the strongest signal; the email local-part is a weaker hint.`;
+- The FULL NAME is the strongest signal (it usually equals the coach's name); the nickname and email local-part are weaker hints.`;
 
 const USER_LINK_SCHEMA = {
   type: "object",
@@ -140,7 +143,12 @@ export async function matchUsersToCoaches(
   const client = getClient();
   if (!client || users.length === 0 || coaches.length === 0) return [];
 
-  const userList = users.map((u) => `- id ${u.id}: ${u.name || "(no name)"} <${u.email}>`).join("\n");
+  const userList = users
+    .map(
+      (u) =>
+        `- id ${u.id}: full name "${u.fullName || "?"}", nickname "${u.name || "?"}" <${u.email}>`,
+    )
+    .join("\n");
   const coachList = coaches.map((c) => `- id ${c.id}: ${c.name}`).join("\n");
 
   try {

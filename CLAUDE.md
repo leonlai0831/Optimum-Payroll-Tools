@@ -433,9 +433,18 @@ are **STAGED per row and committed together with a Save button** (no auto-save o
 blur — `components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row;
 the password reset stays an immediate one-off). It also has a searchable
 linked-employee picker (`components/employee-combobox.tsx`), **AI auto-link**
-(`POST /api/users/auto-link` → deterministic `getCleanName` unique match + a
-Claude pass, `lib/users/autolink.ts` + `matchUsersToCoaches`; reversible,
-audited), and **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
+(`POST /api/users/auto-link`, reversible + audited) and **bulk add**. Auto-link is
+**precision-first** (`lib/users/autolink.ts`, Vitest-locked — a wrong link decides
+who can clock in / be paid): a deterministic pass matches on the **Full Name first,
+then the Nickname**, by cleaned-name equality → same token-set (any order) → multi-
+token subset, and links a user only when **exactly one** coach reaches that top tier
+(ambiguous ties are skipped); each coach is used once. A conservative Claude pass
+(`matchUsersToCoaches`, fed the full name) handles the remainder, then every AI match
+is gated by `sharesNameSignal` (must share a real name token — kills hallucinated
+links for signal-less accounts like a phone-number email). **One workforce profile ↔
+one login is enforced:** auto-link skips coaches already linked to any account, and
+the link PATCH (`/api/users/[id]`) 409s if a coach/gym-staff record is already linked
+elsewhere. And **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
 file**: an `email` column + an optional `full name` (→ the **Full Name** field,
 not the Nickname), parsed client-side into rows by the Vitest-locked
 `lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy ExcelJS, flexible

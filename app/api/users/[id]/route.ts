@@ -90,6 +90,24 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   if (body.coachId !== undefined || body.gymStaffId !== undefined) {
     const link = resolveEmployeeLink(body);
     if ("error" in link) return link.error;
+    // One workforce profile ↔ one login: refuse to point this account at a
+    // coach / gym-staff record that's already linked to a DIFFERENT account.
+    if (link.coachId != null || link.gymStaffId != null) {
+      const clash = (await listUsers()).find(
+        (u) =>
+          u.id !== userId &&
+          ((link.coachId != null && u.coachId === link.coachId) ||
+            (link.gymStaffId != null && u.gymStaffId === link.gymStaffId)),
+      );
+      if (clash) {
+        return NextResponse.json(
+          {
+            error: `That workforce profile is already linked to ${clash.email}. Unlink it there first.`,
+          },
+          { status: 409 },
+        );
+      }
+    }
     patch.coachId = link.coachId;
     patch.gymStaffId = link.gymStaffId;
   }

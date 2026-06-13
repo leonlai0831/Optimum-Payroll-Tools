@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
 import { canManageUserRole } from "@/lib/auth/types";
 import { listCoaches, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
-import { deterministicLinks } from "@/lib/users/autolink";
+import { deterministicLinks, sharesNameSignal, type LinkUser } from "@/lib/users/autolink";
 import { matchUsersToCoaches } from "@/lib/ai/anthropic";
 
 export const dynamic = "force-dynamic";
@@ -29,25 +29,45 @@ export async function POST() {
     return NextResponse.json({ ok: true, linked: 0, matches: [] });
   }
 
-  const coachOpts = coaches.map((c) => ({ id: c.id, name: c.canonicalName }));
-
-  // 1. Deterministic unique clean-name matches (works with no API key).
-  const det = deterministicLinks(
-    unlinked.map((u) => ({ id: u.id, name: u.displayName })),
-    coachOpts,
+  // One workforce profile ↔ one login: a coach already linked to ANY account is
+  // off the table, so auto-link can never point a second user at the same coach.
+  const linkedCoachIds = new Set(
+    users.map((u) => u.coachId).filter((id): id is number => id != null),
   );
+  const coachOpts = coaches
+    .filter((c) => !linkedCoachIds.has(c.id))
+    .map((c) => ({ id: c.id, name: c.canonicalName }));
+  const coachName = new Map(coaches.map((c) => [c.id, c.canonicalName]));
+
+  const linkUsers: LinkUser[] = unlinked.map((u) => ({
+    id: u.id,
+    displayName: u.displayName,
+    fullName: u.fullName,
+    email: u.email,
+  }));
+  const linkUserById = new Map(linkUsers.map((u) => [u.id, u]));
+
+  // 1. Deterministic, precision-first match (full name + nickname, token-aware,
+  //    unique-only). Works with no API key.
+  const det = deterministicLinks(linkUsers, coachOpts);
   const linkedUserIds = new Set(det.map((l) => l.userId));
   const usedCoachIds = new Set(det.map((l) => l.coachId));
 
-  // 2. AI pass on what's left (degrades to [] without ANTHROPIC_API_KEY).
-  const ai = await matchUsersToCoaches(
-    unlinked
+  // 2. AI pass on what's left (degrades to [] without ANTHROPIC_API_KEY), then a
+  //    safety gate: drop any AI match that shares no real name token with the
+  //    account (kills hallucinated links for signal-less accounts).
+  const aiRaw = await matchUsersToCoaches(
+    linkUsers
       .filter((u) => !linkedUserIds.has(u.id))
-      .map((u) => ({ id: u.id, name: u.displayName, email: u.email })),
+      .map((u) => ({ id: u.id, name: u.displayName, fullName: u.fullName, email: u.email })),
     coachOpts.filter((c) => !usedCoachIds.has(c.id)),
   );
+  const ai = aiRaw.filter((m) => {
+    const u = linkUserById.get(m.userId);
+    const cn = coachName.get(m.coachId);
+    return u != null && cn != null && sharesNameSignal(u, cn);
+  });
 
-  const coachName = new Map(coaches.map((c) => [c.id, c.canonicalName]));
   const userById = new Map(users.map((u) => [u.id, u]));
   const matches: { email: string; coachName: string }[] = [];
   for (const { userId, coachId } of [...det, ...ai]) {
