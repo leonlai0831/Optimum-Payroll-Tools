@@ -1,9 +1,44 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-13**, late). `main` is
-green: **vitest 455/455**, typecheck + lint clean, `next build` OK. Read
+Snapshot for the next session (last updated **2026-06-13**, later). `main` is
+green: **vitest 471/471**, typecheck + lint clean, `next build` OK. Read
 `CLAUDE.md` for architecture + the frozen Settings IA rules; read `AGENTS.md`
 before touching Next.js APIs.
+
+## This session (2026-06-13, continuation) — branch `claude/adoring-cori-j40av8`
+
+Three changes, separate commits, one PR:
+
+1. **Bulk add users → CSV/Excel upload.** The Users-page "Bulk add" modal now
+   uploads a CSV or Excel file instead of pasting `email,name` lines. Parsing is
+   client-side (PapaParse for CSV, lazy ExcelJS for xlsx) into a cell grid, then
+   into rows by the new pure, Vitest-locked `lib/users/bulk-parse.ts` (flexible
+   header detection, or headerless `email,name`). The `/api/users/bulk` JSON
+   contract is unchanged; adds a CSV-template download + parsed preview.
+2. **Consolidated the System Setting launcher into ONE card** (`/system/users`,
+   `cap:manage_users`) — the section nav already exposes Users / Audit / Errors
+   / Permissions. Also fixed `app/(app)/system/layout.tsx` passing
+   `isSuperAdmin` as a literal `true` to `SectionNav` (a `manage_users`-only
+   holder would have seen the super-admin tabs); now hidden as intended.
+3. **KPI auto-compute Phase 1** (the big open item — see below).
+
+### KPI auto-compute — Phase 1 SHIPPED
+A staged Student Progress delivery → a reviewable **draft KPI run** in one click.
+`lib/kpi/build-run.ts` (`buildRunCoaches`, Vitest-locked, bit-identical to the
+client `computeCoach`) does merge + v11.1 scoring + carry-over server-side;
+`POST /api/kpi/ingests/[id]/compute` always saves `status:"draft"` and persists
+exactly like the dashboard save (`createRun` + `importKpiIngest`); a **"Compute
+KPI draft"** button on a pending delivery jumps to the existing `RunReview`
+screen. Reuses the existing draft → review → finalize chain + the `finalize_kpi`
+capability (both already built). **No schema change.** See the new auto-compute
+paragraph in CLAUDE.md's Student Progress chapter.
+
+**Remaining KPI auto-compute phases (NOT built):** extend `RunReview` with
+**teaching-allowance + supervisor group/center-hours editors** (today it only
+edits the mgmt assessment + account merge, so supervisors and allowance-less
+coaches can't be completed there); and an **auto-trigger on upload** (today it's
+an explicit button — deliberately, to avoid surprising the API-push path + the
+duplicate-draft / ingest-lifecycle questions).
 
 ## This session (2026-06-13) — shipped to `main`
 
@@ -43,24 +78,16 @@ raw-account KPI binding, CC rule pinned. Vendored `skill-creator` +
 
 ## Open / in-progress — NOT done
 
-- **KPI auto-compute (design APPROVED, not built).** Operator wants to drop the
-  manual KPI Calculator: a Student Progress upload should auto-compute and show
-  in KPI history. Agreed design (don't ship "upload = finalized, zero review"):
-  upload → auto-compute a **DRAFT run** (deterministic+AI merge, carry-over the
-  allowance + last mgmt-assessment) → show in history as draft → manager
-  **reviews** (fix the name merge, fill mgmt-assessment + supervisor group/center
-  hours — none of which are in the CSV) → **finalize** (`finalize_kpi`). Why not
-  full auto: the name merge is payroll-critical + currently human-edited, several
-  inputs aren't in the upload, and compute is currently **client-side only** (no
-  server route) so the pure `lib/kpi` engine must move server-side first. Next
-  natural Phase 1 = a server-side compute path + draft-run-on-import.
-- **Consolidate the System Setting launcher cards** (Users / Audit log /
-  Permissions) into ONE card — operator asked, not yet built. (A single card
-  `href:/system/users`, `cap:manage_users`, brand `system`; the section-nav
-  already exposes all three tabs. super_admin holds `manage_users` implicitly so
-  one card covers everyone.)
+- **KPI auto-compute — Phase 1 DONE this session** (server-side compute +
+  draft-run-on-import via the "Compute KPI draft" button; see the section above).
+  **Phases 2+ remain:** extend `RunReview` with teaching-allowance +
+  supervisor group/center-hours editors (so every coach can be completed at
+  review), and an auto-trigger on upload (today it's an explicit button).
+- **Consolidate the System Setting launcher cards — DONE this session** (one
+  `/system/users` card, `cap:manage_users`).
 - **Real-device QA** on all the new surfaces (clock-in entry/review/schedules,
-  Users page) — UI is build/typecheck-verified only (sandbox can't run Playwright).
+  Users page, the new bulk-add file upload, and the Compute-KPI-draft flow) — UI
+  is build/typecheck-verified only (sandbox can't run Playwright).
 
 ## Environment notes (Claude Code on the web)
 
