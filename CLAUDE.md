@@ -149,11 +149,13 @@ tabs **Months** (`/progress`) + **Upload** (`/progress/upload`), both gated `run
 
 - **Machine push** — `POST /api/ingest/kpi` (`Authorization: Bearer <INGEST_API_KEY>`,
   constant-time compare in `lib/ingest/auth.ts`; 503 when the env var is unset, in-process
-  per-IP rate limit, ~2 MB cap) accepts `{ periodLabel: "YYYY-MM", label?, rows }` with the
-  **same flexible headers as the CSV upload** (normalized via `mapCsvRows`). The same endpoint
-  also accepts a **raw CSV body** (`Content-Type: text/csv`, parsed in `lib/ingest/csv-body.ts`;
-  `periodLabel` required + `label` optional as query params) with identical staging behavior.
-  The proxy exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route).
+  per-IP rate limit, ~2 MB cap) accepts a **JSON object** (REST-standard, everything in the
+  body): `{ periodLabel: "YYYY-MM", label?, rows }` OR `{ periodLabel, label?, csv }` where
+  `csv` is the raw CSV text as a string field (parsed via `lib/ingest/csv-body.ts`) — both use
+  the **same flexible headers as the CSV upload** (normalized via `mapCsvRows`). It still also
+  accepts a **raw CSV body** (`Content-Type: text/csv`; `periodLabel` required + `label` optional
+  as query params) for file-streaming senders, but the JSON `csv` field is preferred (no query
+  params). The proxy exempts `/api/ingest` from the cookie redirect (bearer auth happens in the route).
 - **Manual upload** — `/progress/upload` (month picker + optional label + CSV parsed
   client-side with PapaParse + `mapCsvRows`, preview before submit) posts
   `{ periodLabel, label?, rows }` to `POST /api/progress/uploads`

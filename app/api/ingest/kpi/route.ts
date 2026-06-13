@@ -17,11 +17,14 @@ export const dynamic = "force-dynamic";
  * do not block). The staging behavior itself lives in lib/ingest/stage.ts,
  * shared with the logged-in manual upload (POST /api/progress/uploads).
  *
- * Two body formats, identical staging behavior and response shape:
- * - JSON (default): `{ periodLabel: "YYYY-MM", label?, rows }`.
+ * Accepted body formats, identical staging behavior and response shape:
+ * - JSON (default, REST-standard — everything in one object):
+ *   `{ periodLabel: "YYYY-MM", label?, rows }` OR `{ periodLabel, label?, csv }`
+ *   where `csv` is the raw CSV text as a string field. No query params needed.
  * - Raw CSV (`Content-Type: text/csv`, or a non-JSON body under a missing /
  *   octet-stream content type): the file itself is the body; `periodLabel`
- *   (required) and `label` (optional) come from the query string.
+ *   (required) and `label` (optional) come from the query string. Kept for
+ *   senders that stream a file; the JSON `csv` field is preferred.
  *
  * Auth is a bearer key (`Authorization: Bearer <INGEST_API_KEY>`), not a session
  * cookie — the proxy exempts /api/ingest from the cookie redirect. With the env
@@ -127,7 +130,7 @@ export async function POST(req: Request) {
     }
     rawRows = parsed.rows;
   } else {
-    let body: { periodLabel?: unknown; label?: unknown; rows?: unknown };
+    let body: { periodLabel?: unknown; label?: unknown; rows?: unknown; csv?: unknown };
     try {
       body = JSON.parse(text) as typeof body;
     } catch {
@@ -148,18 +151,36 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    if (
-      !Array.isArray(body.rows) ||
-      body.rows.length === 0 ||
-      !body.rows.every((r) => r != null && typeof r === "object" && !Array.isArray(r))
+    label = typeof body.label === "string" ? body.label.trim().slice(0, 200) : "";
+
+    // The data can arrive as a parsed `rows` array OR a raw `csv` string field —
+    // the latter lets a sender keep everything (periodLabel, label, data) in ONE
+    // JSON object, the REST-standard shape, instead of a raw-CSV body + query
+    // params. `csv` wins if both are present.
+    if (typeof body.csv === "string" && body.csv.trim() !== "") {
+      const parsed = parseCsvBody(body.csv);
+      if (!parsed.ok) {
+        return NextResponse.json(
+          { ok: false, error: `JSON body "csv": ${parsed.error}` },
+          { status: 400 },
+        );
+      }
+      rawRows = parsed.rows;
+    } else if (
+      Array.isArray(body.rows) &&
+      body.rows.length > 0 &&
+      body.rows.every((r) => r != null && typeof r === "object" && !Array.isArray(r))
     ) {
+      rawRows = body.rows as RawRow[];
+    } else {
       return NextResponse.json(
-        { ok: false, error: "JSON body: rows must be a non-empty array of objects." },
+        {
+          ok: false,
+          error: 'JSON body: provide the data as a non-empty "rows" array or a "csv" string.',
+        },
         { status: 400 },
       );
     }
-    rawRows = body.rows as RawRow[];
-    label = typeof body.label === "string" ? body.label.trim().slice(0, 200) : "";
   }
 
   // Shared staging behavior (lib/ingest/stage.ts): closed-period 409 guard
