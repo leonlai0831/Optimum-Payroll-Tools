@@ -275,6 +275,50 @@ changes). PDF export per type via `lib/reports/lesson-plan.ts` (pdf-lib, mirrors
 the payslip builder). Table `lesson_plans`: promoted list columns + jsonb body;
 access rules live in `lib/lesson-plan/access.ts`.
 
+## Clock-in / Timesheet (`lib/timesheet`, `/timesheets`)
+
+Staff self-report their monthly hours → an admin approves → approved hours feed
+the pay calculators. Launcher card "Clock-in" (swim); section tabs **My
+timesheet** (`/timesheets`, `submit_timesheet`) · **Review** (`/timesheets/review`,
+`review_timesheet`) · **Schedules** (`/timesheets/schedules`,
+`manage_freelancer_schedule`). Built P1→P4 (2026-06-13); the engine is pure +
+Vitest-locked like the freelancer/allowance engines (payroll).
+
+- **Pure core** (`lib/timesheet/`): 7 clock-in **class types**
+  (Low/Medium/High/Adult/Young Swimmer/Precomp/Lifesaving) fold into the 3
+  allowance rate buckets via `teachingBucketOf` (low/med/high/adult→`normal`,
+  youngSwimmer→`youngSwimmer`, precomp/lifesaving→`precompLifesaving`) — **no
+  rate-table change**. `aggregateTeaching` (full-time `lesson` hours → allowance
+  `teachingRows`); `reconcileFreelancer` (a freelancer's approved clock-ins vs
+  their fixed schedule → fixed / replaced / absence → `FreelancerCenterRow[]`,
+  auto-deriving the attendance-bonus forfeit). **Reconcile matches on the
+  scheduled DATE only** (operator: freelancers cover at other centers, so a
+  clock-in on a scheduled day is fixed wherever it happened; hours land on the
+  center actually worked; the schedule carries no class type — declared at
+  clock-in).
+- **Two entry modes**: `lesson` (instructor — class type + hours) and `shift`
+  (front-desk freelancer — start/end → hours; no class type). v1 covers
+  **full-time instructors + all freelancers (incl. freelance front desk)**;
+  **full-time front desk is deferred** (still manual). Hours for a `shift` are
+  derived server-side from start/end (`lib/timesheet/validate.ts`).
+- **Schema** (`timesheets` + `freelancer_schedules`): review workflow mirrors
+  lesson plans (`draft → submitted → approved / changes_requested`); editing an
+  entry resets it to draft; rows never hard-deleted. `slotType` is derived (admin
+  can override). Migrations **0033** (tables), **0035** (`note` column),
+  **0036** (drop schedule `class_type`).
+- **Routes** (`app/api/timesheets/*`, capability-gated, audited): `/` (GET own |
+  `?coachId=` for reviewers, POST own), `/[id]` (PATCH/DELETE), `/submit` (flip
+  own month draft→submitted), `/review` (GET queue + POST batch
+  approve/request-changes — guarded to `submitted` only), `/aggregate`
+  (`mode=allowance|freelancer`, gated `run_allowance`/`run_freelancer`).
+- **P4 "Load from clock-in"** buttons in the Freelancer + Allowance calculators
+  pull the approved month's hours (freelancer auto-classified via the schedule).
+- **Pre-go-live data** (like the freelancer payee import): link each
+  instructor/freelancer login to its coach profile (`users.coachId` — else "your
+  account isn't linked"), and enter each freelancer's fixed schedule (else their
+  clock-ins read as replacements/absences). The **Users page AI auto-link**
+  (below) does the first; `/timesheets/schedules` the second.
+
 ## Design language (since the 2026-06 redesign)
 
 Notion-calm base × Optimum CI: warm paper canvas `#f6f5f4`, warm-grey ink ramp
@@ -352,7 +396,18 @@ held until the draw-in finishes).
 
 Per-user accounts (email + password, bcrypt-style hash in the `users` table) with roles
 `super_admin / admin / supervisor / staff`; a role → capability matrix (`/system/permissions`)
-gates everything else. Launcher **category visibility** (swim / fit / marketing) lives in the
+gates everything else. Clock-in adds three capabilities — `submit_timesheet`
+(staff+supervisor+admin), `review_timesheet` + `manage_freelancer_schedule`
+(supervisor+admin), with `BACKFILL_CAPS` so existing deployments inherit them per
+role default (no SQL for the matrix). The `users` table carries both a
+**`displayName` (the everyday "Nickname")** and an admin-only **`fullName`**
+(legal name, migration 0037 — the PATCH route rejects a `fullName` change from a
+non-admin). `/system/users` has list search + sortable columns, a searchable
+linked-employee picker (`components/employee-combobox.tsx`), **AI auto-link**
+(`POST /api/users/auto-link` → deterministic `getCleanName` unique match + a
+Claude pass, `lib/users/autolink.ts` + `matchUsersToCoaches`; reversible,
+audited), and **bulk add** (`POST /api/users/bulk` — paste `email,name` lines,
+one role + shared initial password, dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
 same permissions matrix: each role has **default categories**, and the page's "User overrides"
 tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
 `getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
@@ -525,6 +580,19 @@ via `vercel.json`) → set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` / `SESSI
 `ANTHROPIC_API_KEY` → deploy. **Migrations auto-apply on first DB connect** (`lib/db/index.ts`), so
 a fresh prod database needs no manual SQL; you can still run `npm run db:migrate` against the prod
 DB to apply them explicitly ahead of traffic. See `README.md` for step-by-step details.
+
+**Migration robustness (`lib/db/index.ts`, hardened 2026-06-13).** Three layers
+keep auto-migrate from wedging serverless startup: (1) a **concurrent-race
+retry** — multiple cold-start instances racing `CREATE SCHEMA "drizzle"` /
+the journal insert fail with `23505`/`XX000`/etc.; `migrate()` is idempotent so
+it's retried with backoff. (2) `reconcileSchema` (the fallback when the journal
+is out of sync — e.g. a `db:push`-bootstrapped prod DB) replays every migration
+statement-by-statement, **skipping both "already exists" AND "already gone"**
+SQLSTATEs, so `DROP COLUMN`/`ALTER` replays are no-ops (write new DROP migrations
+as `DROP COLUMN IF EXISTS`). (3) After a reconcile, `recordMigrationsAsApplied`
+**backfills `drizzle.__drizzle_migrations`** (drizzle's own hash + folderMillis)
+so the NEXT migrate is a clean no-op — no perpetual per-cold-start reconcile.
+Locked by `lib/db/migrate-repair.test.ts`.
 
 ## gstack (recommended)
 
