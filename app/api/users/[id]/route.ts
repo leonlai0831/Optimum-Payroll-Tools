@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { resolveEmployeeLink } from "@/lib/auth/user-link";
+import { DUPLICATE_EMAIL_MESSAGE, LOOSE_EMAIL_RE, isDuplicateEmailError } from "@/lib/auth/email";
 import { deleteUser, getUserById, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
 import {
   ROLES,
@@ -50,6 +51,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   if (scopeDenied) return scopeDenied;
 
   const body = (await req.json().catch(() => ({}))) as {
+    email?: string;
     role?: string;
     active?: boolean;
     displayName?: string;
@@ -61,6 +63,22 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
   };
 
   const patch: Parameters<typeof updateUser>[1] = {};
+  // Sign-in email is super_admin-only to change (a typo here locks someone out);
+  // staff change their OWN email via /api/users/me. Uniqueness is enforced by
+  // updateUser (the catch below surfaces a duplicate as a 400).
+  if (typeof body.email === "string") {
+    if (actor.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Only a super admin can change an account's email." },
+        { status: 403 },
+      );
+    }
+    const email = body.email.trim().toLowerCase();
+    if (!LOOSE_EMAIL_RE.test(email)) {
+      return NextResponse.json({ error: "Please enter a valid email." }, { status: 400 });
+    }
+    patch.email = email;
+  }
   if (typeof body.displayName === "string") patch.displayName = body.displayName;
   // Full (legal) name is admin-only — the nickname (displayName) stays editable
   // by any manage_users holder.
@@ -152,8 +170,19 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     }
   }
 
-  await updateUser(userId, patch);
+  try {
+    await updateUser(userId, patch);
+  } catch (e) {
+    // Only the email-uniqueness clash is user-facing; rethrow anything else so a
+    // real server error 500s and reaches the error sink instead of masquerading
+    // as a 400 (and leaking the raw driver message).
+    if (isDuplicateEmailError(e)) {
+      return NextResponse.json({ error: DUPLICATE_EMAIL_MESSAGE }, { status: 400 });
+    }
+    throw e;
+  }
   const changed = [
+    patch.email !== undefined && `email→${patch.email}`,
     patch.displayName !== undefined && "nickname",
     patch.fullName !== undefined && "full name",
     patch.role !== undefined && `role→${patch.role}`,

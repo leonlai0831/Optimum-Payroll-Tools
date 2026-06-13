@@ -7,16 +7,29 @@ import { Button, Card, Input, Label, Spinner } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
 
-export function AccountForm({ email, role }: { email: string; role: Role }) {
+export function AccountForm({
+  email,
+  role,
+  displayName,
+}: {
+  email: string;
+  role: Role;
+  displayName: string;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newEmail, setNewEmail] = useState(email);
+  const [newDisplayName, setNewDisplayName] = useState(displayName);
   const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const dirty =
-    newEmail.trim().toLowerCase() !== email.toLowerCase() || newPassword.length > 0;
+  const emailChanged = newEmail.trim().toLowerCase() !== email.toLowerCase();
+  const nameChanged = newDisplayName.trim() !== displayName.trim();
+  const passwordChanged = newPassword.length > 0;
+  const dirty = emailChanged || nameChanged || passwordChanged;
+  // Current password is only needed for the security-sensitive fields.
+  const needsCurrentPassword = emailChanged || passwordChanged;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -26,9 +39,9 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          currentPassword,
-          newEmail:
-            newEmail.trim().toLowerCase() === email.toLowerCase() ? undefined : newEmail.trim(),
+          currentPassword: needsCurrentPassword ? currentPassword : undefined,
+          newEmail: emailChanged ? newEmail.trim() : undefined,
+          newDisplayName: nameChanged ? newDisplayName.trim() : undefined,
           newPassword: newPassword || undefined,
         }),
       });
@@ -52,7 +65,18 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
       <Card className="space-y-4 p-4">
         <div>
           <Label>Role</Label>
+          {/* Role is admin-controlled — shown here read-only. */}
           <p className="mt-1 text-body text-gray-700">{ROLE_LABELS[role]}</p>
+        </div>
+        <div>
+          <Label htmlFor="acc-nickname">Nickname</Label>
+          <Input
+            id="acc-nickname"
+            value={newDisplayName}
+            onChange={(e) => setNewDisplayName(e.target.value)}
+            placeholder="Shown around the app (falls back to your email)"
+            className="mt-1"
+          />
         </div>
         <div>
           <Label htmlFor="acc-email">Email</Label>
@@ -78,20 +102,24 @@ export function AccountForm({ email, role }: { email: string; role: Role }) {
             className="mt-1"
           />
         </div>
-        <div className="border-t border-gray-100 pt-4">
-          <Label htmlFor="acc-current-password">Current password (required to save)</Label>
-          <Input
-            id="acc-current-password"
-            type="password"
-            autoComplete="current-password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            className="mt-1"
-            required
-          />
-        </div>
+        {needsCurrentPassword && (
+          <div className="border-t border-gray-100 pt-4">
+            <Label htmlFor="acc-current-password">
+              Current password (required to change email or password)
+            </Label>
+            <Input
+              id="acc-current-password"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="mt-1"
+              required
+            />
+          </div>
+        )}
         <div className="flex justify-end">
-          <Button type="submit" disabled={busy || !dirty || !currentPassword}>
+          <Button type="submit" disabled={busy || !dirty || (needsCurrentPassword && !currentPassword)}>
             {busy ? <Spinner /> : <Save className="h-4 w-4" />} Save changes
           </Button>
         </div>
