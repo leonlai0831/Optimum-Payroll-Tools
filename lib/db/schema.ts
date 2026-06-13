@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -118,7 +119,14 @@ export const users = pgTable("users", {
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [
+  // One workforce profile ↔ one login: a coach / gym-staff record links to at
+  // most ONE account. Partial unique — unlinked accounts (NULL) are exempt. The
+  // API already 409s on a duplicate link; this is the DB-level backstop. The
+  // dedup that makes this safe to add lives in migration 0038.
+  uniqueIndex("users_coach_id_unique").on(t.coachId).where(sql`${t.coachId} is not null`),
+  uniqueIndex("users_gym_staff_id_unique").on(t.gymStaffId).where(sql`${t.gymStaffId} is not null`),
+]);
 
 /** A saved monthly run (history record). */
 export const runs = pgTable("runs", {
