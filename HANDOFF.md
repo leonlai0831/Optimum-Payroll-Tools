@@ -1,9 +1,41 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-13**, end of a long
-continuation session). `main` is green: **vitest 493/493**, typecheck + lint
+continuation session). `main` is green: **vitest 502/502**, typecheck + lint
 clean, `next build` OK. Read `CLAUDE.md` for architecture + the frozen Settings
 IA rules; read `AGENTS.md` before touching Next.js APIs.
+
+## This session (2026-06-13, continuation 3) — SOP + backlog A & B (#174–#176)
+
+A **development SOP** was added (CLAUDE.md → "Development SOP — per-feature loop"):
+per feature → build + `/code-review` + lint/typecheck/test/build → **auto-merge when
+CI green** (standing authorization, no per-PR ask) → docs → check token budget then
+continue or hand off. **Doc-maintenance policy** (operator, this session, in the
+SOP): `CLAUDE.md` = system facts/rules (in the feature PR); `ROADMAP.md` =
+intent/priority/decisions (in the feature PR); `HANDOFF.md` = the session snapshot
+(THIS file), refreshed **at session end only**, not per feature. Then, one clean PR
+each, all squash-merged after `/code-review` + green CI:
+
+1. **#174 — Planning docs (no code).** Captured backlog **B** (expanded) + **E**
+   (new) with full code maps, plus the SOP + doc policy itself.
+2. **#175 — Backlog A: Clock-in entry redesign.** Mode auto-locked by
+   `coaches.jobRole` (front_desk → shift, else lesson; toggle removed). A lesson is
+   now a SESSION — a start/end window with one-or-more `(classType, hours)` lines, a
+   live sum-vs-span gate (±0.25 h), persisted **one lesson row per line**
+   (`sessionToEntries`, Vitest-locked). `POST /api/timesheets` routes a `lines` body
+   through `parseTimesheetSession`; shift/legacy path unchanged. The stale
+   `claude/clockin-entry-redesign` branch is **SUPERSEDED** (its validator was
+   cherry-picked onto fresh main) — ignore it.
+3. **#176 — Backlog B: attention badges (launcher cards + section-nav tabs).**
+   `lib/nav/badges.ts` (`attentionBadges` + `launcherBadgeCount`, Vitest-locked) +
+   shared `components/count-badge.tsx`; counts System→Errors, Clock-in→Review,
+   Lesson Plan→History; capability-gated (super_admin = all), best-effort,
+   non-reviewers run **zero** queries. Badge sits on the launcher icon corner + the
+   matching tab. New queries `countTimesheetsForReview` / `countLessonPlansForReview`.
+
+**QA note:** A and B passed typecheck/lint/test/build + a `/code-review`/reviewer
+pass, but were **NOT browser-QA'd (gstack)** this session — worth a real-device pass
+(esp. A's multi-line lesson form + the badge placement on phones).
 
 ## This session (2026-06-13, continuation 2) — merged to `main` as #170–#172
 
@@ -53,53 +85,22 @@ Also this session (NOT a feature PR):
 > PR at a time**, in roughly this order. C and D overlap (both touch
 > `/system/permissions`); B's counts get refined by C.
 
-**A. Clock-in entry redesign — branch `claude/clockin-entry-redesign` (pushed, NOT merged).**
- - DONE: `parseTimesheetSession` + `SESSION_HOURS_TOLERANCE` (±0.25 h) in
-   `lib/timesheet/validate.ts`, Vitest-locked (`validate.test.ts`, 12 pass).
- - **#1 auto-mode (by position):** `app/(app)/timesheets/page.tsx` should fetch the
-   signed-in user's coach `jobRole` (`getCoach(user.coachId)`) and pass it to
-   `components/timesheet-entry.tsx`, which **locks the mode** —
-   `jobRole === "front_desk"` → Front-desk Shift, else → Lesson — and **drops the
-   free Lesson/Shift toggle**.
- - **#2 lesson session (start/end + multiple class lines):** `POST /api/timesheets`
-   should accept a lesson session `{ periodLabel, date, center, startTime, endTime,
-   lines: [{classType, hours}], note }`, validate via `parseTimesheetSession`, and
-   **insert one timesheet row per line** (the `timesheets` table already has
-   startTime/endTime/classType/hours cols — no schema change); keep the shift path
-   (`parseTimesheetEntry`). Redesign the lesson form into a **multi-line
-   (classType, hours) editor** with start/end + a live "sum vs span" indicator that
-   blocks submit unless within ±0.25 h.
- - Decisions: multi-class-type per window; ±0.25 h tolerance; mode auto-locked by
-   `coaches.jobRole` (`"instructor" | "front_desk"`).
+**A. Clock-in entry redesign — ✅ DONE (#175).** Shipped this session (see the
+ continuation-3 block above). The implemented shape became the canonical reference
+ in CLAUDE.md's Clock-in chapter; `sessionToEntries` + `parseTimesheetSession` are
+ Vitest-locked. (Old `claude/clockin-entry-redesign` branch superseded — ignore.)
 
-**B. Notification badges — launcher cards AND section-nav tabs (MERGED, operator
- decision 2026-06-13).** A red count on each module card's **ICON top-right**
- (phone-notification style) for items awaiting *this user's* approval **AND** the
- same count on the matching tab once you open the section, so you know where to
- look. Awaiting-review sources: **Clock-in** = timesheets `submitted`
- (`review_timesheet`) → card + `/timesheets/review` tab; **Lesson Plan** = plans
- `submitted` (`review_lesson_plans`) → card + `/lesson-plans/history` tab;
- **System** = `countAppErrors()` (super_admin) → card + `/system/errors` tab
- (today the errors badge only lives on the card). Build it ONCE:
- - **`lib/nav/badges.ts` → `sectionBadges(user, caps)`** returns `Record<href,
-   number>` (capability-gated for the current user). New queries needed:
-   `countTimesheetsForReview()` (status `submitted`), `countLessonPlansForReview()`
-   (status `submitted`); errors reuses `countAppErrors()`.
- - **Extract `<CountBadge>`** from the inline red-pill markup in
-   `app/(app)/page.tsx` (`ToolCard`) into a shared component; launcher card AND
-   `SectionNav` tab both render it (style never drifts). **Reposition the existing
-   System-card badge** to the icon corner to match.
- - **`SectionNav` gains an optional `badges?: Record<string, number>` prop**
-   (`components/section-nav.tsx`); each section `layout.tsx` (system / timesheets /
-   lesson) computes via `sectionBadges` and passes it in. The launcher card badge =
-   the sum of that section's destination counts.
- - Capability-gated; **super_admin sees all**; counts become **center-scoped once C
-   lands** (add the center filter inside `sectionBadges`). The `Tool.badge` +
-   `ToolCard` infra already exists in `app/(app)/page.tsx` (today next to the
-   chevron). (Absorbs the old "launcher badges only" item.)
+**B. Notification badges — ✅ DONE (#176).** Shipped this session (continuation-3
+ block above). One source of truth `lib/nav/badges.ts` (`attentionBadges` +
+ `launcherBadgeCount`) + shared `components/count-badge.tsx`; lights up launcher
+ cards AND section-nav tabs. **C will add a center filter inside `attentionBadges`.**
 
-**C. Center-scoped approvals (admin approves only their branch).** super_admin = all
- (confirmed by operator). Full code map done this session:
+**C. Center-scoped approvals (admin approves only their branch). ← NEXT, START HERE.**
+ super_admin = all (confirmed by operator). Large + architecturally significant
+ (permission model + a migration + payroll-finalize path), so it was deliberately
+ left for a fresh session. **Open decision to confirm with the operator first:** does
+ the per-admin center assignment UI live on `/system/users` or on
+ `/system/permissions` (it overlaps D)? Full code map:
  - Store `users.managedCenters` (jsonb `string[]`, mirror `visibleCategories`;
    NULL/empty → role default; super_admin → all). Add per-role defaults to
    `PermissionConfig` + an `effectiveAdminCenters()` resolver in `lib/auth/types.ts`;
@@ -158,8 +159,8 @@ Also this session (NOT a feature PR):
 **Carried over (largely handled, verify):** pre-#166 wrong auto-links — #172's
  DB UNIQUE now prevents new dupes and 0038 dedups existing ones (keeping the active
  login); **verify the dedup kept the intended links** and re-run AI auto-link for
- any orphaned active accounts. Real-device QA: this session gstack-QA'd #170/#171/#172
- surfaces; the clock-in redesign (A) and C/D are unbuilt → QA when built.
+ any orphaned active accounts. Real-device QA: A (#175) and B (#176) shipped this
+ session but were NOT browser-QA'd; C/D/E are unbuilt → QA when built.
 
 ## Environment notes (Claude Code on the web)
 
