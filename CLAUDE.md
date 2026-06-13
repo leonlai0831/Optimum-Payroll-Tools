@@ -19,12 +19,11 @@ roles + a capability matrix (see "Auth"); the original shared password is long g
 
 > **Pending work / next session:** the active backlog (in-progress branch + the
 > operator decisions behind each item) lives in **`HANDOFF.md`**, with intent in
-> **`ROADMAP.md`**. As of 2026-06-13 that's: A) Clock-in entry redesign (branch
-> `claude/clockin-entry-redesign` — validator done), B) notification badges on
-> launcher cards AND section-nav tabs, C) center-scoped approvals,
-> D) Permissions/User-overrides redesign, E) list-control standardization
-> (Search/Sort/Filter/select-all via a shared kit), plus the Marketing-card
-> visibility (owner config, no code).
+> **`ROADMAP.md`**. As of 2026-06-13: A) Clock-in entry redesign ✅ and
+> B) notification badges (launcher cards + section-nav tabs) ✅ are SHIPPED;
+> remaining: C) center-scoped approvals, D) Permissions/User-overrides redesign,
+> E) list-control standardization (Search/Sort/Filter/select-all via a shared
+> kit), plus the Marketing-card visibility (owner config, no code).
 
 ## Development SOP — per-feature loop (follow EVERY session)
 
@@ -640,7 +639,24 @@ fills a real gap, since React render errors are swallowed into the boundary and 
 `window.onerror` listener in `error-reporter.tsx`. `global-error.tsx` replaces the root layout, so
 it ships its own `<html>/<body>` + inline styles. **Unseen-error badge:** the launcher **System
 Setting** card shows a red count of `countAppErrors()` for a super_admin (the only role that can
-open the Errors tab); it clears to 0 on "Clear all".
+open the Errors tab); it clears to 0 on "Clear all". This is one source of the shared
+**attention-badge system** (`lib/nav/badges.ts`, below).
+
+### Attention badges (launcher cards + section-nav tabs)
+
+One source of truth (`attentionBadges(user, caps)` in `lib/nav/badges.ts`) feeds a red
+"phone-notification" count to BOTH the launcher card (on the icon's top-right corner) AND the
+matching tab inside the section, via the shared `components/count-badge.tsx`. Keyed by the
+DESTINATION href: **System → Errors** (`countAppErrors`, super_admin), **Clock-in → Review**
+(`countTimesheetsForReview`, `review_timesheet`), **Lesson Plan → History**
+(`countLessonPlansForReview`, `review_lesson_plans`). Each source is capability-gated for the
+current user (super_admin's `getCapabilities` holds all caps, so it sees them all; errors are
+super_admin-only) and **best-effort** — a failing count degrades to 0 and never takes down the
+nav or launcher; non-reviewers run **zero** count queries (the gates short-circuit). The launcher
+rolls a card's count up from its section's destinations (`launcherBadgeCount` +
+`LAUNCHER_BADGE_HREFS`, Vitest-locked); `SectionNav` takes an optional `badges` prop and the
+system/timesheets/lesson layouts pass it. Counts gain a **center filter** here once
+center-scoped approvals (backlog C) land.
 
 ## Environment variables
 

@@ -28,6 +28,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CountBadge } from "@/components/count-badge";
 import type { Capability } from "@/lib/auth/types";
 
 type Requirement = { cap?: Capability; superAdmin?: boolean };
@@ -186,10 +187,14 @@ export function SectionNav({
   section,
   caps = [],
   isSuperAdmin = false,
+  badges,
 }: {
   section: keyof typeof NAVS;
   caps?: Capability[];
   isSuperAdmin?: boolean;
+  /** Attention counts keyed by tab href (see `lib/nav/badges.ts`); a positive
+   *  count renders a red pill on that tab. */
+  badges?: Record<string, number>;
 }) {
   const pathname = usePathname();
   const { title, items } = NAVS[section];
@@ -219,6 +224,7 @@ export function SectionNav({
           >
             <Icon className="h-4 w-4" />
             {label}
+            <CountBadge count={badges?.[href] ?? 0} className="ml-0.5" />
           </Link>
         );
       })}
