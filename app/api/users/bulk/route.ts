@@ -52,6 +52,11 @@ export async function POST(req: Request) {
   if (rows.length === 0) return NextResponse.json({ error: "No users to add." }, { status: 400 });
   if (rows.length > 200) return NextResponse.json({ error: "Too many at once (max 200)." }, { status: 400 });
 
+  // Full (legal) name is admin-only — the same rule the single-edit PATCH route
+  // enforces (it 403s a non-admin fullName change). A non-admin manage_users
+  // holder still creates accounts; their uploaded names are just ignored.
+  const canSetFullName = actor.role === "admin" || actor.role === "super_admin";
+
   // Authoritative existence + hierarchy check from the live list (covers accounts
   // the operator's filtered table can't see), then apply the pure plan.
   const existing = (await listUsers()).map((u) => ({ id: u.id, email: u.email, role: u.role }));
@@ -64,7 +69,7 @@ export async function POST(req: Request) {
   for (const r of plan.toCreate) {
     try {
       // The uploaded name is the person's full/legal name → Full Name field.
-      await createUser({ email: r.email, password, role, fullName: r.name });
+      await createUser({ email: r.email, password, role, fullName: canSetFullName ? r.name : undefined });
       created.push(r.email);
     } catch (e) {
       skipped.push({ email: r.email, reason: e instanceof Error ? e.message : "failed" });
@@ -72,9 +77,10 @@ export async function POST(req: Request) {
   }
   for (const r of plan.toUpdate) {
     try {
-      // Overwrite resets the role + password; full name only when the row carries
-      // one (don't wipe a stored legal name with a blank cell).
-      await updateUser(r.id, { role, password, ...(r.name ? { fullName: r.name } : {}) });
+      // Overwrite resets the role + password; full name only when an admin uploaded
+      // one (don't wipe a stored legal name with a blank cell, and respect the
+      // admin-only rule for the legal name).
+      await updateUser(r.id, { role, password, ...(canSetFullName && r.name ? { fullName: r.name } : {}) });
       updated.push(r.email);
     } catch (e) {
       skipped.push({ email: r.email, reason: e instanceof Error ? e.message : "failed" });

@@ -71,7 +71,10 @@ export function planBulkUsers(opts: {
       continue;
     }
     if (!canManageUserRole(opts.actorRole, hit.role)) {
-      skipped.push({ email, reason: "exists — above your access" });
+      // Don't reveal that the email maps to a HIGHER-ranked account (the users
+      // API 404s such accounts so their existence doesn't leak) — report the
+      // same neutral "already exists" an in-scope existing email gets.
+      skipped.push({ email, reason: "already exists" });
       continue;
     }
     toUpdate.push({ id: hit.id, email, name });

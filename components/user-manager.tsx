@@ -1049,8 +1049,53 @@ function BulkAddUsers({
     );
   }
 
+  // Render exactly ONE dialog at a time — never stack two <Modal>s. Each Modal
+  // registers its own document-level Escape + Tab focus-trap, so stacking would
+  // let Escape tear down the bulk modal (losing the parsed file) and let Tab
+  // escape into the dimmed background. All state lives in this component, so
+  // toggling which modal renders preserves the upload.
+  if (askExisting) {
+    return (
+      <Modal
+        open
+        onClose={busy ? () => {} : () => setAskExisting(false)}
+        title="Some emails already exist"
+        size="md"
+        footer={
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setAskExisting(false)} disabled={busy != null}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => void submit("skip")} disabled={busy != null}>
+              {inFlight === "skip" ? <Spinner /> : null} Skip
+            </Button>
+            <Button onClick={() => void submit("overwrite")} disabled={busy != null}>
+              {inFlight === "overwrite" ? <Spinner /> : null} Overwrite
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-body text-gray-700">
+          <strong>{existingCount}</strong> of these {validCount} email{validCount === 1 ? "" : "s"} already exist in
+          the system.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
+          <li>
+            <strong>Overwrite</strong> resets those accounts to the chosen role + shared password (and full name when
+            the file has one), then creates the rest.
+          </li>
+          <li>
+            <strong>Skip</strong> leaves them untouched and only creates the new emails.
+          </li>
+        </ul>
+        <p className="mt-2 text-xs text-gray-400">
+          Your own account and accounts above your access are never overwritten.
+        </p>
+      </Modal>
+    );
+  }
+
   return (
-   <>
     <Modal
       open
       onClose={busy ? () => {} : close}
@@ -1156,45 +1201,5 @@ function BulkAddUsers({
         </div>
       </div>
     </Modal>
-
-    {askExisting && (
-      <Modal
-        open
-        onClose={busy ? () => {} : () => setAskExisting(false)}
-        title="Some emails already exist"
-        size="md"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setAskExisting(false)} disabled={busy != null}>
-              Cancel
-            </Button>
-            <Button variant="outline" onClick={() => void submit("skip")} disabled={busy != null}>
-              {inFlight === "skip" ? <Spinner /> : null} Skip
-            </Button>
-            <Button onClick={() => void submit("overwrite")} disabled={busy != null}>
-              {inFlight === "overwrite" ? <Spinner /> : null} Overwrite
-            </Button>
-          </>
-        }
-      >
-        <p className="text-body text-gray-700">
-          <strong>{existingCount}</strong> of these {validCount} email{validCount === 1 ? "" : "s"} already exist in
-          the system.
-        </p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
-          <li>
-            <strong>Overwrite</strong> resets those accounts to the chosen role + shared password (and full name when
-            the file has one), then creates the rest.
-          </li>
-          <li>
-            <strong>Skip</strong> leaves them untouched and only creates the new emails.
-          </li>
-        </ul>
-        <p className="mt-2 text-xs text-gray-400">
-          Your own account and accounts above your access are never overwritten.
-        </p>
-      </Modal>
-    )}
-   </>
   );
 }

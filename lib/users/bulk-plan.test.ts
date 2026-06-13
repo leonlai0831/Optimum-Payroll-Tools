@@ -69,7 +69,7 @@ describe("planBulkUsers", () => {
     expect(plan.skipped).toEqual([{ email: "Manager@x.com", reason: "your own account" }]);
   });
 
-  it("never overwrites an account at or above the actor's access", () => {
+  it("never overwrites an account at or above the actor's access (and doesn't leak its rank)", () => {
     const plan = planBulkUsers({
       rows: [
         { email: "boss@x.com", name: "B" }, // super_admin — above an admin
@@ -80,7 +80,9 @@ describe("planBulkUsers", () => {
       mode: "overwrite",
     });
     expect(plan.toUpdate).toEqual([{ id: 3, email: "lead@x.com", name: "L" }]);
-    expect(plan.skipped).toEqual([{ email: "boss@x.com", reason: "exists — above your access" }]);
+    // The above-access account is skipped with the SAME neutral reason an
+    // in-scope existing email gets — its higher rank must not leak.
+    expect(plan.skipped).toEqual([{ email: "boss@x.com", reason: "already exists" }]);
   });
 
   it("a super_admin may overwrite a peer super_admin (but not itself)", () => {
