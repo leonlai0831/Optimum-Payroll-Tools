@@ -64,6 +64,9 @@ export const CAPABILITIES = [
   "view_audit",
   "edit_lesson_plans",
   "review_lesson_plans",
+  "submit_timesheet",
+  "review_timesheet",
+  "manage_freelancer_schedule",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
@@ -88,6 +91,9 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   view_audit: "View audit log",
   edit_lesson_plans: "Create & edit lesson plans",
   review_lesson_plans: "Review lesson plans",
+  submit_timesheet: "Submit own timesheet (clock-in)",
+  review_timesheet: "Review & approve timesheets",
+  manage_freelancer_schedule: "Maintain freelancer fixed schedules",
 };
 
 /**
@@ -204,6 +210,9 @@ const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
     "view_audit",
     "edit_lesson_plans",
     "review_lesson_plans",
+    "submit_timesheet",
+    "review_timesheet",
+    "manage_freelancer_schedule",
   ],
   // A team lead / senior coach: oversee and review the team, run the monthly
   // numbers, but no profile edits, user management, settings edits, or audit log.
@@ -222,8 +231,11 @@ const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
     "run_commission",
     "edit_lesson_plans",
     "review_lesson_plans",
+    "submit_timesheet",
+    "review_timesheet",
+    "manage_freelancer_schedule",
   ],
-  staff: ["view_own", "edit_lesson_plans"],
+  staff: ["view_own", "edit_lesson_plans", "submit_timesheet"],
 };
 
 export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {

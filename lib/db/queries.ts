@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { and, count, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { getDb, type DB } from "./index";
 import { logger } from "@/lib/log";
 import {
@@ -24,6 +24,8 @@ import {
   permissionConfig,
   runs,
   users,
+  timesheets,
+  freelancerSchedules,
   type AllowancePeriodLockRecord,
   type AllowanceRunRecord,
   type AssessmentRecord,
@@ -39,6 +41,8 @@ import {
   type NoteRecord,
   type RunRecord,
   type UserRecord,
+  type TimesheetRecord,
+  type FreelancerScheduleRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
 import { getCleanName } from "@/lib/kpi/csv";
@@ -56,6 +60,7 @@ import {
   type Role,
   type ToolCategory,
 } from "@/lib/auth/types";
+import type { TimesheetClassType, TimesheetEntryType } from "@/lib/timesheet/types";
 import type {
   EmployeeRole,
   EmploymentType,
@@ -2707,7 +2712,14 @@ export async function deleteUser(id: number): Promise<void> {
  * brand-new capability can't have been intentionally revoked. Extend when adding
  * default-granted capabilities that must reach existing deployments.
  */
-const BACKFILL_CAPS: Capability[] = ["finalize_kpi", "edit_lesson_plans", "review_lesson_plans"];
+const BACKFILL_CAPS: Capability[] = [
+  "finalize_kpi",
+  "edit_lesson_plans",
+  "review_lesson_plans",
+  "submit_timesheet",
+  "review_timesheet",
+  "manage_freelancer_schedule",
+];
 
 /**
  * Migrate-on-read for the stored permission matrix (the same trick as the
@@ -3134,6 +3146,139 @@ export async function reviewLessonPlan(
 export async function deleteLessonPlan(id: number): Promise<void> {
   const db = await getDb();
   await db.delete(lessonPlans).where(eq(lessonPlans.id, id));
+}
+
+/* --------------------------------- timesheets ---------------------------------- */
+
+export interface TimesheetEntryInput {
+  coachId: number;
+  periodLabel: string;
+  date: string;
+  center: string;
+  entryType: TimesheetEntryType;
+  classType: TimesheetClassType | null;
+  startTime: string | null;
+  endTime: string | null;
+  hours: number;
+  note: string;
+}
+
+/** One clock-in entry. New entries always land as a draft. */
+export async function createTimesheetEntry(input: TimesheetEntryInput): Promise<TimesheetRecord> {
+  const db = await getDb();
+  const [row] = await db
+    .insert(timesheets)
+    .values({ ...input, status: "draft" })
+    .returning();
+  return row;
+}
+
+/**
+ * Replace an entry's content. ANY edit resets it to draft (mirrors lesson
+ * plans) so a corrected entry must be re-submitted; it also clears any admin
+ * `slotType` override, since the content the override was based on changed.
+ */
+export async function updateTimesheetEntry(id: number, input: TimesheetEntryInput): Promise<void> {
+  const db = await getDb();
+  await db
+    .update(timesheets)
+    .set({ ...input, slotType: null, status: "draft", updatedAt: new Date() })
+    .where(eq(timesheets.id, id));
+}
+
+export async function getTimesheetEntry(id: number): Promise<TimesheetRecord | undefined> {
+  const db = await getDb();
+  const rows = await db.select().from(timesheets).where(eq(timesheets.id, id)).limit(1);
+  return rows[0];
+}
+
+/** A coach's entries for one month (or all months), newest date first. */
+export async function listTimesheetsForCoach(
+  coachId: number,
+  periodLabel?: string,
+): Promise<TimesheetRecord[]> {
+  const db = await getDb();
+  const conditions = [
+    eq(timesheets.coachId, coachId),
+    ...(periodLabel != null ? [eq(timesheets.periodLabel, periodLabel)] : []),
+  ];
+  return db
+    .select()
+    .from(timesheets)
+    .where(and(...conditions))
+    .orderBy(desc(timesheets.date), desc(timesheets.id));
+}
+
+export async function deleteTimesheetEntry(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete(timesheets).where(eq(timesheets.id, id));
+}
+
+/**
+ * Submit a coach's month for review: flip every draft / changes_requested entry
+ * for that coach + period to submitted. Approved entries are left untouched (an
+ * edit to one already bounced it back to draft). Returns the count submitted.
+ */
+export async function submitTimesheetsForPeriod(
+  coachId: number,
+  periodLabel: string,
+): Promise<number> {
+  const db = await getDb();
+  const rows = await db
+    .update(timesheets)
+    .set({ status: "submitted", updatedAt: new Date() })
+    .where(
+      and(
+        eq(timesheets.coachId, coachId),
+        eq(timesheets.periodLabel, periodLabel),
+        inArray(timesheets.status, ["draft", "changes_requested"]),
+      ),
+    )
+    .returning({ id: timesheets.id });
+  return rows.length;
+}
+
+/* ----------------------------- freelancer schedules ---------------------------- */
+
+export interface FreelancerScheduleSlotInput {
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  center: string;
+  classType: TimesheetClassType | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+}
+
+export async function listFreelancerSchedule(coachId: number): Promise<FreelancerScheduleRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(freelancerSchedules)
+    .where(eq(freelancerSchedules.coachId, coachId))
+    .orderBy(
+      asc(freelancerSchedules.weekday),
+      asc(freelancerSchedules.startTime),
+      asc(freelancerSchedules.id),
+    );
+}
+
+/**
+ * Replace a freelancer's whole fixed schedule in one transaction (the UI edits
+ * the weekly grid and saves it as a set). Atomic so a concurrent read never
+ * sees a half-written schedule.
+ */
+export async function replaceFreelancerSchedule(
+  coachId: number,
+  slots: FreelancerScheduleSlotInput[],
+): Promise<void> {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.delete(freelancerSchedules).where(eq(freelancerSchedules.coachId, coachId));
+    if (slots.length > 0) {
+      await tx.insert(freelancerSchedules).values(slots.map((s) => ({ ...s, coachId })));
+    }
+  });
 }
 
 /**

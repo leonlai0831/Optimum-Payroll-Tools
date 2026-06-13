@@ -533,6 +533,16 @@ gstack, and the proprietary `frontend-design` skill.
   intelligence (styles, palettes, font pairings, UX guidelines) with a small Python
   search/design-system generator over CSV data. Only this one skill from that repo is
   vendored; its sibling "ckm-design" marketing skills and bundled fonts are not.
+- **skill-creator** ([anthropics/skills](https://github.com/anthropics/skills),
+  Apache-2.0, pinned — see `.claude/skills/_vendor/skill-creator-NOTICE.md`) —
+  Anthropic's official skill-authoring skill: scaffold new skills, edit/optimize
+  existing ones, and run evals to benchmark triggering + performance. Permissive
+  license, so vendored (committed) like the two above rather than bootstrapped.
+- **find-skills** ([vercel-labs/skills](https://github.com/vercel-labs/skills),
+  MIT, pinned — see `.claude/skills/_vendor/find-skills-NOTICE.md`) — the
+  discovery skill for the open agent-skills ecosystem: searches/installs skills
+  via the `npx skills` CLI (`skills find` / `skills add`) and the skills.sh
+  leaderboard. MIT, so vendored like the others.
 
 **Bootstrapped, not vendored:** **frontend-design** (Anthropic's official UI skill) is
 proprietary ("© Anthropic PBC. All rights reserved."), so it is *not* committed; the
