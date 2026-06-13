@@ -40,6 +40,27 @@ function isAlreadyExistsError(err: unknown): boolean {
 }
 
 /**
+ * SQLSTATEs that signal a CONCURRENT migration race — two serverless cold-start
+ * instances running `migrate()` at the same time. `CREATE SCHEMA IF NOT EXISTS
+ * "drizzle"` (and the journal insert) aren't concurrency-safe: both instances
+ * pass the existence check, one wins the `pg_namespace` / journal insert and the
+ * other errors with unique_violation (23505) or "tuple concurrently updated"
+ * (XX000); serialization/deadlock/lock-timeout can also surface under load. All
+ * are transient — a sibling is mid-migration — so retrying finds the work done.
+ */
+const MIGRATION_RACE_CODES = new Set(["23505", "40001", "40P01", "55P03", "XX000"]);
+
+function isMigrationRaceError(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let depth = 0; cur != null && depth < 6; depth++) {
+    const e = cur as { code?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && MIGRATION_RACE_CODES.has(e.code)) return true;
+    cur = e.cause;
+  }
+  return false;
+}
+
+/**
  * Re-apply every migration statement individually, skipping only "already
  * exists" (matched by SQLSTATE code). Used when the migration journal is out of
  * sync with a database whose objects were created out-of-band (e.g. via
@@ -74,7 +95,7 @@ async function reconcileSchema(db: Pick<DB, "execute">): Promise<void> {
  * of sync (objects exist but aren't recorded), fall back to an idempotent
  * statement-by-statement apply instead of wedging startup on "already exists".
  */
-async function migrateWithFallback(
+async function migrateOnce(
   db: Pick<DB, "execute">,
   runMigrate: () => Promise<void>,
 ): Promise<void> {
@@ -83,6 +104,28 @@ async function migrateWithFallback(
   } catch (err) {
     if (!isAlreadyExistsError(err)) throw err;
     await reconcileSchema(db);
+  }
+}
+
+async function migrateWithFallback(
+  db: Pick<DB, "execute">,
+  runMigrate: () => Promise<void>,
+): Promise<void> {
+  // Retry on a concurrent-migration race: another cold-start instance is
+  // mid-migration (e.g. racing CREATE SCHEMA "drizzle"). migrate() is idempotent,
+  // so by the next attempt the schema + journal exist and it's a no-op. Backs off
+  // with jitter; a genuine error (bad URL, no privilege) isn't a race code and so
+  // surfaces immediately.
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await migrateOnce(db, runMigrate);
+      return;
+    } catch (err) {
+      if (attempt >= MAX_ATTEMPTS || !isMigrationRaceError(err)) throw err;
+      logger.warn("migration race — retrying", { attempt, err });
+      await new Promise((r) => setTimeout(r, 150 * 2 ** (attempt - 1) + Math.random() * 100));
+    }
   }
 }
 
