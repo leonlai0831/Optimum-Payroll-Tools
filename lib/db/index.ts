@@ -117,6 +117,34 @@ async function reconcileSchema(db: Pick<DB, "execute">): Promise<void> {
  * of sync (objects exist but aren't recorded), fall back to an idempotent
  * statement-by-statement apply instead of wedging startup on "already exists".
  */
+/**
+ * After a reconcile (objects exist but drizzle's journal didn't record them —
+ * the state a `db:push`-bootstrapped database is in), backfill the migration
+ * journal so the NEXT migrate() recognises everything as applied and skips
+ * straight through: no per-cold-start reconcile, no log noise, faster cold
+ * starts. Uses drizzle's OWN computed `hash` + `folderMillis` per migration, and
+ * inserts only hashes not already present, so it's exact and idempotent.
+ */
+async function recordMigrationsAsApplied(db: Pick<DB, "execute">): Promise<void> {
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_FOLDER });
+  await db.execute(sql.raw('CREATE SCHEMA IF NOT EXISTS "drizzle"'));
+  await db.execute(
+    sql.raw(
+      'CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)',
+    ),
+  );
+  for (const m of migrations) {
+    await db.execute(
+      sql`INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at")
+          SELECT ${m.hash}, ${m.folderMillis}
+          WHERE NOT EXISTS (
+            SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE "hash" = ${m.hash}
+          )`,
+    );
+  }
+}
+
 async function migrateOnce(
   db: Pick<DB, "execute">,
   runMigrate: () => Promise<void>,
@@ -126,10 +154,17 @@ async function migrateOnce(
   } catch (err) {
     if (!isAlreadyExistsError(err)) throw err;
     await reconcileSchema(db);
+    // Backfill the journal so the next cold start skips the reconcile entirely.
+    // Best-effort: if it fails we just reconcile again next time (correct, slower).
+    try {
+      await recordMigrationsAsApplied(db);
+    } catch (e) {
+      logger.warn("could not backfill migration journal after reconcile", { err: e });
+    }
   }
 }
 
-async function migrateWithFallback(
+export async function migrateWithFallback(
   db: Pick<DB, "execute">,
   runMigrate: () => Promise<void>,
 ): Promise<void> {
