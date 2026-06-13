@@ -3,7 +3,7 @@
 > 用 [pm-skills](https://github.com/deanpeters/Product-Manager-Skills) 的 `write-prd`
 > / `prd-development` skill 写成。承接 `docs/jtbd-2026-06.md`(第二类用户 + 「打卡系统」一节)。
 >
-> - 日期:2026-06-13 · 状态:**草案,待运营拍板头号 Open Question(班型↔费率映射)**
+> - 日期:2026-06-13 · 状态:**草案 — 班型↔费率映射已定(§10.已决);次要 OQ(固定/替补、出勤来源、审核粒度)待定**
 > - 范围由运营 2026-06-13 的四点回答锁定(见各节标注的 Q1–Q4)
 
 ---
@@ -40,12 +40,14 @@
 ## 5. Solution Overview
 
 **核心流程**
-1. 教练在手机上**新增打卡条目**:日期 · 中心 · **班型(Low/Medium/High/Young Swimmer/Adult)** · 时长(小时) · 〔固定/替补?见 OQ2〕 · 备注。
+1. 教练在手机上**新增打卡条目**:日期 · 中心 · **班型(Low / Medium / High / Adult / Young Swimmer / Precomp / Lifesaving,共 7 类)** · 时长(小时) · 〔固定/替补?见 OQ〕 · 备注。
 2. 教练**提交**整月 → 状态 `submitted`。
 3. admin **审核**:逐条或整月 approve / reject(reject 退回可改重交)。Q4:**必须审核通过才进发薪**。
 4. 审核通过的条目按月**聚合**:
-   - → **Allowance**:按 `中心 × 班型` 汇总小时 → 生成 `teachingRows`;出勤小时 → `opHours`/`leaveHours`。
-   - → **Freelancer**:按 `中心` 汇总 fixed/replaced 小时。
+   - → **Allowance**:按 `中心` 汇总小时,7 类打卡班型并进现有 3 档 `teachingRows`
+     (Low/Med/High/Adult → `normalH`、Young Swimmer → `ysH`、Precomp/Lifesaving → `precompH`);
+     出勤小时 → `opHours`/`leaveHours`。**不改现有费率表**。
+   - → **Freelancer**:按 `中心` 汇总 fixed/replaced 小时(费率只按职位 × 中心组,与班型无关)。
 5. 运营在 Allowance / Freelancer 计算器里**「从打卡载入」**(类比 KPI 的 `?ingest=` 载入),工时预填、可改。
 
 **数据模型(建议)**:新表 `timesheets`(或 `clock_ins`):`coachId, date, center, classType, hours, slotType(fixed|replaced), status, note, reviewedBy, reviewedAt`;状态机同教案;不硬删,审计留痕。
@@ -77,23 +79,30 @@
 
 ## 9. Dependencies & Risks
 
-- **依赖**:Allowance 引擎的班型费率表(见 OQ1);能力矩阵新增两项;审核工作流复用教案模式。
+- **依赖**:能力矩阵新增两项(`submit_timesheet` / `review_timesheet`);审核工作流复用教案模式。(津贴费率表**无需改** — §10 已决)
 - **风险与缓解**:
   - *自报虚高* → admin 必审(Q4)+ 审计 + 自报/审核改动率监控。
-  - *班型↔费率对不上(OQ1)* → 上线前必须定死,否则津贴算错(**payroll 级风险**)。
+  - ~~班型↔费率对不上~~ → **已解决**:7 类并进现有 3 档费率,不改费率表,payroll 风险消除。
   - *采纳率低(教练不打卡)* → 手机优先 UX、提交截止提醒;必要时 admin 代录。
   - *固定/替补未捕获(OQ2)* → freelancer attendance bonus 与 replaced 不享 attendance 的规则会算错。
 
-## 10. Open Questions(需运营拍板)
+## 10. Open Questions
 
-1. **🔴 头号 / 阻塞 — 班型 ↔ 津贴费率映射**:打卡班型 `Low/Medium/High/Young Swimmer/Adult`
-   vs 现有津贴费率 `normal/youngSwimmer/precompLifesaving`。
-   - 建议 **(B)**:把津贴费率表**改成按这 5 个班型计价**(运营既然选这 5 类作上报单位,通常想分级定价)。
-   - 备选 **(A)**:low/med/high/adult 全并入 `normal` 同一费率,ys→youngSwimmer(改动最小)。
-   - 附带:**precomp / lifesaving** 不在这 5 类里——是不教了,还是要作为第 6 个班型补进打卡?
-2. **固定 vs 替补(fixed/replaced)**:打卡是否需逐条标记?Freelancer 计费区分二者(replaced 不享 attendance bonus),不标就算不准。
-3. **出勤(opHours/leaveHours)来源**:津贴出勤率从哪来——打卡时长累加即视为出勤,还是单独申报请假小时?
-4. **审核粒度**:admin 逐条审 vs 整月一次性审?(影响 UX 与周转)
+### ✅ 已决(2026-06-13)— 班型 ↔ 津贴费率映射
+
+打卡班型为 **7 类**,聚合并进现有 **3 档**津贴费率(**不改费率表**):
+
+| 打卡班型 | 津贴费率 bucket |
+| --- | --- |
+| Low / Medium / High / Adult(learn-to-swim) | `normal` |
+| Young Swimmer | `youngSwimmer` |
+| **Precomp / Lifesaving**(新增 2 个打卡班型) | `precompLifesaving` |
+
+### 🟡 仍待运营拍板
+
+1. **固定 vs 替补(fixed/replaced)**:打卡是否需逐条标记?Freelancer 计费区分二者(replaced 不享 attendance bonus),不标就算不准。
+2. **出勤(opHours/leaveHours)来源**:津贴出勤率从哪来——打卡时长累加即视为出勤,还是单独申报请假小时?
+3. **审核粒度**:admin 逐条审 vs 整月一次性审?(影响 UX 与周转)
 
 ---
 
