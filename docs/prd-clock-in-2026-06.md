@@ -3,7 +3,7 @@
 > 用 [pm-skills](https://github.com/deanpeters/Product-Manager-Skills) 的 `write-prd`
 > / `prd-development` skill 写成。承接 `docs/jtbd-2026-06.md`(第二类用户 + 「打卡系统」一节)。
 >
-> - 日期:2026-06-13 · 状态:**Open Questions 全部已决 — 可进 user-story / 排期 / 开发(唯一残留:前台「应到工时」标准值,开发时定)**
+> - 日期:2026-06-13 · 状态:**Open Questions 全部已决 — 可进 user-story / 排期 / 开发(残留实现细节:全职前台「应到工时」标准值;freelancer 固定班表的录入与维护)**
 > - 范围由运营 2026-06-13 的四点回答锁定(见各节标注的 Q1–Q4)
 
 ---
@@ -24,12 +24,16 @@
 
 ## 3. Target Users & Personas
 
-- **主 persona — 教练 / 自由教练**(全职 + ~180 自由):按课自报工时(中心 + 班型 + 固定/替补)。
-- **主 persona — 前台 / Front Desk**(津贴 tier A1–A3):按**班次**自报「几点到几点」,**无班型、无固定/替补**;其津贴本就「只算 attendance」。
-- **主 persona — admin / 主管**:逐条 / 批量审核打卡,要手机友好的审核队列。
-- **次 persona — 运营(发薪人)**:在计算器里**一键载入**本月已审核工时,而非手敲。
+打卡的**录入模式**按角色分(教练 = lesson / 前台 = shift);**计费口径**按雇佣类型分(全职 / 自由):
+
+- **全职教练**:按课自报(中心 + 班型 + 时长)→ 喂津贴 teaching 工时。
+- **全职前台**(A1–A3):按班次自报(几点到几点)→ 津贴 attendance(实到 ÷ 应到,§10)。
+- **自由教练 / 自由前台**(~180):同样打卡,但另有一份**维护好的固定班表**;班表是
+  **fixed / 替补 / 缺勤 与 attendance bonus 的自动判定依据**(§5),**和全职不一样**。
+- **admin / 主管**:逐条 / 批量审核打卡 + **维护自由人员的固定班表**;手机友好。
+- **运营(发薪人)**:在计算器里**一键载入**本月已审核工时,而非手敲。
 - **JTBD**:员工「记录我整月做了什么、拿应得的钱、不被少算」;admin「快速核准真实工时,挡住虚报」。
-- **Roster 范围**:打卡覆盖**教练 + 前台**(凡需记工时的在职员工);不同于 Assessment(只 instructor)。
+- **Roster 范围**:打卡覆盖**教练 + 前台**(凡需记工时者);**固定班表维护仅 freelancer**;均不同于 Assessment(只 instructor)。
 
 ## 4. Strategic Context
 
@@ -37,26 +41,30 @@
 - 复用现有成熟模式,**低架构风险**:
   - **审核工作流** 复用 Lesson Plan 的 `draft → submitted → approved / changes_requested`(`lib/lesson-plan/access.ts`)。
   - **班型选择 UI** 沿用 assessment / lesson-plan 的选择器(Low/Medium/High 已存在于教案模板)。
-  - **能力矩阵**:教练得 `submit_timesheet`(仅见自己,类比 `edit_lesson_plans`);admin/主管得 `review_timesheet`(类比 `review_lesson_plans`)。
+  - **能力矩阵**:员工得 `submit_timesheet`(仅见自己,类比 `edit_lesson_plans`);admin/主管得 `review_timesheet`(类比 `review_lesson_plans`)+ `manage_freelancer_schedule`(维护固定班表)。
   - **审计**:每次 submit/approve/reject 落 `audit_log`。
 
 ## 5. Solution Overview
 
 **核心流程**
+0. **(自由人员)维护固定班表**:admin 为每个 freelancer 维护一份**固定班表**(周期性 slot:星期 / 时段 / 中心 / 〔教练:班型〕)。这是 fixed 工时与 attendance 的基准。
 1. **新增打卡条目(两种模式,按角色)**:
-   - **教练(lesson 模式)**:日期 · 中心 · **班型(7 类:Low/Medium/High/Adult/Young Swimmer/Precomp/Lifesaving)** · 时长(小时) · **固定/替补(逐条标记)** · 备注。
-   - **前台(shift 模式,A1–A3)**:日期 · 中心 · **班次起讫(几点到几点 → 自动算工时)** · 备注。**无班型、无固定/替补**。
+   - **教练(lesson 模式)**:日期 · 中心 · **班型(7 类:Low/Medium/High/Adult/Young Swimmer/Precomp/Lifesaving)** · 时长(小时) · 备注。**fixed/替补不手填**(freelancer 由班表自动判;全职不区分)。
+   - **前台(shift 模式)**:日期 · 中心 · **班次起讫(几点到几点 → 自动算工时)** · 备注。**无班型**。
 2. 教练**提交**整月 → 状态 `submitted`。
 3. admin **审核**:可**逐条**、也可**多选勾选批量** approve / reject(reject 退回可改重交)。**必须审核通过才进发薪**(Q4)。
 4. 审核通过的条目按月**聚合**:
    - → **Allowance**:按 `中心` 汇总教学小时,7 类班型并进现有 3 档 `teachingRows`
      (Low/Med/High/Adult → `normalH`、Young Swimmer → `ysH`、Precomp/Lifesaving → `precompH`)。
      **出勤部分(`opHours`/`leaveHours`)v1 不由打卡产生**(仍手工/另系统)。**不改费率表**。
-   - → **Freelancer**:按 `中心 + 固定/替补` 汇总小时(费率只按职位 × 中心组,与班型无关)。
+   - → **Freelancer**(对照固定班表自动判定):每条已审核打卡 vs 班表 → **在班表 = fixed**、**不在 = 替补(replaced)**;**班表上有 slot 却无打卡 = 缺勤**。按 `中心 + fixed/替补` 汇总小时;**attendance bonus 自动判定**(有缺勤即不享,只对 fixed 小时),**取代手工 `absent` 标记**。费率只按职位 × 中心组,与班型无关。
    - → **Allowance(前台 A1–A3)**:已审核 `shift` 工时合计 = **实到** → ÷ **应到工时** → 出勤率 → 现有 met/perfect bracket(§10 已决 A,不改津贴模型)。
 5. 运营在 Allowance / Freelancer 计算器里**「从打卡载入」**(类比 KPI 的 `?ingest=` 载入),工时预填、可改。
 
-**数据模型(建议)**:新表 `timesheets`:`coachId, date, center, entryType('lesson'|'shift'), classType?, slotType?(fixed|replaced), startTime?, endTime?, hours, status, note, reviewedBy, reviewedAt`。教练 = `lesson`(带 classType/slotType);前台 = `shift`(带 startTime/endTime,hours 由起讫推导,classType/slotType 为空)。状态机同教案;不硬删,审计留痕。
+**数据模型(建议)**:
+- 新表 `timesheets`:`coachId, date, center, entryType('lesson'|'shift'), classType?, startTime?, endTime?, hours, slotType?(fixed|replaced — freelancer 由班表派生、admin 可覆盖), status, note, reviewedBy, reviewedAt`。教练 = `lesson`;前台 = `shift`(hours 由起讫推导)。
+- 新表 `freelancer_schedules`(固定班表,仅 freelancer):`coachId, weekday, startTime, endTime, center, classType?, effectiveFrom, effectiveTo?`。按月展开后与 `timesheets` 对账 → 派生 fixed/替补/缺勤。
+- 状态机同教案;均不硬删,审计留痕。
 
 ## 6. Success Metrics
 
@@ -67,34 +75,42 @@
 
 ## 7. User Stories & Requirements
 
-- **US1**(教练):作为教练,我能在手机上新增/编辑/删除本月打卡条目(中心 + 班型 + 时长 + 固定/替补),并看到提交状态。
-  - AC:仅能看/改自己的;`submitted` 后改动退回 `draft`(同教案「改动即回草稿」);班型为 7 类固定枚举;固定/替补必选。
+- **US1**(教练):作为教练,我能在手机上新增/编辑/删除本月打卡条目(中心 + 班型 + 时长),并看到提交状态。
+  - AC:仅能看/改自己的;`submitted` 后改动退回 `draft`(同教案);班型为 7 类固定枚举;**fixed/替补不手填**。
 - **US2**(教练):我能一键提交整月待审。
 - **US3**(admin):作为 admin,我能看到「待审核」队列,**逐条或多选勾选批量** approve / reject 并附理由。
   - AC:仅 `review_timesheet` 可见全部;支持单条与批量两种操作;每次裁决落审计。
 - **US4**(运营):在 Allowance/Freelancer 计算器里一键载入某教练某月**已审核**工时。
   - AC:仅聚合 `approved` 条目;载入后仍可手改;未审核的不参与。
 - **US5**(系统):同一员工同月重复提交/审核有幂等与并发保护(参照现有 advisory-lock 约定)。
-- **US6**(前台):作为前台,我能在手机上按班次记录「日期 + 中心 + 几点到几点」,**无需选班型/固定替补**,提交待审。
+- **US6**(前台):作为前台,我能在手机上按班次记录「日期 + 中心 + 几点到几点」,**无需选班型**,提交待审。
   - AC:`shift` 模式;工时由起讫自动算;审核流、自审计、改动回草稿等同 US1。
+- **US7**(admin):作为 admin,我能为每个 freelancer 维护固定班表(周期性 slot:星期 / 时段 / 中心 / 〔班型〕),含生效起讫。
+  - AC:`manage_freelancer_schedule`;改动落审计;仅 freelancer。
+- **US8**(系统):月底把 freelancer 的已审核打卡**对照固定班表**自动判定每条 fixed/替补、标出缺勤,并据此**自动决定 attendance bonus 是否享**;admin 可覆盖个别判定。
+  - AC:对账与 attendance 判定逻辑**单测锁定**(payroll);覆盖留审计。
 
 ## 8. Out of Scope(v1 明确不做)
 
 - ❌ **喂 KPI Bonus**:KPI 学生进度数据走另一套系统,两边不共享(Q3)。
 - ❌ **学生到课记录**:另有学生 attendance 系统(Q1)。
-- ⚠️ **教练津贴出勤(opHours/leaveHours)+ freelancer absent 标记**:v1 不由打卡产生,仍手工/另系统(已决)。
-- ❌ **排班/课表生成**:v1 不做真实排班表;前台「应到工时」用**可配置的月度标准值**(§10),不是逐日排班。
+- ⚠️ **全职教练津贴出勤(opHours/leaveHours)**:v1 不由打卡产生,仍手工/另系统(已决)。
+- ✅ **freelancer absent**:**改为自动**(打卡 vs 固定班表派生),不再手工标。
+- ❌ **全职排班/课表生成**:v1 不做全职逐日排班;全职前台「应到工时」用**可配置月度标准值**(§10)。
+  (freelancer 固定班表**在范围内** —— 它是 fixed/替补/attendance 的判定依据。)
 - ❌ 薪资以外的报表。
 
 ## 9. Dependencies & Risks
 
-- **依赖**:能力矩阵新增两项(`submit_timesheet` / `review_timesheet`);审核工作流复用教案模式。(津贴费率表**无需改** — §10 已决)
+- **依赖**:能力矩阵新增三项(`submit_timesheet` / `review_timesheet` / `manage_freelancer_schedule`);审核工作流复用教案模式;**freelancer 固定班表须先维护好**才能算准对账。(津贴费率表无需改 — §10)
 - **风险与缓解**:
   - *自报虚高* → admin 必审(Q4)+ 审计 + 自报/审核改动率监控。
   - ~~班型↔费率对不上~~ → **已解决**:7 类并进现有 3 档费率,不改费率表,payroll 风险消除。
   - *采纳率低(员工不打卡)* → 手机优先 UX、提交截止提醒;必要时 admin 代录。
-  - ~~固定/替补未捕获~~ → **已解决**:逐条标记固定/替补(§10),freelancer 计费可算准。
-  - ~~前台工时 → 津贴换算未定~~ → **已解决(A)**:实到 ÷ 应到 → 出勤率(§10);残留依赖 = 「应到工时」标准值来源,开发时与运营定。
+  - ~~固定/替补未捕获~~ → **已解决**:freelancer 由**固定班表自动判定** fixed/替补/缺勤 + attendance bonus(§5/§10),取代手工标。
+  - *班表对账算错 attendance bonus(**payroll 级**)* → 对账 + attendance 判定逻辑 **TDD 单测锁死**;admin 可覆盖 + 审计。
+  - *班表没维护 / 过期* → freelancer 全被判替补/缺勤 → 算错;**上线前须先录入现有 freelancer 班表**(类比 payee 导入的一次性数据准备)。
+  - ~~前台工时 → 津贴换算未定~~ → **已解决(A)**:实到 ÷ 应到 → 出勤率(§10);残留 = 全职前台「应到工时」标准值来源,开发时定。
 
 ## 10. Open Questions
 
@@ -110,7 +126,7 @@
 
 ### ✅ 已决(2026-06-13)— 其余
 
-- **固定 vs 替补**:教练打卡**逐条标记**固定/替补(自报、admin 审);驱动 freelancer 计费。
+- **固定 vs 替补 + 缺勤 + attendance bonus(freelancer)**:由**固定班表自动判定**(打卡 vs 班表),不手填;admin 可覆盖;**和全职不一样**(全职不区分 fixed/替补)。
 - **出勤来源(教练)**:教练打卡**只产出教学小时**;教练 opHours/leaveHours + freelancer absent 仍手工/另系统。
 - **审核粒度**:admin 可**逐条**审,也可**多选勾选批量**审(approve/reject)。
 - **覆盖角色**:打卡同时服务**教练**(lesson 模式)与**前台 A1–A3**(shift 模式,无班型)。
@@ -123,11 +139,18 @@
 - 「应到工时」来源 → **建议**:可配置的**月度标准应到工时**(按中心/职级设默认,可按人覆盖),在 Staff → Settings 维护。
   ⚠️ 具体默认值与维护位置在**开发时与运营最终确认**(唯一残留实现细节,不阻塞设计)。
 
+### ✅ 已决(2026-06-13)— Freelancer 固定班表
+
+freelancer(教练 + 前台)维护**固定班表**;它作为**校验器**:打卡 vs 班表 →
+**在班表 = fixed**、**不在 = 替补**、**班表有 slot 却无打卡 = 缺勤**。据此**自动判定 freelancer 的
+attendance bonus**(有缺勤即不享 fixed 小时的 attendance bonus)—— **和 full-time 的百分比模型不同**。
+admin 可覆盖个别判定。⚠️ 上线前须先录入现有 freelancer 班表(一次性数据准备)。
+
 **全部 Open Question 关闭 → 可进 user-story / 排期 / 开发。**
 
 ---
 
 ### 下一步(PM)
 
-OQ1 定死后,建议:`user-story` 细化 US1–US5 → `plan-roadmap` 排期 → 再进设计/开发(届时走
-brainstorming / TDD,工时聚合逻辑必须单测锁定,毕竟是 payroll)。
+建议:`user-story` 细化 US1–US8 → `plan-roadmap` 排期 → 再进设计/开发(届时走
+brainstorming / TDD;工时聚合 + 班表对账逻辑必须单测锁定,毕竟是 payroll)。
