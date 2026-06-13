@@ -84,4 +84,34 @@ describe("Timesheet DB layer (PGlite in-memory)", () => {
     expect(slots[0].center).toBe("HQ");
     expect(slots[0].classType).toBe("high");
   });
+
+  it("persists the note and surfaces only submitted entries to the review queue", async () => {
+    // Own period so earlier tests' 2026-06 submissions don't leak in.
+    const a = await queries.createTimesheetEntry(
+      lesson({ coachId: 31, periodLabel: "2026-09", date: "2026-09-08", note: "covered for Sam" }),
+    );
+    await queries.createTimesheetEntry(lesson({ coachId: 32, periodLabel: "2026-09", date: "2026-09-09" }));
+    // Drafts are not in the queue.
+    expect(await queries.listTimesheetsForReview({ periodLabel: "2026-09" })).toHaveLength(0);
+
+    await queries.submitTimesheetsForPeriod(31, "2026-09");
+    await queries.submitTimesheetsForPeriod(32, "2026-09");
+    const queue = await queries.listTimesheetsForReview({ periodLabel: "2026-09" });
+    expect(queue.map((e) => e.coachId).sort()).toEqual([31, 32]);
+    expect(queue.find((e) => e.id === a.id)!.note).toBe("covered for Sam");
+  });
+
+  it("batch-reviews only submitted entries and skips stale ids", async () => {
+    const e1 = await queries.createTimesheetEntry(lesson({ coachId: 33, periodLabel: "2026-10", date: "2026-10-08" }));
+    const e2 = await queries.createTimesheetEntry(lesson({ coachId: 33, periodLabel: "2026-10", date: "2026-10-10" }));
+    await queries.submitTimesheetsForPeriod(33, "2026-10");
+
+    const approved = await queries.reviewTimesheets([e1.id, e2.id], "approve", "", 99);
+    expect(approved).toBe(2);
+    expect((await queries.getTimesheetEntry(e1.id))!.status).toBe("approved");
+    expect((await queries.getTimesheetEntry(e1.id))!.reviewedBy).toBe(99);
+    // Re-reviewing already-approved ids is a no-op (guarded to `submitted`).
+    expect(await queries.reviewTimesheets([e1.id, e2.id], "request_changes", "redo", 99)).toBe(0);
+    expect((await queries.getTimesheetEntry(e1.id))!.status).toBe("approved");
+  });
 });

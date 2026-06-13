@@ -486,6 +486,8 @@ export const timesheets = pgTable("timesheets", {
   hours: real("hours").notNull(),
   /** Admin override of the schedule-derived fixed/replaced split; null = derive. */
   slotType: text("slot_type").$type<SlotType>(),
+  /** Free-form note from the submitter (e.g. who they covered for). */
+  note: text("note").default("").notNull(),
   // Review workflow (mirrors lesson plans). No CHECK constraint, so widening the
   // union later is a types-only change.
   status: text("status")
