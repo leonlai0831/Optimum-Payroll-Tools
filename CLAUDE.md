@@ -418,15 +418,20 @@ gates everything else. Clock-in adds three capabilities — `submit_timesheet`
 role default (no SQL for the matrix). The `users` table carries both a
 **`displayName` (the everyday "Nickname")** and an admin-only **`fullName`**
 (legal name, migration 0037 — the PATCH route rejects a `fullName` change from a
-non-admin). `/system/users` has list search + sortable columns, a searchable
+non-admin). `/system/users` has list search + **sortable columns (incl. Full
+Name)**; inline edits (Nickname / Full Name / Role / Linked Employee / Active)
+are **STAGED per row and committed together with a Save button** (no auto-save on
+blur — `components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row;
+the password reset stays an immediate one-off). It also has a searchable
 linked-employee picker (`components/employee-combobox.tsx`), **AI auto-link**
 (`POST /api/users/auto-link` → deterministic `getCleanName` unique match + a
 Claude pass, `lib/users/autolink.ts` + `matchUsersToCoaches`; reversible,
 audited), and **bulk add** (`POST /api/users/bulk` — **upload a CSV or Excel
-file**: an `email` column + optional `name`, parsed client-side into rows by the
-Vitest-locked `lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy
-ExcelJS, flexible header detection or headerless `email,name`; one role + shared
-initial password, dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
+file**: an `email` column + an optional `full name` (→ the **Full Name** field,
+not the Nickname), parsed client-side into rows by the Vitest-locked
+`lib/users/bulk-parse.ts` — CSV via PapaParse, Excel via lazy ExcelJS, flexible
+header detection or headerless `email,name`; one role + shared initial password,
+dups skipped). Launcher **category visibility** (swim / fit / marketing) lives in the
 same permissions matrix: each role has **default categories**, and the page's "User overrides"
 tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
 `getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
