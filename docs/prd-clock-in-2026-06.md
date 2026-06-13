@@ -3,7 +3,7 @@
 > 用 [pm-skills](https://github.com/deanpeters/Product-Manager-Skills) 的 `write-prd`
 > / `prd-development` skill 写成。承接 `docs/jtbd-2026-06.md`(第二类用户 + 「打卡系统」一节)。
 >
-> - 日期:2026-06-13 · 状态:**草案 — 班型↔费率映射已定(§10.已决);次要 OQ(固定/替补、出勤来源、审核粒度)待定**
+> - 日期:2026-06-13 · 状态:**Open Questions 全部已决(§10),可进 user-story / 排期 / 开发**
 > - 范围由运营 2026-06-13 的四点回答锁定(见各节标注的 Q1–Q4)
 
 ---
@@ -40,14 +40,14 @@
 ## 5. Solution Overview
 
 **核心流程**
-1. 教练在手机上**新增打卡条目**:日期 · 中心 · **班型(Low / Medium / High / Adult / Young Swimmer / Precomp / Lifesaving,共 7 类)** · 时长(小时) · 〔固定/替补?见 OQ〕 · 备注。
+1. 教练在手机上**新增打卡条目**:日期 · 中心 · **班型(7 类:Low/Medium/High/Adult/Young Swimmer/Precomp/Lifesaving)** · 时长(小时) · **固定/替补(逐条标记)** · 备注。
 2. 教练**提交**整月 → 状态 `submitted`。
-3. admin **审核**:逐条或整月 approve / reject(reject 退回可改重交)。Q4:**必须审核通过才进发薪**。
+3. admin **审核**:可**逐条**、也可**多选勾选批量** approve / reject(reject 退回可改重交)。**必须审核通过才进发薪**(Q4)。
 4. 审核通过的条目按月**聚合**:
-   - → **Allowance**:按 `中心` 汇总小时,7 类打卡班型并进现有 3 档 `teachingRows`
-     (Low/Med/High/Adult → `normalH`、Young Swimmer → `ysH`、Precomp/Lifesaving → `precompH`);
-     出勤小时 → `opHours`/`leaveHours`。**不改现有费率表**。
-   - → **Freelancer**:按 `中心` 汇总 fixed/replaced 小时(费率只按职位 × 中心组,与班型无关)。
+   - → **Allowance**:按 `中心` 汇总教学小时,7 类班型并进现有 3 档 `teachingRows`
+     (Low/Med/High/Adult → `normalH`、Young Swimmer → `ysH`、Precomp/Lifesaving → `precompH`)。
+     **出勤部分(`opHours`/`leaveHours`)v1 不由打卡产生**(仍手工/另系统)。**不改费率表**。
+   - → **Freelancer**:按 `中心 + 固定/替补` 汇总小时(费率只按职位 × 中心组,与班型无关)。
 5. 运营在 Allowance / Freelancer 计算器里**「从打卡载入」**(类比 KPI 的 `?ingest=` 载入),工时预填、可改。
 
 **数据模型(建议)**:新表 `timesheets`(或 `clock_ins`):`coachId, date, center, classType, hours, slotType(fixed|replaced), status, note, reviewedBy, reviewedAt`;状态机同教案;不硬删,审计留痕。
@@ -61,11 +61,11 @@
 
 ## 7. User Stories & Requirements
 
-- **US1**(教练):作为教练,我能在手机上新增/编辑/删除本月打卡条目,选择中心+班型+时长,并看到提交状态。
-  - AC:仅能看/改自己的;`submitted` 后改动退回 `draft`(同教案「改动即回草稿」);班型为固定枚举。
+- **US1**(教练):作为教练,我能在手机上新增/编辑/删除本月打卡条目(中心 + 班型 + 时长 + 固定/替补),并看到提交状态。
+  - AC:仅能看/改自己的;`submitted` 后改动退回 `draft`(同教案「改动即回草稿」);班型为 7 类固定枚举;固定/替补必选。
 - **US2**(教练):我能一键提交整月待审。
-- **US3**(admin):作为 admin,我能看到「待审核」队列,逐条/整月 approve 或 reject 并附理由。
-  - AC:仅 `review_timesheet` 可见全部;每次裁决落审计。
+- **US3**(admin):作为 admin,我能看到「待审核」队列,**逐条或多选勾选批量** approve / reject 并附理由。
+  - AC:仅 `review_timesheet` 可见全部;支持单条与批量两种操作;每次裁决落审计。
 - **US4**(运营):在 Allowance/Freelancer 计算器里一键载入某教练某月**已审核**工时。
   - AC:仅聚合 `approved` 条目;载入后仍可手改;未审核的不参与。
 - **US5**(系统):同一教练同月重复提交/审核有幂等与并发保护(参照现有 advisory-lock 约定)。
@@ -74,7 +74,7 @@
 
 - ❌ **喂 KPI Bonus**:KPI 学生进度数据走另一套系统,两边不共享(Q3)。
 - ❌ **学生到课记录**:另有学生 attendance 系统(Q1)。
-- ❌ **自动缺勤判定**:freelancer 的 absent 标记本期仍按现状处理(除非并入 OQ2)。
+- ❌ **津贴出勤(opHours/leaveHours)+ freelancer absent 标记**:v1 不由打卡产生,仍手工/另系统(已决)。
 - ❌ 排班/课表生成、薪资以外的报表。
 
 ## 9. Dependencies & Risks
@@ -84,7 +84,7 @@
   - *自报虚高* → admin 必审(Q4)+ 审计 + 自报/审核改动率监控。
   - ~~班型↔费率对不上~~ → **已解决**:7 类并进现有 3 档费率,不改费率表,payroll 风险消除。
   - *采纳率低(教练不打卡)* → 手机优先 UX、提交截止提醒;必要时 admin 代录。
-  - *固定/替补未捕获(OQ2)* → freelancer attendance bonus 与 replaced 不享 attendance 的规则会算错。
+  - ~~固定/替补未捕获~~ → **已解决**:逐条标记固定/替补(§10),freelancer 计费可算准。
 
 ## 10. Open Questions
 
@@ -98,11 +98,13 @@
 | Young Swimmer | `youngSwimmer` |
 | **Precomp / Lifesaving**(新增 2 个打卡班型) | `precompLifesaving` |
 
-### 🟡 仍待运营拍板
+### ✅ 已决(2026-06-13)— 其余
 
-1. **固定 vs 替补(fixed/replaced)**:打卡是否需逐条标记?Freelancer 计费区分二者(replaced 不享 attendance bonus),不标就算不准。
-2. **出勤(opHours/leaveHours)来源**:津贴出勤率从哪来——打卡时长累加即视为出勤,还是单独申报请假小时?
-3. **审核粒度**:admin 逐条审 vs 整月一次性审?(影响 UX 与周转)
+- **固定 vs 替补**:打卡**逐条标记**固定/替补(教练自报、admin 审);驱动 freelancer 计费。
+- **出勤来源**:v1 打卡**只产出教学小时**;津贴出勤(opHours/leaveHours)+ freelancer absent 仍手工/另系统。
+- **审核粒度**:admin 可**逐条**审,也可**多选勾选批量**审(approve/reject)。
+
+**所有 Open Question 已关闭 → 可进 user-story / 排期 / 开发。**
 
 ---
 
