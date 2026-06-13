@@ -82,6 +82,7 @@ export async function POST(req: Request) {
   session.destroy();
   session.userId = user.id;
   session.role = user.role;
+  session.lastSeenAt = Date.now();
   await session.save();
   return NextResponse.json({ ok: true });
 }

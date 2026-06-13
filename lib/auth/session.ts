@@ -1,11 +1,18 @@
 import { cache } from "react";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
+import { isSessionIdleExpired } from "./idle";
 import { effectiveCategories, type Role, type ToolCategory } from "./types";
 
 export interface SessionData {
   userId?: number;
   role?: Role;
+  /**
+   * Last activity timestamp (ms epoch) for the idle auto-logout — written at
+   * login and refreshed by `POST /api/auth/touch`; checked against the policy
+   * in `lib/auth/idle.ts` by `getCurrentUser()`.
+   */
+  lastSeenAt?: number;
 }
 
 export const SESSION_COOKIE = "kpi_session";
@@ -90,6 +97,10 @@ export interface CurrentUser {
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await getSession();
   if (!session.userId) return null;
+  // Idle auto-logout (authoritative): a stale-but-valid cookie is simply
+  // treated as signed out. No destroy() here — this also runs during SSR
+  // render, where cookies are read-only; login/logout re-issue the cookie.
+  if (isSessionIdleExpired(session.lastSeenAt, Date.now())) return null;
   const { getUserById, getPermissionConfig } = await import("@/lib/db/queries");
   const user = await getUserById(session.userId);
   if (!user || !user.active) return null;

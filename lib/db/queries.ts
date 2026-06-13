@@ -6,6 +6,7 @@ import {
   allowanceConfig,
   allowancePeriodLocks,
   allowanceRuns,
+  appErrors,
   assessments,
   freelancerConfig,
   freelancerRuns,
@@ -28,6 +29,7 @@ import {
   freelancerSchedules,
   type AllowancePeriodLockRecord,
   type AllowanceRunRecord,
+  type AppErrorRecord,
   type AssessmentRecord,
   type AuditLogRecord,
   type CoachRecord,
@@ -45,7 +47,6 @@ import {
   type FreelancerScheduleRecord,
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
-import { getCleanName } from "@/lib/kpi/csv";
 import {
   ALL_TOOL_CATEGORIES,
   CAPABILITIES,
@@ -3344,10 +3345,73 @@ export async function listAuditLog(limit = 200): Promise<AuditLogRecord[]> {
   return db.select().from(auditLog).orderBy(desc(auditLog.createdAt), desc(auditLog.id)).limit(limit);
 }
 
+/* ── Error tracking (/system/errors) ───────────────────────────────────────── */
+
+export interface AppErrorEntry {
+  source: "server" | "client";
+  message: string;
+  stack?: string | null;
+  path?: string | null;
+  userId?: number | null;
+  userEmail?: string;
+  userAgent?: string | null;
+}
+
+/** Errors older than this are trimmed opportunistically on insert. */
+const APP_ERROR_RETENTION_DAYS = 30;
+
+/**
+ * Append one captured error. MUST swallow its own failures silently — it is
+ * called from the error-level log sink (lib/observability.ts), so logging a
+ * failure here at error level would recurse straight back in. Field lengths
+ * are capped so a pathological error can't bloat a row.
+ */
+export async function recordAppError(entry: AppErrorEntry): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.insert(appErrors).values({
+      source: entry.source,
+      message: entry.message.slice(0, 2_000),
+      stack: entry.stack ? entry.stack.slice(0, 8_000) : null,
+      path: entry.path ? entry.path.slice(0, 500) : null,
+      userId: entry.userId ?? null,
+      userEmail: entry.userEmail ?? "",
+      userAgent: entry.userAgent ? entry.userAgent.slice(0, 300) : null,
+    });
+    // Opportunistic retention trim (~1 insert in 50) so the table can't grow
+    // unbounded between manual clears.
+    if (Math.random() < 0.02) {
+      await db
+        .delete(appErrors)
+        .where(
+          sql`${appErrors.createdAt} < now() - make_interval(days => ${APP_ERROR_RETENTION_DAYS})`,
+        );
+    }
+  } catch {
+    /* see docblock — never throw, never log at error level */
+  }
+}
+
+/** Most recent captured errors first. */
+export async function listAppErrors(limit = 300): Promise<AppErrorRecord[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(appErrors)
+    .orderBy(desc(appErrors.createdAt), desc(appErrors.id))
+    .limit(limit);
+}
+
+/** Wipe the captured-error list (super_admin "Clear all" on /system/errors). */
+export async function clearAppErrors(): Promise<void> {
+  const db = await getDb();
+  await db.delete(appErrors);
+}
+
 /* ── Freelancer ↔ KPI result binding ───────────────────────────────────────── */
 
 export interface KpiResultCandidate {
-  /** Clean instructor account name (getCleanName) from the month's KPI data. */
+  /** RAW instructor account name exactly as it appears in the month's KPI data. */
   name: string;
   black: number;
   colour: number;
@@ -3359,6 +3423,11 @@ export interface KpiResultCandidate {
  * latest SAVED KPI run for the period, falling back to the latest pending
  * ingest (data is pushed on the 1st of the FOLLOWING month, so early in that
  * window only the staged delivery may exist). Empty when neither exists yet.
+ *
+ * Accounts are NOT merged by `getCleanName` (operator decision 2026-06-12):
+ * branch accounts like `CK [BK]` / `CK [PK]` stay separate candidates so a
+ * freelancer's result binds the branch account they actually teach at.
+ * Multiple rows of the SAME raw account (e.g. per-center) still sum.
  */
 export async function getKpiResultCandidates(periodLabel: string): Promise<KpiResultCandidate[]> {
   const db = await getDb();
@@ -3381,7 +3450,7 @@ export async function getKpiResultCandidates(periodLabel: string): Promise<KpiRe
   if (!rows?.length) return [];
   const byName = new Map<string, { black: number; colour: number }>();
   for (const r of rows) {
-    const name = getCleanName(r.Instructor);
+    const name = String(r.Instructor ?? "").trim();
     if (!name) continue;
     const cur = byName.get(name) ?? { black: 0, colour: 0 };
     cur.black += Number(r.Black) || 0;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Nunito, Geist_Mono } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ErrorReporter } from "@/components/error-reporter";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${nunito.variable} ${geistMono.variable} antialiased`}>
       <body className="min-h-screen bg-background text-foreground font-sans">
+        <ErrorReporter />
         {children}
         <SpeedInsights />
       </body>

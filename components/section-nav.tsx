@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bug,
   Calculator,
   CalendarDays,
   ClipboardCheck,
@@ -157,6 +158,7 @@ const NAVS: Record<
       // two System tabs stay super_admin-only.
       { href: "/system/users", label: "Users", icon: UserCog, requires: { cap: "manage_users" } },
       { href: "/system/audit", label: "Audit log", icon: ScrollText, requires: { superAdmin: true } },
+      { href: "/system/errors", label: "Errors", icon: Bug, requires: { superAdmin: true } },
       {
         href: "/system/permissions",
         label: "Permissions",
