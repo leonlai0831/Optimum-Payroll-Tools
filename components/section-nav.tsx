@@ -73,6 +73,12 @@ const NAVS: Record<
     items: [
       { href: "/timesheets", label: "My timesheet", icon: Clock, exact: true, requires: { cap: "submit_timesheet" } },
       {
+        href: "/timesheets/review",
+        label: "Review",
+        icon: ClipboardCheck,
+        requires: { cap: "review_timesheet" },
+      },
+      {
         href: "/timesheets/schedules",
         label: "Schedules",
         icon: CalendarDays,

@@ -3239,6 +3239,87 @@ export async function submitTimesheetsForPeriod(
   return rows.length;
 }
 
+export interface TimesheetReviewRow {
+  id: number;
+  coachId: number;
+  coachName: string | null;
+  periodLabel: string;
+  date: string;
+  center: string;
+  entryType: TimesheetEntryType;
+  classType: TimesheetClassType | null;
+  startTime: string | null;
+  endTime: string | null;
+  hours: number;
+  status: "draft" | "submitted" | "approved" | "changes_requested";
+  note: string;
+  reviewNote: string;
+}
+
+/**
+ * The reviewer's queue across all coaches. Defaults to entries awaiting review
+ * (`submitted`); pass a status to see another bucket. Joined to the coach name
+ * so the UI can group by person. Ordered by coach then date.
+ */
+export async function listTimesheetsForReview(
+  opts: { periodLabel?: string; status?: TimesheetReviewRow["status"] } = {},
+): Promise<TimesheetReviewRow[]> {
+  const db = await getDb();
+  const conditions = [
+    eq(timesheets.status, opts.status ?? "submitted"),
+    ...(opts.periodLabel != null ? [eq(timesheets.periodLabel, opts.periodLabel)] : []),
+  ];
+  return db
+    .select({
+      id: timesheets.id,
+      coachId: timesheets.coachId,
+      coachName: coaches.canonicalName,
+      periodLabel: timesheets.periodLabel,
+      date: timesheets.date,
+      center: timesheets.center,
+      entryType: timesheets.entryType,
+      classType: timesheets.classType,
+      startTime: timesheets.startTime,
+      endTime: timesheets.endTime,
+      hours: timesheets.hours,
+      status: timesheets.status,
+      note: timesheets.note,
+      reviewNote: timesheets.reviewNote,
+    })
+    .from(timesheets)
+    .leftJoin(coaches, eq(timesheets.coachId, coaches.id))
+    .where(and(...conditions))
+    .orderBy(asc(coaches.canonicalName), asc(timesheets.date), asc(timesheets.id));
+}
+
+/**
+ * Batch review: flip the given entries to approved / changes_requested with the
+ * reviewer's note + attribution. Guarded to entries currently `submitted`, so a
+ * stale id (already reviewed or edited back to draft) is skipped rather than
+ * silently re-decided. Returns the count actually reviewed.
+ */
+export async function reviewTimesheets(
+  ids: number[],
+  action: "approve" | "request_changes",
+  note: string,
+  reviewerId: number,
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const db = await getDb();
+  const rows = await db
+    .update(timesheets)
+    .set({
+      status: action === "approve" ? "approved" : "changes_requested",
+      reviewNote: note,
+      reviewedBy: reviewerId,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(inArray(timesheets.id, ids), eq(timesheets.status, "submitted")))
+    .returning({ id: timesheets.id });
+  return rows.length;
+}
+
 /* ----------------------------- freelancer schedules ---------------------------- */
 
 export interface FreelancerScheduleSlotInput {
