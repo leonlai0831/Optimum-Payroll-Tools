@@ -93,31 +93,28 @@ describe("parseTimesheetEntry — shift", () => {
 });
 
 describe("parseScheduleSlots", () => {
-  it("accepts a valid slot list", () => {
+  it("accepts a valid slot list (no class type on the schedule)", () => {
     const r = parseScheduleSlots({
       slots: [
-        { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", classType: "low" },
-        { weekday: 3, startTime: "09:00", endTime: "17:00", center: "USJ", classType: null, effectiveFrom: "2026-06-01" },
+        { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK" },
+        { weekday: 3, startTime: "09:00", endTime: "17:00", center: "USJ", effectiveFrom: "2026-06-01" },
       ],
     });
     expect(r).toEqual({
       value: [
-        { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", classType: "low", effectiveFrom: null, effectiveTo: null },
-        { weekday: 3, startTime: "09:00", endTime: "17:00", center: "USJ", classType: null, effectiveFrom: "2026-06-01", effectiveTo: null },
+        { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", effectiveFrom: null, effectiveTo: null },
+        { weekday: 3, startTime: "09:00", endTime: "17:00", center: "USJ", effectiveFrom: "2026-06-01", effectiveTo: null },
       ],
     });
   });
 
-  it("rejects a non-array, a bad weekday, bad times, and an invalid class type", () => {
+  it("rejects a non-array, a bad weekday, and bad times", () => {
     expect(parseScheduleSlots({ slots: "no" })).toEqual({ error: "slots must be an array" });
     expect(parseScheduleSlots({ slots: [{ weekday: 7, startTime: "17:00", endTime: "18:00", center: "PK" }] })).toEqual({
       error: "slot 0: weekday must be 0–6",
     });
     expect(parseScheduleSlots({ slots: [{ weekday: 1, startTime: "17:00", endTime: "16:00", center: "PK" }] })).toEqual({
       error: "slot 0: endTime must be after startTime",
-    });
-    expect(parseScheduleSlots({ slots: [{ weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", classType: "xx" }] })).toEqual({
-      error: "slot 0: invalid classType",
     });
   });
 });

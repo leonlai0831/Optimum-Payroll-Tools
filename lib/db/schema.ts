@@ -509,9 +509,10 @@ export const timesheets = pgTable("timesheets", {
  * A freelancer's fixed weekly schedule — the validator that classifies their
  * clock-ins into fixed (on-schedule) vs replaced (off-schedule) and surfaces
  * absences (a scheduled slot with no clock-in), auto-deriving the
- * attendance-bonus forfeit. Recurring by weekday; `classType` is null for
- * front-desk shifts. Matching uses weekday + center + classType (not the
- * times). Maintained by `manage_freelancer_schedule` holders; freelancer-only.
+ * attendance-bonus forfeit. Recurring by weekday; carries NO class type (that
+ * varies and is declared on the clock-in), so matching uses weekday + center
+ * only (not class, not the times). Maintained by `manage_freelancer_schedule`
+ * holders; freelancer-only.
  */
 export const freelancerSchedules = pgTable("freelancer_schedules", {
   id: serial("id").primaryKey(),
@@ -520,8 +521,6 @@ export const freelancerSchedules = pgTable("freelancer_schedules", {
   startTime: text("start_time").default("").notNull(),
   endTime: text("end_time").default("").notNull(),
   center: text("center").notNull(),
-  /** Class type for teaching freelancers; null for front-desk shifts. */
-  classType: text("class_type").$type<TimesheetClassType>(),
   /** Effective window "YYYY-MM-DD"; null = open-ended. */
   effectiveFrom: text("effective_from"),
   effectiveTo: text("effective_to"),

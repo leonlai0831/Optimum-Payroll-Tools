@@ -96,7 +96,6 @@ export interface ParsedScheduleSlot {
   startTime: string;
   endTime: string;
   center: string;
-  classType: TimesheetClassType | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
 }
@@ -132,15 +131,11 @@ export function parseScheduleSlots(body: unknown): { value: ParsedScheduleSlot[]
     }
     if (endTime <= startTime) return { error: `slot ${i}: endTime must be after startTime` };
 
-    const classType = s.classType == null ? null : isClassType(s.classType) ? s.classType : undefined;
-    if (classType === undefined) return { error: `slot ${i}: invalid classType` };
-
     value.push({
       weekday,
       startTime,
       endTime,
       center,
-      classType,
       effectiveFrom: parseOptionalDate(s.effectiveFrom),
       effectiveTo: parseOptionalDate(s.effectiveTo),
     });

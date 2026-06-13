@@ -65,8 +65,8 @@ describe("Timesheet DB layer (PGlite in-memory)", () => {
 
   it("replaces a freelancer's whole schedule and lists it ordered", async () => {
     await queries.replaceFreelancerSchedule(21, [
-      { weekday: 3, startTime: "09:00", endTime: "17:00", center: "USJ", classType: null, effectiveFrom: null, effectiveTo: null },
-      { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", classType: "low", effectiveFrom: null, effectiveTo: null },
+      { weekday: 3, startTime: "09:00", endTime: "17:00", center: "USJ", effectiveFrom: null, effectiveTo: null },
+      { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", effectiveFrom: null, effectiveTo: null },
     ]);
     let slots = await queries.listFreelancerSchedule(21);
     // Ordered by weekday then startTime → Monday(1) first.
@@ -77,12 +77,12 @@ describe("Timesheet DB layer (PGlite in-memory)", () => {
 
     // Replacing again wipes the prior set (no accumulation).
     await queries.replaceFreelancerSchedule(21, [
-      { weekday: 5, startTime: "10:00", endTime: "11:00", center: "HQ", classType: "high", effectiveFrom: null, effectiveTo: null },
+      { weekday: 5, startTime: "10:00", endTime: "11:00", center: "HQ", effectiveFrom: null, effectiveTo: null },
     ]);
     slots = await queries.listFreelancerSchedule(21);
     expect(slots).toHaveLength(1);
     expect(slots[0].center).toBe("HQ");
-    expect(slots[0].classType).toBe("high");
+    expect(slots[0].weekday).toBe(5);
   });
 
   it("persists the note and surfaces only submitted entries to the review queue", async () => {
@@ -131,7 +131,7 @@ describe("Timesheet DB layer (PGlite in-memory)", () => {
   it("loads approved freelancer hours reconciled against the fixed schedule", async () => {
     // Monday PK low; June 2026 has 5 Mondays (1/8/15/22/29).
     await queries.replaceFreelancerSchedule(42, [
-      { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", classType: "low", effectiveFrom: null, effectiveTo: null },
+      { weekday: 1, startTime: "17:00", endTime: "18:00", center: "PK", effectiveFrom: null, effectiveTo: null },
     ]);
     const e = await queries.createTimesheetEntry(lesson({ coachId: 42, periodLabel: "2026-06", date: "2026-06-08", classType: "low", hours: 2 }));
     await queries.submitTimesheetsForPeriod(42, "2026-06");

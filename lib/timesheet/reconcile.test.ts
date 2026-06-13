@@ -6,24 +6,24 @@ const Y = 2026;
 const M = 6;
 const MONDAYS = ["2026-06-01", "2026-06-08", "2026-06-15", "2026-06-22", "2026-06-29"];
 
-function entry(date: string, center: string, hours: number, classType: ReconcileEntry["classType"] = "low"): ReconcileEntry {
-  return { date, center, hours, classType };
+function entry(date: string, center: string, hours: number): ReconcileEntry {
+  return { date, center, hours };
 }
 
 describe("reconcileFreelancer", () => {
   it("classifies an on-schedule clock-in as fixed and a missed slot as absent", () => {
-    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK", classType: "low" }];
+    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK" }];
     // Attend only 4 of the 5 scheduled Mondays.
     const entries = MONDAYS.slice(0, 4).map((d) => entry(d, "PK", 2));
 
     const { centerRows, absences } = reconcileFreelancer(schedule, entries, Y, M);
 
     expect(centerRows).toEqual([{ center: "PK", fixedHours: 8, replacedHours: 0, absent: true }]);
-    expect(absences).toEqual([{ date: "2026-06-29", center: "PK", classType: "low" }]);
+    expect(absences).toEqual([{ date: "2026-06-29", center: "PK" }]);
   });
 
   it("when every scheduled occurrence is attended there is no absence", () => {
-    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK", classType: "low" }];
+    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK" }];
     const entries = MONDAYS.map((d) => entry(d, "PK", 2));
 
     const { centerRows, absences } = reconcileFreelancer(schedule, entries, Y, M);
@@ -39,20 +39,23 @@ describe("reconcileFreelancer", () => {
     expect(absences).toEqual([]);
   });
 
-  it("requires the class type to match (different type on a scheduled day = replaced + absence)", () => {
-    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK", classType: "low" }];
-    // Taught "high" on every scheduled Monday — none match the "low" slots.
-    const entries = MONDAYS.map((d) => entry(d, "PK", 2, "high"));
-
-    const { centerRows } = reconcileFreelancer(schedule, entries, Y, M);
-
-    // 10h of "high" are replacements; all 5 "low" slots missed → absent.
-    expect(centerRows).toEqual([{ center: "PK", fixedHours: 0, replacedHours: 10, absent: true }]);
+  it("matches on date + center only — class type is not part of the schedule", () => {
+    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK" }];
+    // The clock-in's class type (whatever it is) doesn't affect the match: a
+    // Monday at PK is fixed; a Tuesday at PK is a replacement.
+    const { centerRows } = reconcileFreelancer(
+      schedule,
+      [entry("2026-06-08", "PK", 2), entry("2026-06-09", "PK", 1)],
+      Y,
+      M,
+    );
+    // 2h fixed (Mon), 1h replaced (Tue), and 4 missed Mondays → absent.
+    expect(centerRows).toEqual([{ center: "PK", fixedHours: 2, replacedHours: 1, absent: true }]);
   });
 
-  it("matches front-desk shifts (no class type) on date + center", () => {
-    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "USJ", classType: null }];
-    const entries: ReconcileEntry[] = MONDAYS.map((d) => ({ date: d, center: "usj", hours: 8, classType: null }));
+  it("matches case-insensitively on center (front-desk shift, no class anywhere)", () => {
+    const schedule: ScheduleSlot[] = [{ weekday: 1, center: "USJ" }];
+    const entries = MONDAYS.map((d) => entry(d, "usj", 8));
 
     const { centerRows, absences } = reconcileFreelancer(schedule, entries, Y, M);
 
@@ -61,12 +64,12 @@ describe("reconcileFreelancer", () => {
   });
 
   it("consumes occurrences greedily — extra same-slot clock-ins overflow to replaced", () => {
-    // Two identical Monday slots → 2 fixed occurrences per Monday (10 total).
+    // Two Monday slots at PK → 2 fixed occurrences per Monday (10 total).
     const schedule: ScheduleSlot[] = [
-      { weekday: 1, center: "PK", classType: "low" },
-      { weekday: 1, center: "PK", classType: "low" },
+      { weekday: 1, center: "PK" },
+      { weekday: 1, center: "PK" },
     ];
-    // Three "low" classes on the first Monday: 2 fixed, 1 replaced.
+    // Three classes on the first Monday: 2 fixed, 1 replaced.
     const entries = [entry("2026-06-01", "PK", 1), entry("2026-06-01", "PK", 1), entry("2026-06-01", "PK", 1)];
 
     const { centerRows } = reconcileFreelancer(schedule, entries, Y, M);
