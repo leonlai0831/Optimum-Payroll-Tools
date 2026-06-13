@@ -24,6 +24,7 @@ export function EmployeeCombobox({
   onChange,
   disabled,
   className,
+  takenBy,
 }: {
   coaches: EmployeeOption[];
   gymStaff: EmployeeOption[];
@@ -31,6 +32,13 @@ export function EmployeeCombobox({
   onChange: (value: string) => void;
   disabled?: boolean;
   className?: string;
+  /**
+   * token ("coach:ID" / "gym:ID") → email of the account it's ALREADY linked to.
+   * One workforce profile ↔ one login: such a profile is shown greyed + locked
+   * here (the account's own current `value` is never locked). The server still
+   * enforces this with a 409; this is the up-front guide.
+   */
+  takenBy?: ReadonlyMap<string, string>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -72,7 +80,13 @@ export function EmployeeCombobox({
     ? items.filter((i) => `${i.name} ${i.subtitle ?? ""}`.toLowerCase().includes(q))
     : items;
 
+  // Email of the account this token is already linked to, EXCEPT this row's own
+  // current selection (which must stay shown + selectable). undefined = free.
+  const takenEmailOf = (token: string): string | undefined =>
+    token !== value ? takenBy?.get(token) : undefined;
+
   function pick(token: string) {
+    if (takenEmailOf(token)) return; // locked — already linked elsewhere
     onChange(token);
     setOpen(false);
     setQuery("");
@@ -109,9 +123,13 @@ export function EmployeeCombobox({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") setOpen(false);
-                if (e.key === "Enter" && filtered.length > 0) {
-                  e.preventDefault();
-                  pick(filtered[0].token);
+                if (e.key === "Enter") {
+                  // Pick the first SELECTABLE match (skip ones linked elsewhere).
+                  const first = filtered.find((i) => !takenEmailOf(i.token));
+                  if (first) {
+                    e.preventDefault();
+                    pick(first.token);
+                  }
                 }
               }}
               placeholder="Search name…"
@@ -128,30 +146,54 @@ export function EmployeeCombobox({
                 <X className="h-3.5 w-3.5" /> none
               </button>
             </li>
-            {filtered.map((i) => (
-              <li key={i.token}>
-                <button
-                  type="button"
-                  onClick={() => pick(i.token)}
-                  className={cn(
-                    "flex w-full items-start justify-between gap-2 px-3 py-1.5 text-left hover:bg-gray-100",
-                    i.token === value && "bg-indigo-50",
-                  )}
-                >
-                  <span className="min-w-0">
-                    {/* Full name, wrapping if long — never truncated, so similar
-                        names stay distinguishable. */}
-                    <span className="block break-words font-medium text-gray-800">{i.name}</span>
-                    <span className="block text-[11px] text-gray-400">
-                      {i.subtitle ? `${i.subtitle} · ${i.group}` : i.group}
+            {filtered.map((i) => {
+              const takenEmail = takenEmailOf(i.token);
+              if (takenEmail) {
+                // Locked: linked to another account. Greyed, not clickable, with
+                // the linking account shown (and a hover tooltip — phones, which
+                // have no hover, still see the inline sub-label).
+                return (
+                  <li key={i.token}>
+                    <div
+                      aria-disabled
+                      title={`Linked to ${takenEmail}`}
+                      className="flex w-full cursor-not-allowed items-start justify-between gap-2 px-3 py-1.5 text-left opacity-60"
+                    >
+                      <span className="min-w-0">
+                        <span className="block break-words font-medium text-gray-400">{i.name}</span>
+                        <span className="block text-[11px] text-gray-400">
+                          Linked to {takenEmail}
+                        </span>
+                      </span>
+                    </div>
+                  </li>
+                );
+              }
+              return (
+                <li key={i.token}>
+                  <button
+                    type="button"
+                    onClick={() => pick(i.token)}
+                    className={cn(
+                      "flex w-full items-start justify-between gap-2 px-3 py-1.5 text-left hover:bg-gray-100",
+                      i.token === value && "bg-indigo-50",
+                    )}
+                  >
+                    <span className="min-w-0">
+                      {/* Full name, wrapping if long — never truncated, so similar
+                          names stay distinguishable. */}
+                      <span className="block break-words font-medium text-gray-800">{i.name}</span>
+                      <span className="block text-[11px] text-gray-400">
+                        {i.subtitle ? `${i.subtitle} · ${i.group}` : i.group}
+                      </span>
                     </span>
-                  </span>
-                  {i.token === value && (
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
-                  )}
-                </button>
-              </li>
-            ))}
+                    {i.token === value && (
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
             {filtered.length === 0 && (
               <li className="px-3 py-3 text-center text-gray-400">No match for “{query}”.</li>
             )}

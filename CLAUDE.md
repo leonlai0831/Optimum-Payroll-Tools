@@ -430,13 +430,18 @@ role default (no SQL for the matrix). The `users` table carries both a
 **`displayName` (the everyday "Nickname")** and an admin-only **`fullName`**
 (legal name, migration 0037 — the PATCH route rejects a `fullName` change from a
 non-admin). `/system/users` has list search + **sortable columns (incl. Full
-Name)**; inline edits (Nickname / Full Name / Role / Linked Workforce / Active)
-are **STAGED per row and committed together with a Save button** (no auto-save on
-blur — `components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row;
-the password reset stays an immediate one-off). It also has a searchable
+Name AND Linked Workforce — the latter sorts by the resolved profile name)** + a
+**filter bar** (by Role / Active status / Linked-vs-unlinked); inline edits
+(Nickname / Full Name / Role / Linked Workforce / Active — plus **Email, which is
+super_admin-only** to change inline, gated again in the PATCH route) are **STAGED
+per row and committed together with a Save button** (no auto-save on blur —
+`components/user-manager.tsx` keeps per-id drafts, one PATCH per dirty row; the
+password reset stays an immediate one-off). It also has a searchable
 linked-employee picker (`components/employee-combobox.tsx` — its dropdown is wider
 than the column and shows each coach's **full name + center sub-label**, so similar
-"MUHAMMAD …" names stay distinguishable), **AI auto-link**
+"MUHAMMAD …" names stay distinguishable; a profile **already linked to another
+account is greyed + locked** with that account's email shown, an up-front guide on
+top of the server's one-profile↔one-login 409), **AI auto-link**
 (`POST /api/users/auto-link`, reversible + audited) and **bulk add**. Auto-link is
 **precision-first** (`lib/users/autolink.ts`, Vitest-locked — a wrong link decides
 who can clock in / be paid): a deterministic pass matches on the **Full Name first,
@@ -482,6 +487,12 @@ The **launcher** shows a **single "System Setting" card** (`href:/system/users`,
 `cap:manage_users`, brand `system`) for the whole section — the section nav then exposes
 Users / Audit log / Errors / Permissions as tabs (the super_admin-only ones hidden for a
 non-super-admin `manage_users` holder, who lands on Users).
+
+**Account self-service (`/account`, any logged-in role).** `components/account-form.tsx`
++ `PATCH /api/users/me` let a user edit **their own Nickname, sign-in Email, and
+password** — never their **Full Name or Role** (those stay admin-controlled; Role is
+shown read-only). Email/password changes require re-entering the **current password**
+(stolen-cookie defense); a Nickname-only change does not. Linked in the nav for everyone.
 
 Staff/settings capabilities are **brand-scoped** — `swim_view_staff` / `fit_view_staff`,
 `swim_edit_staff` / `fit_edit_staff`, `swim_view_settings` / `fit_view_settings`,

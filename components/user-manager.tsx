@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpDown, Download, Eye, EyeOff, FileUp, KeyRound, Plus, Save, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowUpDown, Download, Eye, EyeOff, FileUp, Filter, KeyRound, Plus, Save, Search, Sparkles, Trash2, UserPlus, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
@@ -13,10 +13,14 @@ import { EMAIL_RE, countValid, rowsFromGrid, type ParsedUserRow } from "@/lib/us
 import type { BulkMode } from "@/lib/users/bulk-plan";
 import { cn } from "@/lib/utils";
 
-type SortCol = "email" | "displayName" | "fullName" | "role" | "active";
+type SortCol = "email" | "displayName" | "fullName" | "role" | "link" | "active";
+type RoleFilter = Role | "all";
+type ActiveFilter = "all" | "active" | "inactive";
+type LinkFilter = "all" | "linked" | "unlinked";
 
 /** The inline-editable fields of a user row — staged as drafts, saved on demand. */
 type DraftFields = {
+  email: string;
   displayName: string;
   fullName: string;
   role: Role;
@@ -150,6 +154,17 @@ export function UserManager({
     () => new Set(users.map((u) => u.email.trim().toLowerCase())),
     [users],
   );
+  // token ("coach:ID" / "gym:ID") → email of the account it's already linked to.
+  // One profile ↔ one login: the EmployeeCombobox greys + locks taken profiles
+  // (each row's own current link is exempt, handled inside the combobox).
+  const takenByToken = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of users) {
+      if (u.coachId != null) m.set(`coach:${u.coachId}`, u.email);
+      if (u.gymStaffId != null) m.set(`gym:${u.gymStaffId}`, u.email);
+    }
+    return m;
+  }, [users]);
   const [busyIds, setBusyIds] = useState<ReadonlySet<number>>(new Set());
   // Every inline edit is STAGED per user id and committed together with the
   // Save button — nothing auto-saves on blur/change.
@@ -157,28 +172,65 @@ export function UserManager({
   const [saving, setSaving] = useState(false);
   // Full (legal) name is admin-only to edit (the API enforces it too).
   const canEditFullName = actorRole === "admin" || actorRole === "super_admin";
+  // Sign-in email is super_admin-only to edit inline (the API enforces it too).
+  const canEditEmail = actorRole === "super_admin";
   const [deleteTarget, setDeleteTarget] = useState<SafeUser | null>(null);
   const [pwTarget, setPwTarget] = useState<SafeUser | null>(null);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [linkFilter, setLinkFilter] = useState<LinkFilter>("all");
   const [sort, setSort] = useState<{ col: SortCol; dir: 1 | -1 }>({ col: "email", dir: 1 });
+
+  // Resolve a user's linked workforce to a display name (for search + the
+  // Linked Workforce sort); "" when unlinked, so unlinked rows group together.
+  const linkNameOf = useMemo(() => {
+    const byCoach = new Map(coaches.map((c) => [c.id, c.name]));
+    const byGym = new Map(gymStaff.map((g) => [g.id, g.name]));
+    return (u: SafeUser): string =>
+      u.coachId != null
+        ? byCoach.get(u.coachId) ?? ""
+        : u.gymStaffId != null
+          ? byGym.get(u.gymStaffId) ?? ""
+          : "";
+  }, [coaches, gymStaff]);
+
+  const filterActive = roleFilter !== "all" || activeFilter !== "all" || linkFilter !== "all";
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = q
-      ? users.filter((u) => u.email.toLowerCase().includes(q) || u.displayName.toLowerCase().includes(q))
-      : users;
+    const filtered = users.filter((u) => {
+      if (q && !(u.email.toLowerCase().includes(q) || u.displayName.toLowerCase().includes(q))) {
+        return false;
+      }
+      if (roleFilter !== "all" && u.role !== roleFilter) return false;
+      if (activeFilter === "active" && !u.active) return false;
+      if (activeFilter === "inactive" && u.active) return false;
+      const linked = u.coachId != null || u.gymStaffId != null;
+      if (linkFilter === "linked" && !linked) return false;
+      if (linkFilter === "unlinked" && linked) return false;
+      return true;
+    });
     const { col, dir } = sort;
     return [...filtered].sort((a, b) => {
       const cmp =
         col === "active"
           ? Number(a.active) - Number(b.active)
-          : String(a[col]).localeCompare(String(b[col]));
+          : col === "link"
+            ? linkNameOf(a).localeCompare(linkNameOf(b))
+            : String(a[col]).localeCompare(String(b[col]));
       return cmp !== 0 ? cmp * dir : a.email.localeCompare(b.email);
     });
-  }, [users, search, sort]);
+  }, [users, search, roleFilter, activeFilter, linkFilter, sort, linkNameOf]);
 
   function toggleSort(col: SortCol) {
     setSort((s) => (s.col === col ? { col, dir: s.dir === 1 ? -1 : 1 } : { col, dir: 1 }));
+  }
+
+  function resetFilters() {
+    setRoleFilter("all");
+    setActiveFilter("all");
+    setLinkFilter("all");
   }
 
   const [linking, setLinking] = useState(false);
@@ -237,6 +289,7 @@ export function UserManager({
   function effective(u: SafeUser): DraftFields {
     const d = drafts[u.id] ?? {};
     return {
+      email: "email" in d ? d.email! : u.email,
       displayName: "displayName" in d ? d.displayName! : u.displayName,
       fullName: "fullName" in d ? d.fullName! : u.fullName,
       role: "role" in d ? d.role! : u.role,
@@ -252,6 +305,7 @@ export function UserManager({
   function changedFields(u: SafeUser): Partial<DraftFields> | null {
     const e = effective(u);
     const out: Partial<DraftFields> = {};
+    if (e.email.trim().toLowerCase() !== u.email.toLowerCase()) out.email = e.email.trim().toLowerCase();
     if (e.displayName.trim() !== u.displayName.trim()) out.displayName = e.displayName.trim();
     if (e.fullName.trim() !== u.fullName.trim()) out.fullName = e.fullName.trim();
     if (e.role !== u.role) out.role = e.role;
@@ -335,6 +389,8 @@ export function UserManager({
     readOnly: !canManageUserRole(actorRole, u.role),
     busy: busyIds.has(u.id) || saving,
     canEditFullName,
+    canEditEmail,
+    takenBy: takenByToken,
     // Effective (draft-over-stored) values + a single staging callback; rows
     // never PATCH on their own — the Save button commits them.
     values: effective(u),
@@ -349,7 +405,12 @@ export function UserManager({
       {/* No assignable role below the actor's own → nothing they could create. */}
       {roleOptions.length > 0 && (
         <div className="flex flex-wrap items-start gap-2">
-          <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
+          <AddUser
+            coaches={coaches}
+            gymStaff={gymStaff}
+            roleOptions={roleOptions}
+            takenBy={takenByToken}
+          />
           <BulkAddUsers roleOptions={roleOptions} existingEmails={existingEmails} />
         </div>
       )}
@@ -380,6 +441,52 @@ export function UserManager({
             </div>
           </div>
         </div>
+        {/* Filter bar — Role / Active / Linked-status, plus a Clear when any is set. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50/60 px-4 py-2">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
+            aria-label="Filter by role"
+            className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="all">All roles</option>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+          <select
+            value={activeFilter}
+            onChange={(e) => setActiveFilter(e.target.value as ActiveFilter)}
+            aria-label="Filter by active status"
+            className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="all">Active &amp; inactive</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+          </select>
+          <select
+            value={linkFilter}
+            onChange={(e) => setLinkFilter(e.target.value as LinkFilter)}
+            aria-label="Filter by linked workforce"
+            className="rounded-md border border-gray-300 bg-white py-1.5 pl-2 pr-7 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="all">Linked &amp; unlinked</option>
+            <option value="linked">Linked only</option>
+            <option value="unlinked">Unlinked only</option>
+          </select>
+          {filterActive && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-800"
+            >
+              <X className="h-3.5 w-3.5" /> Clear filters
+            </button>
+          )}
+        </div>
         <MobileCards>
           {visible.map((u) => (
             <UserEntry key={u.id} layout="card" {...entryProps(u)} />
@@ -393,9 +500,7 @@ export function UserManager({
                 <SortTh label="Nickname" col="displayName" sort={sort} onSort={toggleSort} />
                 <SortTh label="Full Name" col="fullName" sort={sort} onSort={toggleSort} />
                 <SortTh label="Role" col="role" sort={sort} onSort={toggleSort} />
-                {/* normal-case: a plain <th> inherits the thead's uppercase; the
-                    SortTh columns don't (their label sits in a <button>). */}
-                <th className="px-4 py-2 text-left normal-case">Linked Workforce</th>
+                <SortTh label="Linked Workforce" col="link" sort={sort} onSort={toggleSort} />
                 <SortTh label="Active" col="active" sort={sort} onSort={toggleSort} center />
                 <th className="px-4 py-2"></th>
               </tr>
@@ -525,6 +630,8 @@ function UserEntry({
   values,
   isDirty,
   canEditFullName,
+  canEditEmail,
+  takenBy,
   onField,
   onResetPassword,
   onDelete,
@@ -544,6 +651,10 @@ function UserEntry({
   isDirty: boolean;
   /** Full (legal) name is admin-only — non-admins see it read-only. */
   canEditFullName: boolean;
+  /** Sign-in email is super_admin-only to edit inline; others see plain text. */
+  canEditEmail: boolean;
+  /** token → email of the account a profile is already linked to (greys it out). */
+  takenBy: ReadonlyMap<string, string>;
   /** Stage a field change (no network until Save). */
   onField: (patch: Partial<DraftFields>) => void;
   onResetPassword: () => void;
@@ -575,6 +686,7 @@ function UserEntry({
       value={linkToken({ coachId: values.coachId, gymStaffId: values.gymStaffId })}
       disabled={busy || readOnly}
       onChange={(token) => onField(parseLinkToken(token))}
+      takenBy={takenBy}
     />
   );
   const nameInput = (className: string) => (
@@ -602,6 +714,24 @@ function UserEntry({
       }}
     />
   );
+  // Email is editable inline only for a super_admin (and an editable row);
+  // everyone else sees plain text — the identifier for the row.
+  const emailEditable = canEditEmail && !readOnly;
+  const emailNode = (inputClassName: string) =>
+    emailEditable ? (
+      <Input
+        className={inputClassName}
+        type="email"
+        value={values.email}
+        disabled={busy}
+        onChange={(e) => onField({ email: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+      />
+    ) : (
+      <span className="font-medium text-gray-800">{user.email}</span>
+    );
   const viewOnlyBadge = (
     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-400">
       View only
@@ -612,8 +742,9 @@ function UserEntry({
     return (
       <div className={cn("p-4", busy && "opacity-60", isDirty && "bg-indigo-50/40")}>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 truncate font-medium text-gray-800">
-            {user.email}
+          <div className="min-w-0 flex-1 truncate font-medium text-gray-800">
+            {/* text-base on phones (iOS anti-zoom rule); desktop row uses text-xs. */}
+            {emailNode("w-full py-1")}
             {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -677,7 +808,7 @@ function UserEntry({
   return (
     <tr className={cn(busy && "opacity-60", isDirty && "bg-indigo-50/40")}>
       <td className="px-4 py-2 font-medium text-gray-800">
-        {user.email}
+        {emailNode("w-48 py-1 text-xs")}
         {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
       </td>
       {/* Widths net out to the pre-Full-Name layout that fit: Full Name gets the
@@ -731,10 +862,12 @@ function AddUser({
   coaches,
   gymStaff,
   roleOptions,
+  takenBy,
 }: {
   coaches: CoachOption[];
   gymStaff: GymStaffOption[];
   roleOptions: Role[];
+  takenBy: ReadonlyMap<string, string>;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -867,6 +1000,7 @@ function AddUser({
             gymStaff={gymStaff}
             value={link}
             onChange={setLink}
+            takenBy={takenBy}
           />
         </div>
       </div>
