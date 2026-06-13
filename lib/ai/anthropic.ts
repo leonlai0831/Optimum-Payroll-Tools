@@ -88,6 +88,97 @@ export async function matchInstructorNames(
   }
 }
 
+export interface UserForLink {
+  id: number;
+  name: string;
+  email: string;
+}
+export interface CoachForLink {
+  id: number;
+  name: string;
+}
+
+const USER_LINK_SYSTEM = `You match staff LOGIN ACCOUNTS to their employee (coach) profile by name, for a swim school.
+You get a list of unlinked accounts (id, display name, email) and a list of coach profiles (id, name).
+Return, for each account you can confidently match, the coach id it belongs to.
+
+Rules:
+- Match only when confident it's the same person — handle case, extra spaces, branch suffixes like "[BK]", reversed name order (e.g. "Lee Darren" vs "Darren Lee"), and an email whose local-part contains the name. This controls who can submit timesheets, so a wrong match is costly: when unsure, leave the account out.
+- Each account maps to at most one coach, and each coach to at most one account.
+- The display name is the strongest signal; the email local-part is a weaker hint.`;
+
+const USER_LINK_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    matches: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          userId: { type: "number" },
+          coachId: { type: "number" },
+        },
+        required: ["userId", "coachId"],
+      },
+    },
+  },
+  required: ["matches"],
+} as const;
+
+/**
+ * Use Claude to match login accounts to coach profiles by name (beyond the
+ * deterministic clean-name pass). Returns {userId, coachId} pairs, validated
+ * against the input id sets and deduped (each user/coach at most once). No-ops
+ * to [] without ANTHROPIC_API_KEY or on any error.
+ */
+export async function matchUsersToCoaches(
+  users: UserForLink[],
+  coaches: CoachForLink[],
+): Promise<{ userId: number; coachId: number }[]> {
+  const client = getClient();
+  if (!client || users.length === 0 || coaches.length === 0) return [];
+
+  const userList = users.map((u) => `- id ${u.id}: ${u.name || "(no name)"} <${u.email}>`).join("\n");
+  const coachList = coaches.map((c) => `- id ${c.id}: ${c.name}`).join("\n");
+
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: [{ type: "text", text: USER_LINK_SYSTEM, cache_control: { type: "ephemeral" } }],
+      output_config: { format: { type: "json_schema", schema: USER_LINK_SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `Accounts:\n${userList}\n\nCoaches:\n${coachList}\n\nReturn the confident account→coach matches.`,
+        },
+      ],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") return [];
+    const parsed = JSON.parse(text.text) as { matches?: { userId: number; coachId: number }[] };
+    const userIds = new Set(users.map((u) => u.id));
+    const coachIds = new Set(coaches.map((c) => c.id));
+    const seenUsers = new Set<number>();
+    const seenCoaches = new Set<number>();
+    const out: { userId: number; coachId: number }[] = [];
+    for (const m of parsed.matches ?? []) {
+      if (typeof m?.userId !== "number" || typeof m?.coachId !== "number") continue;
+      if (!userIds.has(m.userId) || !coachIds.has(m.coachId)) continue;
+      if (seenUsers.has(m.userId) || seenCoaches.has(m.coachId)) continue;
+      seenUsers.add(m.userId);
+      seenCoaches.add(m.coachId);
+      out.push({ userId: m.userId, coachId: m.coachId });
+    }
+    return out;
+  } catch (err) {
+    logger.warn("matchUsersToCoaches failed; deterministic links only", { err });
+    return [];
+  }
+}
+
 export interface AnalyzeInput {
   name: string;
   finalScore: number;
