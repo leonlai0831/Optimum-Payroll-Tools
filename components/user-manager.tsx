@@ -17,6 +17,7 @@ export interface SafeUser {
   id: number;
   email: string;
   displayName: string;
+  fullName: string;
   role: Role;
   coachId: number | null;
   gymStaffId: number | null;
@@ -129,8 +130,11 @@ export function UserManager({
   // component — the page filters them out server-side.
   const roleOptions = ROLES.filter((r) => canManageUserRole(actorRole, r));
   const [busyIds, setBusyIds] = useState<ReadonlySet<number>>(new Set());
-  // Display-name drafts keyed by user id; saved on blur when changed.
+  // Nickname (display-name) + full-name drafts keyed by user id; saved on blur.
   const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
+  const [fullNameDrafts, setFullNameDrafts] = useState<Record<number, string>>({});
+  // Full (legal) name is admin-only to edit (the API enforces it too).
+  const canEditFullName = actorRole === "admin" || actorRole === "super_admin";
   const [deleteTarget, setDeleteTarget] = useState<SafeUser | null>(null);
   const [pwTarget, setPwTarget] = useState<SafeUser | null>(null);
   const [search, setSearch] = useState("");
@@ -237,6 +241,12 @@ export function UserManager({
     onNameBlur: (v: string) => {
       if (v.trim() !== u.displayName.trim()) void patchUser(u.id, { displayName: v.trim() });
     },
+    fullName: fullNameDrafts[u.id] ?? u.fullName,
+    canEditFullName,
+    onFullNameChange: (v: string) => setFullNameDrafts((m) => ({ ...m, [u.id]: v })),
+    onFullNameBlur: (v: string) => {
+      if (v.trim() !== u.fullName.trim()) void patchUser(u.id, { fullName: v.trim() });
+    },
     onPatch: (body: Record<string, unknown>) => void patchUser(u.id, body),
     onResetPassword: () => setPwTarget(u),
     onDelete: () => setDeleteTarget(u),
@@ -288,7 +298,8 @@ export function UserManager({
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <SortTh label="Email" col="email" sort={sort} onSort={toggleSort} />
-                <SortTh label="Name" col="displayName" sort={sort} onSort={toggleSort} />
+                <SortTh label="Nickname" col="displayName" sort={sort} onSort={toggleSort} />
+                <th className="px-4 py-2 text-left">Full name</th>
                 <SortTh label="Role" col="role" sort={sort} onSort={toggleSort} />
                 <th className="px-4 py-2 text-left">Linked employee</th>
                 <SortTh label="Active" col="active" sort={sort} onSort={toggleSort} center />
@@ -399,6 +410,10 @@ function UserEntry({
   name,
   onNameChange,
   onNameBlur,
+  fullName,
+  canEditFullName,
+  onFullNameChange,
+  onFullNameBlur,
   onPatch,
   onResetPassword,
   onDelete,
@@ -415,6 +430,11 @@ function UserEntry({
   name: string;
   onNameChange: (value: string) => void;
   onNameBlur: (value: string) => void;
+  fullName: string;
+  /** Full (legal) name is admin-only — non-admins see it read-only. */
+  canEditFullName: boolean;
+  onFullNameChange: (value: string) => void;
+  onFullNameBlur: (value: string) => void;
   onPatch: (body: Record<string, unknown>) => void;
   onResetPassword: () => void;
   onDelete: () => void;
@@ -460,6 +480,20 @@ function UserEntry({
       }}
     />
   );
+  const fullNameInput = (className: string) => (
+    <Input
+      className={className}
+      value={fullName}
+      disabled={busy || readOnly || !canEditFullName}
+      placeholder={canEditFullName ? "Full name" : "—"}
+      title={canEditFullName ? undefined : "Only an admin can edit the full name"}
+      onChange={(e) => onFullNameChange(e.target.value)}
+      onBlur={() => onFullNameBlur(fullName)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
   const viewOnlyBadge = (
     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-400">
       View only
@@ -490,8 +524,12 @@ function UserEntry({
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="text-overline text-muted">Name</span>
+            <span className="text-overline text-muted">Nickname</span>
             {nameInput("mt-1")}
+          </label>
+          <label className="block">
+            <span className="text-overline text-muted">Full name</span>
+            {fullNameInput("mt-1")}
           </label>
           <label className="block">
             <span className="text-overline text-muted">Role</span>
@@ -534,7 +572,8 @@ function UserEntry({
         {user.email}
         {isSelf && <span className="ml-1 text-[11px] text-gray-400">(you)</span>}
       </td>
-      <td className="px-4 py-2">{nameInput("w-40 py-1 text-xs")}</td>
+      <td className="px-4 py-2">{nameInput("w-36 py-1 text-xs")}</td>
+      <td className="px-4 py-2">{fullNameInput("w-40 py-1 text-xs")}</td>
       <td className="px-4 py-2">{roleSelect("w-36 py-1 text-xs")}</td>
       <td className="px-4 py-2">{linkSelect("w-44 py-1 text-xs")}</td>
       <td className="px-4 py-2 text-center">

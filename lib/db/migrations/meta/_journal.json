@@ -260,6 +260,13 @@
       "when": 1781343290765,
       "tag": "0036_even_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1781346209268,
+      "tag": "0037_slim_electro",
+      "breakpoints": true
     }
   ]
 }

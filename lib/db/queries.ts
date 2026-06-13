@@ -2676,6 +2676,7 @@ export async function updateUser(
   patch: {
     email?: string;
     displayName?: string;
+    fullName?: string;
     role?: Role;
     active?: boolean;
     coachId?: number | null;
@@ -2688,6 +2689,7 @@ export async function updateUser(
   const db = await getDb();
   const set: Partial<typeof users.$inferInsert> = { updatedAt: new Date() };
   if (patch.displayName !== undefined) set.displayName = patch.displayName.trim();
+  if (patch.fullName !== undefined) set.fullName = patch.fullName.trim();
   if (patch.email !== undefined) {
     const email = normalizeEmail(patch.email);
     const existing = await getUserByEmail(email);

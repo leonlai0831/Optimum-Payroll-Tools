@@ -53,6 +53,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     role?: string;
     active?: boolean;
     displayName?: string;
+    fullName?: string;
     coachId?: number | null;
     gymStaffId?: number | null;
     visibleCategories?: unknown;
@@ -61,6 +62,14 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
 
   const patch: Parameters<typeof updateUser>[1] = {};
   if (typeof body.displayName === "string") patch.displayName = body.displayName;
+  // Full (legal) name is admin-only — the nickname (displayName) stays editable
+  // by any manage_users holder.
+  if (typeof body.fullName === "string") {
+    if (actor.role !== "admin" && actor.role !== "super_admin") {
+      return NextResponse.json({ error: "Only an admin can edit the full name." }, { status: 403 });
+    }
+    patch.fullName = body.fullName;
+  }
   if (body.role !== undefined) {
     if (!(ROLES as readonly string[]).includes(body.role)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
@@ -127,7 +136,8 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
 
   await updateUser(userId, patch);
   const changed = [
-    patch.displayName !== undefined && "name",
+    patch.displayName !== undefined && "nickname",
+    patch.fullName !== undefined && "full name",
     patch.role !== undefined && `role→${patch.role}`,
     patch.active !== undefined && (patch.active ? "activated" : "deactivated"),
     (patch.coachId !== undefined || patch.gymStaffId !== undefined) && "linked employee",
