@@ -1,10 +1,15 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-12**, second session of
-the day, session end). `main` holds PRs #136–#145 — everything from both
-2026-06-12 sessions is merged. Full suite 411 passing. Read `CLAUDE.md` for
-architecture + the frozen Settings IA rules; read `AGENTS.md` before touching
-Next.js APIs.
+Snapshot for the next session (last updated **2026-06-12**, third session of
+the day). `main` holds PRs #136–#146 — everything from the first two
+2026-06-12 sessions is merged; **PR #147 (this session) was a draft awaiting
+review at handoff time**. Full suite 411 passing (no app code changed in
+#147 — hook + docs only). Read `CLAUDE.md` for architecture + the frozen
+Settings IA rules; read `AGENTS.md` before touching Next.js APIs.
+
+> Progress tracking lives HERE (plus PR/git history for detail) — a separate
+> `progress.md` was considered 2026-06-12 and rejected as a duplicate source
+> of truth. Update this file at session end instead.
 
 ## What's on `main` now
 
@@ -62,8 +67,27 @@ Operator also reported the hub ribbon "misplaced on resize" — that turned out
 to be browser zoom (narrower effective viewport → legs re-anchor at
 `vw − 150` and thread behind the cards), confirmed not a bug.
 
+### Third session (2026-06-12) — PR #147 (draft at handoff time)
+
+PM skills for Leon. Searched GitHub for product-manager skills; the clear
+winner is [deanpeters/Product-Manager-Skills](https://github.com/deanpeters/Product-Manager-Skills)
+(⭐ 5.1k, 49 PM skills — component templates / interactive advisors /
+workflows; Claude Code plugin marketplace `pm-skills`). Installed the
+marketplace + its `jobs-to-be-done` plugin at user scope, then made it
+persistent: **the SessionStart hook now bootstraps pm-skills each web
+session** (`.claude/hooks/session-start.sh` — registry-grep fast path, both
+CLI commands verified idempotent, non-fatal, placed BEFORE the gstack block
+which early-exits). CLAUDE.md's vendored-skills chapter documents it.
+Why bootstrap, not vendor: plugin installs live in `~/.claude` (user scope),
+which the ephemeral container loses. Note a freshly installed plugin's skill
+only loads at the NEXT session start. More skills from the same marketplace
+later: `claude plugin install <name>@pm-skills` + extend the hook block.
+
 ## Open / needs attention
 
+- **PR #147 needs review + squash-merge** (draft — mark ready first): the
+  pm-skills SessionStart bootstrap + this handoff update. CI (build/test/e2e)
+  was running at handoff time; hook + docs only, no app code.
 - **Visual QA on real devices** (everything above is in production): login
   charging current now guaranteed visible each sign-in; launcher hero mascot
   (half-submerged position vs the drifting crest), wave surge, ribbon current

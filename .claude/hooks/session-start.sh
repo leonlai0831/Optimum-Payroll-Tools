@@ -1,8 +1,9 @@
 #!/bin/bash
 # SessionStart hook: make web-session skills available. Installs gstack (see the
-# "gstack (recommended)" section in CLAUDE.md) and the proprietary,
-# not-vendored frontend-design skill from its official source (see "Vendored
-# skills" in CLAUDE.md). MIT skills are vendored directly under .claude/skills/.
+# "gstack (recommended)" section in CLAUDE.md), the proprietary, not-vendored
+# frontend-design skill from its official source (see "Vendored skills" in
+# CLAUDE.md), and the pm-skills plugin marketplace (jobs-to-be-done). MIT
+# skills are vendored directly under .claude/skills/.
 #
 # Design notes:
 #  - Remote-only: does nothing on local machines (developers install gstack once).
@@ -36,6 +37,24 @@ if [ ! -e "$PROJECT_DIR/.claude/skills/frontend-design" ]; then
   fi
 else
   echo "frontend-design: already present — skipping." >&2
+fi
+
+# --- pm-skills (deanpeters/Product-Manager-Skills marketplace) --------------
+# Product-management skills for Claude Code. Installed at user scope each
+# session (the remote container is ephemeral, so ~/.claude installs don't
+# survive it). Both CLI commands are idempotent (exit 0 when already done);
+# the registry grep just skips the CLI startup cost on warm containers.
+# Non-fatal: a failed clone/install must not block the session.
+if grep -qs '"jobs-to-be-done@pm-skills"' "$HOME/.claude/plugins/installed_plugins.json"; then
+  echo "pm-skills: jobs-to-be-done already installed — skipping." >&2
+else
+  echo "pm-skills: adding marketplace + installing jobs-to-be-done ..." >&2
+  if claude plugin marketplace add deanpeters/Product-Manager-Skills >&2 \
+      && claude plugin install jobs-to-be-done@pm-skills >&2; then
+    echo "pm-skills: installed." >&2
+  else
+    echo "pm-skills: install failed — skipping (session continues)." >&2
+  fi
 fi
 
 GSTACK_DIR="$HOME/.claude/skills/gstack"
