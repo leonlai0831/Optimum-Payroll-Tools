@@ -9,11 +9,12 @@
 import type { FreelancerCenterRow } from "@/lib/freelancer/types";
 
 /**
- * One recurring slot in a freelancer's fixed schedule. The schedule does NOT
- * carry a class type — that varies and is only declared on the actual clock-in
- * (operator decision 2026-06-13) — so matching uses `weekday + center` only.
- * Start/end times live on the stored row for display but don't affect matching;
- * billable hours always come from the clock-in, never the planned slot.
+ * One recurring slot in a freelancer's fixed schedule. Matching uses the
+ * scheduled DATE only (operator decision 2026-06-13): a freelancer may cover at
+ * a different center than their slot, so a clock-in on a scheduled day is
+ * `fixed` wherever it happened, and the hours land on the center actually
+ * worked. The slot's `center` is kept only to attribute an absence; class type
+ * and start/end times never affect matching (hours come from the clock-in).
  */
 export interface ScheduleSlot {
   weekday: number; // 0 = Sunday … 6 = Saturday (UTC)
@@ -97,10 +98,12 @@ export function reconcileFreelancer(
   };
 
   // 2. Classify each entry against an unconsumed scheduled occurrence on the
-  //    same date + center (class type is irrelevant to the schedule).
+  //    same DATE only — the center may differ (the freelancer covered elsewhere),
+  //    so center is NOT part of the match. Fixed/replaced hours always land on
+  //    the center actually worked (the clock-in's center).
   for (const e of entries) {
     const k = centerKey(e.center);
-    const match = occurrences.find((o) => !o.consumed && o.date === e.date && o.centerK === k);
+    const match = occurrences.find((o) => !o.consumed && o.date === e.date);
     const row = rowFor(k);
     if (match) {
       match.consumed = true;

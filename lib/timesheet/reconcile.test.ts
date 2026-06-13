@@ -39,18 +39,23 @@ describe("reconcileFreelancer", () => {
     expect(absences).toEqual([]);
   });
 
-  it("matches on date + center only — class type is not part of the schedule", () => {
+  it("matches on the scheduled DATE only — covering at another center still counts as fixed", () => {
     const schedule: ScheduleSlot[] = [{ weekday: 1, center: "PK" }];
-    // The clock-in's class type (whatever it is) doesn't affect the match: a
-    // Monday at PK is fixed; a Tuesday at PK is a replacement.
+    // Scheduled Monday at PK, but the freelancer covered at HQ that Monday →
+    // still FIXED (the date matches) and the hours land on HQ. A Tuesday clock-in
+    // is off-schedule → replaced.
     const { centerRows } = reconcileFreelancer(
       schedule,
-      [entry("2026-06-08", "PK", 2), entry("2026-06-09", "PK", 1)],
+      [entry("2026-06-08", "HQ", 2), entry("2026-06-09", "USJ", 1)],
       Y,
       M,
     );
-    // 2h fixed (Mon), 1h replaced (Tue), and 4 missed Mondays → absent.
-    expect(centerRows).toEqual([{ center: "PK", fixedHours: 2, replacedHours: 1, absent: true }]);
+    expect(centerRows).toEqual([
+      { center: "HQ", fixedHours: 2, replacedHours: 0, absent: false },
+      { center: "USJ", fixedHours: 0, replacedHours: 1, absent: false },
+      // The other 4 scheduled Mondays were missed → PK marked absent (0h).
+      { center: "PK", fixedHours: 0, replacedHours: 0, absent: true },
+    ]);
   });
 
   it("matches case-insensitively on center (front-desk shift, no class anywhere)", () => {
