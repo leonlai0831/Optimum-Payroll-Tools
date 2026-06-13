@@ -20,9 +20,65 @@ roles + a capability matrix (see "Auth"); the original shared password is long g
 > **Pending work / next session:** the active backlog (in-progress branch + the
 > operator decisions behind each item) lives in **`HANDOFF.md`**, with intent in
 > **`ROADMAP.md`**. As of 2026-06-13 that's: A) Clock-in entry redesign (branch
-> `claude/clockin-entry-redesign` — validator done), B) per-module launcher
-> notification badges, C) center-scoped approvals, D) Permissions/User-overrides
-> redesign, plus the Marketing-card visibility (owner config, no code).
+> `claude/clockin-entry-redesign` — validator done), B) notification badges on
+> launcher cards AND section-nav tabs, C) center-scoped approvals,
+> D) Permissions/User-overrides redesign, E) list-control standardization
+> (Search/Sort/Filter/select-all via a shared kit), plus the Marketing-card
+> visibility (owner config, no code).
+
+## Development SOP — per-feature loop (follow EVERY session)
+
+Standing operator instruction (2026-06-13): when working through the backlog, run
+this loop **per feature** and **do not stop until every queued task is done** — or
+until the conversation's token budget runs low (step 4). Keep the existing **one
+clean PR at a time** rule; each pass through the loop is one PR.
+
+1. **Build → review → test.** Implement ONE feature on its branch, then review and
+   test it before doing anything else: run the `/code-review` skill on the diff and
+   address its findings, plus `npm run lint`, `npm run typecheck`, `npm test`, and a
+   `npm run build` / browser QA when the change warrants. A red check means it is
+   NOT done — fix it, don't move on. **Doc edits ride in THIS PR** per the
+   doc-maintenance policy below: if the feature changed a system fact/rule, update
+   `CLAUDE.md` here; if it cleared a roadmap item or changed direction, update
+   `ROADMAP.md` here. (Do NOT touch `HANDOFF.md` per-feature — that's session-end.)
+2. **Auto-merge when clean.** Once review + tests pass **and CI is green on the
+   PR**, merge it — this is standing authorization, no need to ask per-PR. Never
+   merge a red or still-pending PR: confirm CI green first (merging here bypasses
+   branch protection, so the green check is the real gate).
+3. **Check the token budget, then continue or hand off.** If there is comfortably
+   enough conversation budget left for another full build→review→merge cycle, cut a
+   fresh branch from the updated `main` and loop back to step 1 with the next
+   backlog item. If not, **refresh `HANDOFF.md` (session snapshot — see below) and
+   stop, telling the operator to open a new conversation** so the next session
+   resumes cleanly.
+
+Repeat steps 1–3 until the backlog is empty or step 3 pauses for budget. Hard /
+irreversible / outward-facing actions outside this loop still get confirmed first;
+the per-PR auto-merge above is the one standing exception.
+
+### Doc-maintenance policy (do NOT update all three files every time)
+
+Three docs, three cadences. Per feature, run the two-question self-check; `HANDOFF`
+waits for session end.
+
+- **`CLAUDE.md` (system facts / rules)** — update only when "what the system looks
+  like" or a hard rule changes, **in the same PR as the code**. Update for: a new
+  module, a data-model / migration change, a changed convention or calculation rule,
+  a new capability, a newly-frozen decision. Do NOT touch for: a bug fix, copy
+  change, style tweak, or behavior-preserving refactor.
+- **`ROADMAP.md` (intent / direction)** — update only when intent, priority, or a
+  decision changes. Update for: a roadmap item shipped (mark ✅ / remove it), a
+  priority re-order, a new owner decision (into "Decided — do not reopen"). Do NOT
+  record pure implementation detail here (that belongs in HANDOFF).
+- **`HANDOFF.md` (session handoff snapshot)** — refresh **per session, not per
+  feature**, once at session end / handoff: what this session did + which PRs
+  merged, the real backlog state (cross off done, add new), and any pitfalls /
+  environment notes the next session needs.
+
+**Per-feature self-check:** ① Did it change a system fact or rule? → yes ⇒ edit
+`CLAUDE.md` (in the feature PR). ② Did it clear a roadmap item or change direction?
+→ yes ⇒ edit `ROADMAP.md` (in the feature PR). Otherwise leave them untouched.
+`HANDOFF.md` is updated at session end regardless.
 
 ## Goal & decisions
 

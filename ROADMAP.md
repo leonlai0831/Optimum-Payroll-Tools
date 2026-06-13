@@ -45,15 +45,30 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
 - **A. Clock-in entry redesign** — branch `claude/clockin-entry-redesign` (pushed,
   validator done): auto-lock Lesson/Shift by `coaches.jobRole`; lesson = start/end
   + multiple (classType, hours) lines whose sum ≈ span (±0.25 h) or it blocks.
-- **B. Launcher notification badges** — per-module pending-approval count on each
-  card's icon corner (Clock-in → timesheets to review, Lesson Plan → plans to
-  review); reuse/reposition the #172 errors badge.
+- **B. Notification badges — launcher cards AND section-nav tabs** (merged with the
+  operator's "drill-down" ask, 2026-06-13): one shared per-destination count helper
+  (`lib/nav/badges.ts`) + a shared `<CountBadge>` lights up BOTH the launcher card
+  icon corner AND the matching tab inside the section, so a count tells you which
+  tab to open. Sources: System → Errors (`countAppErrors`), Clock-in → Review
+  (submitted timesheets, `review_timesheet`), Lesson Plan → History (submitted
+  plans, `review_lesson_plans`). Capability-gated; super_admin = all; counts gain a
+  center filter for free once C lands. (Absorbs the old "launcher badges" item.)
 - **C. Center-scoped approvals** — `users.managedCenters`; admins approve only
   their branch's requests (super_admin = all). Filter the review queues by the
   request's center.
 - **D. Permissions / User-overrides redesign** — full name, search + per-column
   sort/filter, bulk check/uncheck filtered rows, move category control off the
   Roles tab, rename "User overrides", drop the Visibility column.
+- **E. List-control standardization** — every data list must ship Search + Sort +
+  Filter, plus select-all/clear where it has row checkboxes; all via the shared
+  `components/table-controls.tsx` kit (no more one-off `useState("")` + `.filter()`).
+  Rollout (operator decision 2026-06-13): **kit + docs FIRST** — extend
+  table-controls with `SearchInput` / `FilterBar` / `useRowSelection` /
+  `SelectAllCheckbox`, migrate the 2 existing select-all surfaces (timesheet review,
+  permissions matrix) as the reference, write the standard into `CLAUDE.md`
+  Conventions — THEN convert the ~15 missing lists in per-module batches (one clean
+  PR each). Inventory baseline (2026-06-13): 23 lists — search 8, sort 9, filter 6,
+  select-all 2.
 - **Marketing visibility** — owner unticks "Optimum Marketing" for staff/supervisor
   on `/system/permissions` (no code); root cause: all roles default to all 3
   launcher categories + the Marketing card has no capability gate.
