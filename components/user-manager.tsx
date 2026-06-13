@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, KeyRound, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowUpDown, Eye, EyeOff, KeyRound, Plus, Search, Trash2, UserPlus, X } from "lucide-react";
 import { Button, Card, Input, Label, Select, Spinner } from "@/components/ui";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
+import { EmployeeCombobox } from "@/components/employee-combobox";
 import { useToast } from "@/components/toast";
 import { ROLE_LABELS, ROLES, canManageUserRole, type Role } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
+
+type SortCol = "email" | "displayName" | "role" | "active";
 
 export interface SafeUser {
   id: number;
@@ -70,36 +73,33 @@ function PasswordInput({
   );
 }
 
-/** Grouped <option>s shared by the add form and each row's link picker. */
-function EmployeeLinkOptions({
-  coaches,
-  gymStaff,
+/** A sortable desktop column header. */
+function SortTh({
+  label,
+  col,
+  sort,
+  onSort,
+  center,
 }: {
-  coaches: CoachOption[];
-  gymStaff: GymStaffOption[];
+  label: string;
+  col: SortCol;
+  sort: { col: SortCol; dir: 1 | -1 };
+  onSort: (col: SortCol) => void;
+  center?: boolean;
 }) {
+  const active = sort.col === col;
   return (
-    <>
-      <option value="">— none —</option>
-      {coaches.length > 0 && (
-        <optgroup label="Swim School">
-          {coaches.map((c) => (
-            <option key={`coach:${c.id}`} value={`coach:${c.id}`}>
-              {c.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-      {gymStaff.length > 0 && (
-        <optgroup label="Optimum Fit">
-          {gymStaff.map((g) => (
-            <option key={`gym:${g.id}`} value={`gym:${g.id}`}>
-              {g.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </>
+    <th className={cn("px-4 py-2", center ? "text-center" : "text-left")}>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        className={cn("inline-flex items-center gap-1 hover:text-gray-700", active && "text-gray-900")}
+        title={`Sort by ${label}`}
+      >
+        {label}
+        <ArrowUpDown className={cn("h-3 w-3", active ? "text-indigo-500" : "text-gray-300")} />
+      </button>
+    </th>
   );
 }
 
@@ -133,6 +133,27 @@ export function UserManager({
   const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
   const [deleteTarget, setDeleteTarget] = useState<SafeUser | null>(null);
   const [pwTarget, setPwTarget] = useState<SafeUser | null>(null);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<{ col: SortCol; dir: 1 | -1 }>({ col: "email", dir: 1 });
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = q
+      ? users.filter((u) => u.email.toLowerCase().includes(q) || u.displayName.toLowerCase().includes(q))
+      : users;
+    const { col, dir } = sort;
+    return [...filtered].sort((a, b) => {
+      const cmp =
+        col === "active"
+          ? Number(a.active) - Number(b.active)
+          : String(a[col]).localeCompare(String(b[col]));
+      return cmp !== 0 ? cmp * dir : a.email.localeCompare(b.email);
+    });
+  }, [users, search, sort]);
+
+  function toggleSort(col: SortCol) {
+    setSort((s) => (s.col === col ? { col, dir: s.dir === 1 ? -1 : 1 } : { col, dir: 1 }));
+  }
 
   function setBusy(id: number, on: boolean) {
     setBusyIds((prev) => {
@@ -208,11 +229,23 @@ export function UserManager({
         <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
       )}
       <Card className="overflow-hidden">
-        <div className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-bold text-gray-900">
-          User accounts · {users.length}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-2">
+          <span className="text-sm font-bold text-gray-900">
+            User accounts ·{" "}
+            {visible.length === users.length ? users.length : `${visible.length} / ${users.length}`}
+          </span>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search email or name…"
+              className="w-56 max-w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
         </div>
         <MobileCards>
-          {users.map((u) => (
+          {visible.map((u) => (
             <UserEntry key={u.id} layout="card" {...entryProps(u)} />
           ))}
         </MobileCards>
@@ -220,16 +253,16 @@ export function UserManager({
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="px-4 py-2 text-left">Email</th>
-                <th className="px-4 py-2 text-left">Name</th>
-                <th className="px-4 py-2 text-left">Role</th>
+                <SortTh label="Email" col="email" sort={sort} onSort={toggleSort} />
+                <SortTh label="Name" col="displayName" sort={sort} onSort={toggleSort} />
+                <SortTh label="Role" col="role" sort={sort} onSort={toggleSort} />
                 <th className="px-4 py-2 text-left">Linked employee</th>
-                <th className="px-4 py-2 text-center">Active</th>
+                <SortTh label="Active" col="active" sort={sort} onSort={toggleSort} center />
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {users.map((u) => (
+              {visible.map((u) => (
                 <UserEntry key={u.id} layout="row" {...entryProps(u)} />
               ))}
             </tbody>
@@ -371,14 +404,14 @@ function UserEntry({
     </Select>
   );
   const linkSelect = (className: string) => (
-    <Select
+    <EmployeeCombobox
       className={className}
+      coaches={coaches}
+      gymStaff={gymStaff}
       value={linkToken(user)}
       disabled={busy || readOnly}
-      onChange={(e) => onPatch(parseLinkToken(e.target.value))}
-    >
-      <EmployeeLinkOptions coaches={coaches} gymStaff={gymStaff} />
-    </Select>
+      onChange={(token) => onPatch(parseLinkToken(token))}
+    />
   );
   const nameInput = (className: string) => (
     <Input
@@ -644,14 +677,13 @@ function AddUser({
         </div>
         <div>
           <Label htmlFor="u-coach">Linked employee</Label>
-          <Select
-            id="u-coach"
+          <EmployeeCombobox
             className="mt-1"
+            coaches={coaches}
+            gymStaff={gymStaff}
             value={link}
-            onChange={(e) => setLink(e.target.value)}
-          >
-            <EmployeeLinkOptions coaches={coaches} gymStaff={gymStaff} />
-          </Select>
+            onChange={setLink}
+          />
         </div>
       </div>
       <div className="mt-3">
