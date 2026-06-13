@@ -91,6 +91,90 @@ export function parseTimesheetEntry(body: unknown): { value: ParsedTimesheetEntr
   return { value: { date, center, entryType, classType: null, startTime, endTime, hours, note } };
 }
 
+/** Max allowed gap (hours) between the summed class hours and the clocked
+ *  start–end span. Small tolerance for rounding / a short break. */
+export const SESSION_HOURS_TOLERANCE = 0.25;
+
+export interface ParsedTimesheetSession {
+  date: string;
+  center: string;
+  startTime: string;
+  endTime: string;
+  /** One or more classes taught within the start–end window. */
+  lines: { classType: TimesheetClassType; hours: number }[];
+  note: string;
+}
+
+/**
+ * Parse a LESSON session: a clocked start–end window with one or more
+ * (classType, hours) lines taught inside it. The lines' hours must sum to the
+ * window span within {@link SESSION_HOURS_TOLERANCE} — an instructor can't log
+ * more (or far fewer) teaching hours than they were clocked in for. Each line is
+ * persisted as its own lesson row sharing the window, so downstream
+ * aggregation/reconcile is unchanged. Pure → unit-locked (payroll input).
+ */
+export function parseTimesheetSession(
+  body: unknown,
+): { value: ParsedTimesheetSession } | { error: string } {
+  if (typeof body !== "object" || body === null) return { error: "body must be an object" };
+  const b = body as Record<string, unknown>;
+
+  const date = typeof b.date === "string" ? b.date.trim() : "";
+  if (!DATE_RE.test(date)) return { error: "date must be YYYY-MM-DD" };
+
+  const center = typeof b.center === "string" ? b.center.trim() : "";
+  if (!center) return { error: "center is required" };
+
+  const startTime = typeof b.startTime === "string" ? b.startTime.trim() : "";
+  const endTime = typeof b.endTime === "string" ? b.endTime.trim() : "";
+  if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) {
+    return { error: "a lesson session needs startTime and endTime as HH:MM" };
+  }
+  if (endTime <= startTime) return { error: "endTime must be after startTime" };
+  const span = (toMinutes(endTime) - toMinutes(startTime)) / 60;
+
+  const raw = b.lines;
+  if (!Array.isArray(raw) || raw.length === 0) return { error: "add at least one class line" };
+  const lines: { classType: TimesheetClassType; hours: number }[] = [];
+  let sum = 0;
+  for (const [i, item] of raw.entries()) {
+    if (typeof item !== "object" || item === null) return { error: `line ${i + 1}: must be an object` };
+    const li = item as Record<string, unknown>;
+    if (!isClassType(li.classType)) return { error: `line ${i + 1}: needs a valid classType` };
+    const hours = typeof li.hours === "number" ? li.hours : Number(li.hours);
+    if (!Number.isFinite(hours) || hours <= 0) return { error: `line ${i + 1}: hours must be a positive number` };
+    lines.push({ classType: li.classType, hours });
+    sum += hours;
+  }
+  if (Math.abs(sum - span) > SESSION_HOURS_TOLERANCE) {
+    return {
+      error: `class hours (${sum.toFixed(2)}) must match the ${span.toFixed(2)} h between start and end`,
+    };
+  }
+
+  const note = typeof b.note === "string" ? b.note.trim() : "";
+  return { value: { date, center, startTime, endTime, lines, note } };
+}
+
+/**
+ * Expand a parsed lesson session into one {@link ParsedTimesheetEntry} per class
+ * line — each a `lesson` row sharing the session's date/center/window/note, with
+ * that line's class type + hours. One row per line keeps downstream aggregation /
+ * reconcile (which read classType + hours) unchanged. Pure → unit-locked.
+ */
+export function sessionToEntries(s: ParsedTimesheetSession): ParsedTimesheetEntry[] {
+  return s.lines.map((line) => ({
+    date: s.date,
+    center: s.center,
+    entryType: "lesson",
+    classType: line.classType,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    hours: line.hours,
+    note: s.note,
+  }));
+}
+
 export interface ParsedScheduleSlot {
   weekday: number;
   startTime: string;
