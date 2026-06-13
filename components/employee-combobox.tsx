@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 export interface EmployeeOption {
   id: number;
   name: string;
+  /** Secondary distinguisher shown under the name (e.g. the coach's center). */
+  subtitle?: string;
 }
 
 /**
@@ -34,11 +36,21 @@ export function EmployeeCombobox({
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  // Flatten to {token, name, group} so search spans both brands.
+  // Flatten to {token, name, subtitle, group} so search spans both brands.
   const items = useMemo(
     () => [
-      ...coaches.map((c) => ({ token: `coach:${c.id}`, name: c.name, group: "Swim School" as const })),
-      ...gymStaff.map((g) => ({ token: `gym:${g.id}`, name: g.name, group: "Optimum Fit" as const })),
+      ...coaches.map((c) => ({
+        token: `coach:${c.id}`,
+        name: c.name,
+        subtitle: c.subtitle,
+        group: "Swim School" as const,
+      })),
+      ...gymStaff.map((g) => ({
+        token: `gym:${g.id}`,
+        name: g.name,
+        subtitle: g.subtitle,
+        group: "Optimum Fit" as const,
+      })),
     ],
     [coaches, gymStaff],
   );
@@ -56,7 +68,9 @@ export function EmployeeCombobox({
   const label = selected ? selected.name : "— none —";
 
   const q = query.trim().toLowerCase();
-  const filtered = q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
+  const filtered = q
+    ? items.filter((i) => `${i.name} ${i.subtitle ?? ""}`.toLowerCase().includes(q))
+    : items;
 
   function pick(token: string) {
     onChange(token);
@@ -69,6 +83,7 @@ export function EmployeeCombobox({
       <button
         type="button"
         disabled={disabled}
+        title={selected ? `${selected.name}${selected.subtitle ? ` · ${selected.subtitle}` : ""}` : undefined}
         onClick={() => {
           setQuery("");
           setOpen((o) => !o);
@@ -83,7 +98,9 @@ export function EmployeeCombobox({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+        // Panel is wider than the (often narrow) trigger so long, similar names
+        // ("MUHAMMAD …") are readable in full instead of truncating.
+        <div className="absolute left-0 z-50 mt-1 w-[min(22rem,90vw)] min-w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
           <div className="flex items-center gap-2 border-b border-gray-100 px-2.5 py-2">
             <Search className="h-4 w-4 shrink-0 text-gray-400" />
             <input
@@ -117,15 +134,21 @@ export function EmployeeCombobox({
                   type="button"
                   onClick={() => pick(i.token)}
                   className={cn(
-                    "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-gray-100",
+                    "flex w-full items-start justify-between gap-2 px-3 py-1.5 text-left hover:bg-gray-100",
                     i.token === value && "bg-indigo-50",
                   )}
                 >
-                  <span className="truncate">
-                    {i.name}
-                    <span className="ml-1 text-[11px] text-gray-400">{i.group}</span>
+                  <span className="min-w-0">
+                    {/* Full name, wrapping if long — never truncated, so similar
+                        names stay distinguishable. */}
+                    <span className="block break-words font-medium text-gray-800">{i.name}</span>
+                    <span className="block text-[11px] text-gray-400">
+                      {i.subtitle ? `${i.subtitle} · ${i.group}` : i.group}
+                    </span>
                   </span>
-                  {i.token === value && <Check className="h-3.5 w-3.5 shrink-0 text-indigo-600" />}
+                  {i.token === value && (
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
+                  )}
                 </button>
               </li>
             ))}

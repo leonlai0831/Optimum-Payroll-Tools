@@ -36,7 +36,13 @@ export default async function UsersPage() {
       gymStaffId: u.gymStaffId,
       active: u.active,
     }));
-  const coachOptions: CoachOption[] = coaches.map((c) => ({ id: c.id, name: c.canonicalName }));
+  // The center is the picker's distinguisher between similar full names
+  // ("MUHAMMAD …"); skip it when blank so the sub-label stays clean.
+  const coachOptions: CoachOption[] = coaches.map((c) => ({
+    id: c.id,
+    name: c.canonicalName,
+    subtitle: c.center?.trim() || undefined,
+  }));
   const gymStaffOptions: GymStaffOption[] = gymStaff.map((g) => ({ id: g.id, name: g.name }));
 
   return (
