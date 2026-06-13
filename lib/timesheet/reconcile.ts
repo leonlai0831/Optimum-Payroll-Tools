@@ -7,32 +7,29 @@
 // Pure + deterministic so it can be unit-locked (payroll).
 
 import type { FreelancerCenterRow } from "@/lib/freelancer/types";
-import type { TimesheetClassType } from "./types";
 
 /**
- * One recurring slot in a freelancer's fixed schedule. The matching rule uses
- * `weekday + center + classType` only; start/end times live on the stored row
- * for display but DON'T affect classification in v1 — billable hours always
- * come from the actual clock-in, never the planned slot.
+ * One recurring slot in a freelancer's fixed schedule. The schedule does NOT
+ * carry a class type — that varies and is only declared on the actual clock-in
+ * (operator decision 2026-06-13) — so matching uses `weekday + center` only.
+ * Start/end times live on the stored row for display but don't affect matching;
+ * billable hours always come from the clock-in, never the planned slot.
  */
 export interface ScheduleSlot {
   weekday: number; // 0 = Sunday … 6 = Saturday (UTC)
   center: string;
-  classType?: TimesheetClassType | null; // null for front-desk shifts
 }
 
 /** One approved clock-in to reconcile against the schedule. */
 export interface ReconcileEntry {
   date: string; // YYYY-MM-DD
   center: string;
-  classType?: TimesheetClassType | null;
   hours: number;
 }
 
 export interface Absence {
   date: string;
   center: string;
-  classType: TimesheetClassType | null;
 }
 
 export interface ReconcileResult {
@@ -59,7 +56,6 @@ function pad2(n: number): string {
 interface Occurrence {
   date: string;
   centerK: string;
-  classType: TimesheetClassType | null;
   consumed: boolean;
 }
 
@@ -83,12 +79,7 @@ export function reconcileFreelancer(
     const date = `${year}-${pad2(month)}-${pad2(day)}`;
     for (const slot of schedule) {
       if (slot.weekday !== weekday) continue;
-      occurrences.push({
-        date,
-        centerK: centerKey(slot.center),
-        classType: slot.classType ?? null,
-        consumed: false,
-      });
+      occurrences.push({ date, centerK: centerKey(slot.center), consumed: false });
     }
   }
 
@@ -105,13 +96,11 @@ export function reconcileFreelancer(
     return row;
   };
 
-  // 2. Classify each entry against an unconsumed matching occurrence.
+  // 2. Classify each entry against an unconsumed scheduled occurrence on the
+  //    same date + center (class type is irrelevant to the schedule).
   for (const e of entries) {
     const k = centerKey(e.center);
-    const ct = e.classType ?? null;
-    const match = occurrences.find(
-      (o) => !o.consumed && o.date === e.date && o.centerK === k && o.classType === ct,
-    );
+    const match = occurrences.find((o) => !o.consumed && o.date === e.date && o.centerK === k);
     const row = rowFor(k);
     if (match) {
       match.consumed = true;
@@ -125,7 +114,7 @@ export function reconcileFreelancer(
   const absences: Absence[] = [];
   for (const o of occurrences) {
     if (o.consumed) continue;
-    absences.push({ date: o.date, center: o.centerK, classType: o.classType });
+    absences.push({ date: o.date, center: o.centerK });
     rowFor(o.centerK).absent = true;
   }
 

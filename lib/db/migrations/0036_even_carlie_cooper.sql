@@ -1,0 +1,1 @@
+ALTER TABLE "freelancer_schedules" DROP COLUMN "class_type";

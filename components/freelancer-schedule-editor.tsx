@@ -4,11 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { Button, Card, Input, Label, Select } from "@/components/ui";
 import { CENTERS } from "@/lib/allowance/types";
-import {
-  TIMESHEET_CLASS_TYPE_LABELS,
-  TIMESHEET_CLASS_TYPES,
-  type TimesheetClassType,
-} from "@/lib/timesheet/types";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -22,7 +17,6 @@ interface SlotRow {
   _key: number;
   weekday: number;
   center: string;
-  classType: TimesheetClassType | null;
   startTime: string;
   endTime: string;
 }
@@ -80,7 +74,7 @@ export function FreelancerScheduleEditor() {
     setSaved(false);
     setRows((rs) => [
       ...rs,
-      { _key: nextKey(), weekday: 1, center: CENTERS[0], classType: "low", startTime: "17:00", endTime: "18:00" },
+      { _key: nextKey(), weekday: 1, center: CENTERS[0], startTime: "17:00", endTime: "18:00" },
     ]);
   }
 
@@ -100,10 +94,9 @@ export function FreelancerScheduleEditor() {
     setError(null);
     setSaved(false);
     try {
-      const slots = rows.map(({ weekday, center, classType, startTime, endTime }) => ({
+      const slots = rows.map(({ weekday, center, startTime, endTime }) => ({
         weekday,
         center,
-        classType,
         startTime,
         endTime,
         effectiveFrom: null,
@@ -170,7 +163,7 @@ export function FreelancerScheduleEditor() {
                 <p className="text-sm text-gray-500">No slots yet — add the weekly schedule below.</p>
               )}
               {rows.map((r) => (
-                <div key={r._key} className="grid grid-cols-2 gap-2 sm:grid-cols-6 sm:items-end">
+                <div key={r._key} className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:items-end">
                   <div>
                     <Label>Day</Label>
                     <Select
@@ -190,24 +183,6 @@ export function FreelancerScheduleEditor() {
                       {CENTERS.map((c) => (
                         <option key={c} value={c}>
                           {c}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Class</Label>
-                    <Select
-                      value={r.classType ?? ""}
-                      onChange={(e) =>
-                        patchRow(r._key, {
-                          classType: e.target.value ? (e.target.value as TimesheetClassType) : null,
-                        })
-                      }
-                    >
-                      <option value="">Front-desk shift</option>
-                      {TIMESHEET_CLASS_TYPES.map((c) => (
-                        <option key={c} value={c}>
-                          {TIMESHEET_CLASS_TYPE_LABELS[c]}
                         </option>
                       ))}
                     </Select>

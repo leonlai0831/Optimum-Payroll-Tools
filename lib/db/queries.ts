@@ -3330,7 +3330,6 @@ export interface FreelancerScheduleSlotInput {
   startTime: string;
   endTime: string;
   center: string;
-  classType: TimesheetClassType | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
 }
@@ -3402,10 +3401,10 @@ export async function getApprovedFreelancerRows(
   const year = Number(period.slice(0, 4));
   const month = Number(period.slice(5, 7));
   return reconcileFreelancer(
-    schedule.map((s) => ({ weekday: s.weekday, center: s.center, classType: s.classType })),
+    schedule.map((s) => ({ weekday: s.weekday, center: s.center })),
     entries
       .filter((e) => e.status === "approved")
-      .map((e) => ({ date: e.date, center: e.center, classType: e.classType, hours: e.hours })),
+      .map((e) => ({ date: e.date, center: e.center, hours: e.hours })),
     year,
     month,
   );
