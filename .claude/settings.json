@@ -11,6 +11,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // empty' 2>/dev/null | grep -qE '(^|[;&|]) *git +commit' && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"Pre-commit reminder: run the /code-review skill on the staged diff (git diff --staged) and address its findings BEFORE this commit. If you have already code-reviewed these exact staged changes earlier this session, proceed with the commit.\"}}' || true"
+          }
+        ]
+      }
     ]
   }
 }

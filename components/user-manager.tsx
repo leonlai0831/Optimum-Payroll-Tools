@@ -9,7 +9,8 @@ import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { EmployeeCombobox } from "@/components/employee-combobox";
 import { useToast } from "@/components/toast";
 import { ROLE_LABELS, ROLES, canManageUserRole, type Role } from "@/lib/auth/types";
-import { countValid, rowsFromGrid, type ParsedUserRow } from "@/lib/users/bulk-parse";
+import { EMAIL_RE, countValid, rowsFromGrid, type ParsedUserRow } from "@/lib/users/bulk-parse";
+import type { BulkMode } from "@/lib/users/bulk-plan";
 import { cn } from "@/lib/utils";
 
 type SortCol = "email" | "displayName" | "fullName" | "role" | "active";
@@ -142,6 +143,13 @@ export function UserManager({
   // (super_admin assigns anything). Higher-ranked accounts never reach this
   // component — the page filters them out server-side.
   const roleOptions = ROLES.filter((r) => canManageUserRole(actorRole, r));
+  // Lowercased emails already in the (hierarchy-filtered) table — drives the
+  // bulk-add overwrite/skip prompt. The server re-checks authoritatively, so a
+  // hidden higher-ranked account just falls through to a safe server-side skip.
+  const existingEmails = useMemo(
+    () => new Set(users.map((u) => u.email.trim().toLowerCase())),
+    [users],
+  );
   const [busyIds, setBusyIds] = useState<ReadonlySet<number>>(new Set());
   // Every inline edit is STAGED per user id and committed together with the
   // Save button — nothing auto-saves on blur/change.
@@ -342,7 +350,7 @@ export function UserManager({
       {roleOptions.length > 0 && (
         <div className="flex flex-wrap items-start gap-2">
           <AddUser coaches={coaches} gymStaff={gymStaff} roleOptions={roleOptions} />
-          <BulkAddUsers roleOptions={roleOptions} />
+          <BulkAddUsers roleOptions={roleOptions} existingEmails={existingEmails} />
         </div>
       )}
       <Card className="overflow-hidden">
@@ -915,8 +923,16 @@ function excelCellText(v: unknown): string {
 }
 
 /** Bulk-create accounts from an uploaded CSV/Excel file — all one role + a
- *  shared initial password. Existing/duplicate emails are skipped + reported. */
-function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
+ *  shared initial password. When the upload overlaps existing emails, the
+ *  operator is asked whether to overwrite those accounts or skip them. */
+function BulkAddUsers({
+  roleOptions,
+  existingEmails,
+}: {
+  roleOptions: Role[];
+  /** Lowercased emails already in the system — drives the overwrite/skip prompt. */
+  existingEmails: ReadonlySet<string>;
+}) {
   const router = useRouter();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -927,8 +943,20 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
   const [role, setRole] = useState<Role>(roleOptions[roleOptions.length - 1] ?? "staff");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"parse" | "submit" | null>(null);
+  // Set while the overwrite/skip dialog is open; the mode whose submit is
+  // in-flight (for the button spinner).
+  const [askExisting, setAskExisting] = useState(false);
+  const [inFlight, setInFlight] = useState<BulkMode | null>(null);
 
   const validCount = countValid(parsed);
+  // Valid emails in the upload that already exist (so we know to prompt).
+  const existingCount = useMemo(
+    () =>
+      parsed.filter(
+        (r) => EMAIL_RE.test(r.email) && existingEmails.has(r.email.trim().toLowerCase()),
+      ).length,
+    [parsed, existingEmails],
+  );
 
   function reset() {
     setFilename("");
@@ -965,35 +993,51 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
     URL.revokeObjectURL(url);
   }
 
-  async function submit() {
+  /** Clicking Create: ask first if the upload overlaps existing emails. */
+  function onCreate() {
+    if (existingCount > 0) setAskExisting(true);
+    else void submit("skip");
+  }
+
+  async function submit(mode: BulkMode) {
     setBusy("submit");
+    setInFlight(mode);
     try {
       const res = await fetch("/api/users/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ users: parsed, role, password }),
+        body: JSON.stringify({ users: parsed, role, password, mode }),
       });
       const json = (await res.json()) as {
         error?: string;
         created?: number;
+        updated?: number;
         skipped?: { email: string; reason: string }[];
       };
       if (!res.ok) throw new Error(json.error ?? "Bulk add failed");
-      const skipped = json.skipped ?? [];
-      toast.success(`Created ${json.created ?? 0}${skipped.length ? `, skipped ${skipped.length}` : ""}.`);
+      const created = json.created ?? 0;
+      const updated = json.updated ?? 0;
+      const skipped = (json.skipped ?? []).length;
+      const parts = [`Created ${created}`];
+      if (updated) parts.push(`overwrote ${updated}`);
+      if (skipped) parts.push(`skipped ${skipped}`);
+      toast.success(`${parts.join(", ")}.`);
       reset();
       setPassword("");
+      setAskExisting(false);
       setOpen(false);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Bulk add failed");
     } finally {
       setBusy(null);
+      setInFlight(null);
     }
   }
 
   function close() {
     reset();
+    setAskExisting(false);
     setOpen(false);
   }
 
@@ -1002,6 +1046,52 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
       <Button variant="outline" onClick={() => setOpen(true)}>
         <UserPlus className="h-4 w-4" /> Bulk add
       </Button>
+    );
+  }
+
+  // Render exactly ONE dialog at a time — never stack two <Modal>s. Each Modal
+  // registers its own document-level Escape + Tab focus-trap, so stacking would
+  // let Escape tear down the bulk modal (losing the parsed file) and let Tab
+  // escape into the dimmed background. All state lives in this component, so
+  // toggling which modal renders preserves the upload.
+  if (askExisting) {
+    return (
+      <Modal
+        open
+        onClose={busy ? () => {} : () => setAskExisting(false)}
+        title="Some emails already exist"
+        size="md"
+        footer={
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setAskExisting(false)} disabled={busy != null}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => void submit("skip")} disabled={busy != null}>
+              {inFlight === "skip" ? <Spinner /> : null} Skip
+            </Button>
+            <Button onClick={() => void submit("overwrite")} disabled={busy != null}>
+              {inFlight === "overwrite" ? <Spinner /> : null} Overwrite
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-body text-gray-700">
+          <strong>{existingCount}</strong> of these {validCount} email{validCount === 1 ? "" : "s"} already exist in
+          the system.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
+          <li>
+            <strong>Overwrite</strong> resets those accounts to the chosen role + shared password (and full name when
+            the file has one), then creates the rest.
+          </li>
+          <li>
+            <strong>Skip</strong> leaves them untouched and only creates the new emails.
+          </li>
+        </ul>
+        <p className="mt-2 text-xs text-gray-400">
+          Your own account and accounts above your access are never overwritten.
+        </p>
+      </Modal>
     );
   }
 
@@ -1016,7 +1106,7 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
           <Button variant="outline" onClick={close} disabled={busy != null}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy != null || validCount === 0 || password.length < 6}>
+          <Button onClick={onCreate} disabled={busy != null || validCount === 0 || password.length < 6}>
             {busy === "submit" ? <Spinner /> : <Plus className="h-4 w-4" />} Create {validCount || ""}
           </Button>
         </>
@@ -1026,8 +1116,8 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
         <p className="text-sm text-gray-600">
           Upload a <strong>CSV or Excel</strong> file with an <code className="rounded bg-gray-100 px-1">email</code>{" "}
           column (and an optional <code className="rounded bg-gray-100 px-1">full name</code>). All get the role +
-          shared initial password below; existing emails are skipped. Link them to a coach afterwards with{" "}
-          <strong>AI auto-link</strong>.
+          shared initial password below; if any emails already exist you&rsquo;ll be asked whether to overwrite or
+          skip them. Link them to a coach afterwards with <strong>AI auto-link</strong>.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -1091,13 +1181,21 @@ function BulkAddUsers({ roleOptions }: { roleOptions: Role[] }) {
           </button>
           {parseError ? (
             <p className="mt-1 text-xs text-red-500">{parseError}</p>
+          ) : filename && parsed.length > 0 ? (
+            <p className="mt-1 text-xs text-gray-400">
+              {`${validCount} valid email${validCount === 1 ? "" : "s"} detected${
+                parsed.length !== validCount ? ` (${parsed.length - validCount} without a valid email)` : ""
+              }.`}
+              {existingCount > 0 && (
+                <span className="font-semibold text-amber-600">
+                  {" "}
+                  {existingCount} already exist{existingCount === 1 ? "s" : ""} — you&rsquo;ll be asked.
+                </span>
+              )}
+            </p>
           ) : (
             <p className="mt-1 text-xs text-gray-400">
-              {filename && parsed.length > 0
-                ? `${validCount} valid email${validCount === 1 ? "" : "s"} detected${
-                    parsed.length !== validCount ? ` (${parsed.length - validCount} without a valid email)` : ""
-                  }.`
-                : "First column is the email; a full-name column is optional."}
+              First column is the email; a full-name column is optional.
             </p>
           )}
         </div>
