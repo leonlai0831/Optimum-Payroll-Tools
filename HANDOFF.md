@@ -72,14 +72,31 @@ Also this session (NOT a feature PR):
  - Decisions: multi-class-type per window; ±0.25 h tolerance; mode auto-locked by
    `coaches.jobRole` (`"instructor" | "front_desk"`).
 
-**B. Launcher notification badges (per-module pending-approval counts).** A red count
- on each module card's **ICON top-right** (phone-notification style) for items
- awaiting *this user's* approval: **Clock-in** = timesheets `submitted` awaiting
- review (`review_timesheet`), **Lesson Plan** = plans `submitted` awaiting review
- (`review_lesson_plans`). **Reposition the existing System-card errors badge** to
- the icon corner to match. The `Tool.badge` + `ToolCard` infra already exists in
- `app/(app)/page.tsx` (today it renders next to the chevron). Capability-gated;
- **super_admin sees all**; counts become **center-scoped once C lands**.
+**B. Notification badges — launcher cards AND section-nav tabs (MERGED, operator
+ decision 2026-06-13).** A red count on each module card's **ICON top-right**
+ (phone-notification style) for items awaiting *this user's* approval **AND** the
+ same count on the matching tab once you open the section, so you know where to
+ look. Awaiting-review sources: **Clock-in** = timesheets `submitted`
+ (`review_timesheet`) → card + `/timesheets/review` tab; **Lesson Plan** = plans
+ `submitted` (`review_lesson_plans`) → card + `/lesson-plans/history` tab;
+ **System** = `countAppErrors()` (super_admin) → card + `/system/errors` tab
+ (today the errors badge only lives on the card). Build it ONCE:
+ - **`lib/nav/badges.ts` → `sectionBadges(user, caps)`** returns `Record<href,
+   number>` (capability-gated for the current user). New queries needed:
+   `countTimesheetsForReview()` (status `submitted`), `countLessonPlansForReview()`
+   (status `submitted`); errors reuses `countAppErrors()`.
+ - **Extract `<CountBadge>`** from the inline red-pill markup in
+   `app/(app)/page.tsx` (`ToolCard`) into a shared component; launcher card AND
+   `SectionNav` tab both render it (style never drifts). **Reposition the existing
+   System-card badge** to the icon corner to match.
+ - **`SectionNav` gains an optional `badges?: Record<string, number>` prop**
+   (`components/section-nav.tsx`); each section `layout.tsx` (system / timesheets /
+   lesson) computes via `sectionBadges` and passes it in. The launcher card badge =
+   the sum of that section's destination counts.
+ - Capability-gated; **super_admin sees all**; counts become **center-scoped once C
+   lands** (add the center filter inside `sectionBadges`). The `Tool.badge` +
+   `ToolCard` infra already exists in `app/(app)/page.tsx` (today next to the
+   chevron). (Absorbs the old "launcher badges only" item.)
 
 **C. Center-scoped approvals (admin approves only their branch).** super_admin = all
  (confirmed by operator). Full code map done this session:
@@ -104,6 +121,32 @@ Also this session (NOT a feature PR):
  5. **rename "User overrides"** to something clearer;
  6. drop the **Visibility** column.
  (Overlaps C — the per-admin center assignment likely lives on this same page.)
+
+**E. List-control standardization (operator decision 2026-06-13: kit + docs FIRST,
+ then per-module batches).** Standard to enforce: **every data list ships Search +
+ Sort + Filter, plus select-all / clear where it has row checkboxes** — all via the
+ shared `components/table-controls.tsx` kit, never a one-off `useState("")` +
+ `.filter()`. Inventory baseline (this session's audit): 23 lists — search 8, sort 9,
+ filter 6, select-all 2 (only `TimesheetReview` group-toggle + the `PermissionsForm`
+ matrix). Existing reusable pieces: `useTableSort` / `SortTh` / `TableToolbar` /
+ `includesText`. **What's one-off today and must be extracted:** search box, filter
+ dropdowns, row-selection/select-all.
+ - **PR-kit (first):** extend `table-controls.tsx` with `SearchInput` (icon +
+   clear), `FilterBar` / `FilterSelect` (dropdowns + "clear filters"),
+   `useRowSelection` (`Set<id>` + toggle + `selectAll`/`clear` + `allSelected`/
+   `someSelected`), `SelectAllCheckbox` (tri-state). **Migrate the 2 existing
+   select-all surfaces** (`components/timesheet-review.tsx`,
+   `components/permissions-form.tsx`) onto the new hook as the reference impl.
+   **Write the standard into `CLAUDE.md` Conventions** (the binding rule lands here,
+   once the helpers exist — referencing real components, not aspirational ones).
+ - **Then convert the ~15 missing lists in per-module batches** (one clean PR each),
+   roughly: ① Allowance / Freelancer / Commission history (need search+sort+filter)
+   ② `/progress` deliveries · `/system/audit` · `/system/errors` ·
+   `/timesheets/schedules` (nearly all four missing) ③ `/lesson-plans/history`
+   (needs search+sort) ④ KPI run detail (`RunCoachTable`) · `/staff/payees` (needs
+   filter). Each batch is its own PR → `/code-review` + QA. **Synergy with D:** the
+   Permissions-page redesign's "search + per-column sort/filter + bulk check/uncheck"
+   asks should be built ON the same kit, so do PR-kit before D.
 
 **#3 Marketing visibility — owner action, NO code.** Swim staff see the "Optimum
  Marketing" card because `DEFAULT_PERMISSION_CONFIG.categories` grants **all three**
