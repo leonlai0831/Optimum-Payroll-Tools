@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, ClipboardCheck, Loader2, X } from "lucide-react";
 import { Button, Card, Input, Label } from "@/components/ui";
+import { SelectAllCheckbox, useRowSelection } from "@/components/table-controls";
 import { groupSessionWindows, type SessionWindow } from "@/lib/timesheet/group";
 import { TIMESHEET_CLASS_TYPE_LABELS, type TimesheetClassType } from "@/lib/timesheet/types";
 
@@ -39,8 +40,16 @@ function classBreakdown(w: SessionWindow<Row>): string {
 export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
   const [rows, setRows] = useState<Row[]>(initialEntries);
   // Selection is tracked by row id; a whole clocked window is selected/cleared
-  // together (the reviewer acts on the window, not a single class line).
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // together (the reviewer acts on the window, not a single class line), so
+  // every toggle goes through `toggleMany` over a window's / coach's row ids.
+  const {
+    selected,
+    size: selectedCount,
+    toggleMany,
+    clear: clearSelection,
+    stateOf,
+    allSelected,
+  } = useRowSelection<number>();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,21 +73,13 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
   }, [rows]);
 
   const allWindows = useMemo(() => coachGroups.flatMap((g) => g.windows), [coachGroups]);
+  // Every clocked window's row ids, in display order — the scope of the
+  // top-level "select all records" control.
+  const allRowIds = useMemo(() => allWindows.flatMap((w) => w.ids), [allWindows]);
   const selectedWindows = useMemo(
-    () => allWindows.filter((w) => w.ids.every((id) => selected.has(id))).length,
-    [allWindows, selected],
+    () => allWindows.filter((w) => allSelected(w.ids)).length,
+    [allWindows, allSelected],
   );
-
-  function toggleGroup(ids: number[], on: boolean) {
-    setSelected((s) => {
-      const next = new Set(s);
-      for (const id of ids) {
-        if (on) next.add(id);
-        else next.delete(id);
-      }
-      return next;
-    });
-  }
 
   async function refresh() {
     setError(null);
@@ -87,7 +88,7 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to load");
       setRows(json.entries as Row[]);
-      setSelected(new Set());
+      clearSelection();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     }
@@ -130,6 +131,16 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
             ? "Nothing awaiting review."
             : `${allWindows.length} submitted record${allWindows.length === 1 ? "" : "s"} · ${selectedWindows} selected`}
         </p>
+        {allWindows.length > 0 && (
+          <label className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+            <SelectAllCheckbox
+              state={stateOf(allRowIds)}
+              onChange={(on) => toggleMany(allRowIds, on)}
+              aria-label="Select all records"
+            />
+            Select all records
+          </label>
+        )}
       </Card>
 
       {error && (
@@ -139,16 +150,14 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
       )}
 
       {coachGroups.map((g) => {
-        const allOn = g.rowIds.length > 0 && g.rowIds.every((id) => selected.has(id));
         return (
           <Card key={g.coachId} className="p-0">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <label className="flex items-center gap-2 font-semibold text-gray-900">
-                <input
-                  type="checkbox"
-                  checked={allOn}
-                  onChange={(e) => toggleGroup(g.rowIds, e.target.checked)}
-                  className="h-4 w-4"
+                <SelectAllCheckbox
+                  state={stateOf(g.rowIds)}
+                  onChange={(on) => toggleMany(g.rowIds, on)}
+                  aria-label={`Select all of ${g.name}`}
                 />
                 {g.name}
               </label>
@@ -158,14 +167,15 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
               {g.windows.map((w) => {
                 const note = w.rows[0].note;
                 const breakdown = w.entryType === "lesson" ? classBreakdown(w) : "";
-                const on = w.ids.every((id) => selected.has(id));
+                const on = allSelected(w.ids);
                 return (
                   <li key={w.key} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                     <input
                       type="checkbox"
                       checked={on}
-                      onChange={(e) => toggleGroup(w.ids, e.target.checked)}
-                      className="h-4 w-4"
+                      onChange={(e) => toggleMany(w.ids, e.target.checked)}
+                      className="h-4 w-4 accent-indigo-600"
+                      aria-label={`Select ${w.date} ${w.center} record`}
                     />
                     <span className="w-24 font-medium text-gray-900">{w.date}</span>
                     <span className="w-12">{w.center}</span>
@@ -190,10 +200,10 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
             <Input id="rv-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. split the Tuesday class into two rows" />
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" onClick={() => review("request_changes")} disabled={busy || selected.size === 0}>
+            <Button variant="outline" onClick={() => review("request_changes")} disabled={busy || selectedCount === 0}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} Request changes
             </Button>
-            <Button onClick={() => review("approve")} disabled={busy || selected.size === 0}>
+            <Button onClick={() => review("approve")} disabled={busy || selectedCount === 0}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve selected
             </Button>
           </div>

@@ -748,6 +748,18 @@ npm run db:migrate   # apply migrations explicitly (optional; auto-applied on fi
   `components/responsive-table.tsx` (they flip at `lg`; reference card markup: the KPI
   leaderboard in `components/dashboard.tsx`). Touch targets ≥ ~44px, ≥ 8px apart; no
   hover-only affordances (phones have no hover); tabular figures for numeric columns.
+- **List controls go through the shared kit (`components/table-controls.tsx`), never a
+  one-off.** Every data list ships **Search + Sort + Filter, plus select-all / clear where it
+  has row checkboxes** — built from the kit, not a bespoke `useState("")` + `.filter()`.
+  The kit: `SearchInput` (icon + clear), `FilterSelect` / `FilterBar` (dropdowns + "Clear
+  filters"), `useTableSort` / `SortTh` (click-to-cycle headers) + `makeComparator`
+  (empty-last, numeric-aware), `includesText` (trimmed, case-insensitive match), and for
+  selection `useRowSelection` (`Set<id>` + `toggle` / `toggleMany` / `selectOnly` / `clear` +
+  `stateOf` / `allSelected`) with the tri-state `SelectAllCheckbox`. `SearchInput` /
+  `FilterSelect` compose `ui.tsx`'s `Input` / `Select` so list chrome matches every other
+  field. Reference impl: the select-all in `components/timesheet-review.tsx` (top-level +
+  per-coach-group tri-state over each clocked window's row ids). The pure helpers (`triState`,
+  `makeComparator`, `includesText`) are Vitest-locked in `components/table-controls.test.ts`.
 - **Next 16**: middleware is **`proxy.ts`**, not `middleware.ts`. Per `AGENTS.md`, read
   `node_modules/next/dist/docs/` before using Next APIs — several differ from older versions.
 - **No `POSTGRES_URL`** locally → PGlite persists to `./.pglite` (gitignored). No cloud DB required to run.
