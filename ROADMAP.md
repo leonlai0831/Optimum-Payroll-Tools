@@ -62,9 +62,21 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   center-restricted admin can't review/finalize/reopen/delete a run at all
   (reserved for super_admin + all-centers admins). Pure helpers + queue filters
   Vitest-locked.
-- **D. Permissions / User-overrides redesign** — full name, search + per-column
-  sort/filter, bulk check/uncheck filtered rows, move category control off the
-  Roles tab, rename "User overrides", drop the Visibility column.
+- **F. Clock-in lesson session v2** (operator request 2026-06-14, with screenshots).
+  Refine the multi-line lesson session (#175): ① **one row per class type** — no
+  duplicate rows (Add only offers unused types; raise the row's number to log more);
+  ② label the per-row number as **hours** + note **Young Swimmer = 0.5 h/class,
+  others = 1 h** (the footer already sums it as hours); ③ the saved record, the
+  coach's delete, and the admin's approve all act on the **whole clock-in window
+  together**, not per class line. Number = hours is operator-confirmed. Full spec +
+  the group-by-window-key vs `sessionId`-column decision in `HANDOFF.md`.
+- **D. Permissions / User-overrides redesign** — the "User overrides" tab lists
+  **203 accounts with NO search / sort / filter and NO select-all/clear** (operator
+  flagged 2026-06-14), on BOTH the category-overrides card AND the new Center-scope
+  card (#180). Add: full name; **search + per-column sort/filter**; **bulk
+  check/uncheck (一键勾选/取消) the filtered rows**; move category control off the
+  Roles tab; rename "User overrides"; drop the Visibility column. Build the controls
+  on the **E list-control kit**, so **E-kit lands first**.
 - **E. List-control standardization** — every data list must ship Search + Sort +
   Filter, plus select-all/clear where it has row checkboxes; all via the shared
   `components/table-controls.tsx` kit (no more one-off `useState("")` + `.filter()`).
@@ -75,9 +87,14 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   Conventions — THEN convert the ~15 missing lists in per-module batches (one clean
   PR each). Inventory baseline (2026-06-13): 23 lists — search 8, sort 9, filter 6,
   select-all 2.
-- **Marketing visibility** — owner unticks "Optimum Marketing" for staff/supervisor
-  on `/system/permissions` (no code); root cause: all roles default to all 3
-  launcher categories + the Marketing card has no capability gate.
+- **G. Default-deny launcher categories + drop the Visibility column** (operator
+  request 2026-06-14). Flip category defaults from **all-three** to **none** — an
+  account sees no department until an admin manually ticks one on the User-overrides
+  tab — and drop the Visibility column (= D #6). Code lever: role-default categories
+  → `[]` (super_admin always all). **Existing 203 accounts:** snapshot current
+  effective categories into per-user overrides BEFORE flipping the default (safe
+  rollout) so they keep access; only NEW accounts default-deny. **Supersedes** the
+  old marketing-only visibility item.
 
 ## Backlog (unordered — pick with the owner)
 

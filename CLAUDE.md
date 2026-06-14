@@ -25,6 +25,13 @@ roles + a capability matrix (see "Auth"); the original shared password is long g
 > E) list-control standardization (Search/Sort/Filter/select-all via a shared
 > kit), plus the Marketing-card visibility (owner config, no code).
 
+## Communicating with the operator
+
+**Reply to the operator in Chinese (中文).** Standing instruction (2026-06-14): all
+chat explanations / status updates to the operator are written in Chinese. The
+artifacts stay in **English** — code, identifiers, commit messages, PR titles/bodies,
+code comments, and the project docs (`CLAUDE.md` / `ROADMAP.md` / `HANDOFF.md`).
+
 ## Development SOP — per-feature loop (follow EVERY session)
 
 Standing operator instruction (2026-06-13): when working through the backlog, run
