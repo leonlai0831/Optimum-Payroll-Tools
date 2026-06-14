@@ -3240,6 +3240,19 @@ export async function deleteTimesheetEntry(id: number): Promise<void> {
   await db.delete(timesheets).where(eq(timesheets.id, id));
 }
 
+/** Delete several entries at once (the per-line rows of one clocked window) in a
+ *  single statement, so a window deletes atomically. The caller has already
+ *  filtered `ids` to rows it may delete. Returns the count removed. */
+export async function deleteTimesheetEntries(ids: number[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const db = await getDb();
+  const rows = await db
+    .delete(timesheets)
+    .where(inArray(timesheets.id, ids))
+    .returning({ id: timesheets.id });
+  return rows.length;
+}
+
 /**
  * Submit a coach's month for review: flip every draft / changes_requested entry
  * for that coach + period to submitted. Approved entries are left untouched (an

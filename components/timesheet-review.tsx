@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, ClipboardCheck, Loader2, X } from "lucide-react";
 import { Button, Card, Input, Label } from "@/components/ui";
+import { groupSessionWindows, type SessionWindow } from "@/lib/timesheet/group";
 import { TIMESHEET_CLASS_TYPE_LABELS, type TimesheetClassType } from "@/lib/timesheet/types";
 
 interface Row {
@@ -20,37 +21,53 @@ interface Row {
   note: string;
 }
 
-function describe(r: Row): string {
-  if (r.entryType === "shift") return `Shift ${r.startTime ?? ""}–${r.endTime ?? ""}`;
-  return r.classType ? TIMESHEET_CLASS_TYPE_LABELS[r.classType] : "Lesson";
+/** A displayed record's headline: a shift's span or a lesson window's clocked
+ *  start–end (bare "Lesson" for a legacy window-less row). */
+function windowLabel(w: SessionWindow<Row>): string {
+  if (w.entryType === "shift") return `Shift ${w.startTime ?? ""}–${w.endTime ?? ""}`;
+  return w.startTime && w.endTime ? `${w.startTime}–${w.endTime}` : "Lesson";
+}
+
+/** The per-class breakdown inside a lesson window: "Low 1.00 h · Medium 2.00 h". */
+function classBreakdown(w: SessionWindow<Row>): string {
+  return w.rows
+    .filter((r) => r.classType)
+    .map((r) => `${TIMESHEET_CLASS_TYPE_LABELS[r.classType!]} ${r.hours.toFixed(2)} h`)
+    .join(" · ");
 }
 
 export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
   const [rows, setRows] = useState<Row[]>(initialEntries);
+  // Selection is tracked by row id; a whole clocked window is selected/cleared
+  // together (the reviewer acts on the window, not a single class line).
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Group the queue by coach, preserving the query's coach-then-date order.
-  const groups = useMemo(() => {
+  // Group the queue by coach (preserving the query's coach-then-date order), then
+  // collapse each coach's per-line lesson rows back into the clocked windows.
+  const coachGroups = useMemo(() => {
     const map = new Map<number, { name: string; rows: Row[] }>();
     for (const r of rows) {
       const g = map.get(r.coachId) ?? { name: r.coachName ?? `Coach #${r.coachId}`, rows: [] };
       g.rows.push(r);
       map.set(r.coachId, g);
     }
-    return [...map.entries()];
+    return [...map.entries()].map(([coachId, g]) => ({
+      coachId,
+      name: g.name,
+      windows: groupSessionWindows(g.rows),
+      rowIds: g.rows.map((r) => r.id),
+      hours: g.rows.reduce((s, r) => s + r.hours, 0),
+    }));
   }, [rows]);
 
-  function toggle(id: number) {
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const allWindows = useMemo(() => coachGroups.flatMap((g) => g.windows), [coachGroups]);
+  const selectedWindows = useMemo(
+    () => allWindows.filter((w) => w.ids.every((id) => selected.has(id))).length,
+    [allWindows, selected],
+  );
 
   function toggleGroup(ids: number[], on: boolean) {
     setSelected((s) => {
@@ -109,9 +126,9 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
           <ClipboardCheck className="h-5 w-5 text-brand" /> Timesheet review
         </h1>
         <p className="mt-2 text-sm text-gray-600">
-          {rows.length === 0
+          {allWindows.length === 0
             ? "Nothing awaiting review."
-            : `${rows.length} submitted entr${rows.length === 1 ? "y" : "ies"} · ${selected.size} selected`}
+            : `${allWindows.length} submitted record${allWindows.length === 1 ? "" : "s"} · ${selectedWindows} selected`}
         </p>
       </Card>
 
@@ -121,48 +138,52 @@ export function TimesheetReview({ initialEntries }: { initialEntries: Row[] }) {
         </p>
       )}
 
-      {groups.map(([coachId, g]) => {
-        const ids = g.rows.map((r) => r.id);
-        const allOn = ids.every((id) => selected.has(id));
-        const total = g.rows.reduce((s, r) => s + r.hours, 0);
+      {coachGroups.map((g) => {
+        const allOn = g.rowIds.length > 0 && g.rowIds.every((id) => selected.has(id));
         return (
-          <Card key={coachId} className="p-0">
+          <Card key={g.coachId} className="p-0">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <label className="flex items-center gap-2 font-semibold text-gray-900">
                 <input
                   type="checkbox"
                   checked={allOn}
-                  onChange={(e) => toggleGroup(ids, e.target.checked)}
+                  onChange={(e) => toggleGroup(g.rowIds, e.target.checked)}
                   className="h-4 w-4"
                 />
                 {g.name}
               </label>
-              <span className="text-sm text-gray-500 tabular-nums">{total.toFixed(2)} h</span>
+              <span className="text-sm text-gray-500 tabular-nums">{g.hours.toFixed(2)} h</span>
             </div>
             <ul className="divide-y divide-gray-50">
-              {g.rows.map((r) => (
-                <li key={r.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.id)}
-                    onChange={() => toggle(r.id)}
-                    className="h-4 w-4"
-                  />
-                  <span className="w-24 font-medium text-gray-900">{r.date}</span>
-                  <span className="w-12">{r.center}</span>
-                  <span className="flex-1 text-gray-600">
-                    {describe(r)}
-                    {r.note && <span className="ml-2 text-gray-400">· {r.note}</span>}
-                  </span>
-                  <span className="tabular-nums text-gray-700">{r.hours.toFixed(2)} h</span>
-                </li>
-              ))}
+              {g.windows.map((w) => {
+                const note = w.rows[0].note;
+                const breakdown = w.entryType === "lesson" ? classBreakdown(w) : "";
+                const on = w.ids.every((id) => selected.has(id));
+                return (
+                  <li key={w.key} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={(e) => toggleGroup(w.ids, e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <span className="w-24 font-medium text-gray-900">{w.date}</span>
+                    <span className="w-12">{w.center}</span>
+                    <span className="flex-1 text-gray-600">
+                      {windowLabel(w)}
+                      {breakdown && <span className="ml-2 text-gray-500">· {breakdown}</span>}
+                      {note && <span className="ml-2 text-gray-400">· {note}</span>}
+                    </span>
+                    <span className="tabular-nums text-gray-700">{w.hours.toFixed(2)} h</span>
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         );
       })}
 
-      {rows.length > 0 && (
+      {allWindows.length > 0 && (
         <Card className="sticky bottom-2 space-y-3 p-4">
           <div>
             <Label htmlFor="rv-note">Note (required to request changes)</Label>
