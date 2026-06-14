@@ -12,8 +12,10 @@ import {
   SelectAllCheckbox,
   SortTh,
   includesText,
+  triState,
   useRowSelection,
   useTableSort,
+  type TriState,
 } from "@/components/table-controls";
 import {
   ROLE_LABELS,
@@ -52,7 +54,10 @@ type SortKey = "account" | "role";
  *
  * The list ships the standard Search + Sort + Filter controls plus a select-all
  * and a bulk action bar (grant/revoke a category or clear access across the
- * selected rows) — built on the shared `table-controls` kit.
+ * selected rows) — built on the shared `table-controls` kit. Each category
+ * COLUMN header also carries a tri-state one-click toggle that grants/revokes
+ * that one category for ALL visible accounts at once (the "too many accounts"
+ * shortcut, independent of row selection; scoped to the current filter).
  *
  * All mutation state lives HERE (not in the per-user rows): each user renders
  * twice (mobile card + desktop row), so row-local state would fork between the
@@ -168,13 +173,16 @@ export function CategoryOverrides({
     void patchOverride(user, nextList.length ? nextList : null);
   }
 
-  // ── Bulk actions over the current selection ────────────────────────────────
-  async function bulkApply(
+  // ── Bulk actions ───────────────────────────────────────────────────────────
+  /** Optimistically PATCH a category list onto each target, reverting only the
+   *  rows whose write failed. Shared by the selection-driven bar AND the
+   *  per-column header toggles. Returns true when every write succeeded. */
+  async function applyToTargets(
+    targets: OverrideUser[],
     label: string,
     compute: (user: OverrideUser) => ToolCategory[] | null,
-  ) {
-    const targets = sorted.filter((u) => u.role !== "super_admin" && sel.has(u.id));
-    if (targets.length === 0) return;
+  ): Promise<boolean> {
+    if (targets.length === 0) return false;
     const previous = new Map(targets.map((u) => [u.id, overrideById[u.id] ?? null]));
     const nextById = new Map(targets.map((u) => [u.id, compute(u)] as const));
     setOverrideById((m) => ({ ...m, ...Object.fromEntries(nextById) }));
@@ -200,14 +208,21 @@ export function CategoryOverrides({
           ...Object.fromEntries(failedTargets.map((u) => [u.id, previous.get(u.id) ?? null])),
         }));
         toast.error(`${label}: ${failedTargets.length} of ${targets.length} failed.`);
-      } else {
-        toast.success(`${label} · ${targets.length} accounts.`);
-        sel.clear();
+        router.refresh();
+        return false;
       }
+      toast.success(`${label} · ${targets.length} accounts.`);
       router.refresh();
+      return true;
     } finally {
       setBulkBusy(false);
     }
+  }
+
+  // Selection-driven bar: operate on the currently-selected visible rows.
+  async function bulkApply(label: string, compute: (user: OverrideUser) => ToolCategory[] | null) {
+    const targets = sorted.filter((u) => u.role !== "super_admin" && sel.has(u.id));
+    if (await applyToTargets(targets, label, compute)) sel.clear();
   }
 
   const grantCategory = (category: ToolCategory) =>
@@ -220,6 +235,34 @@ export function CategoryOverrides({
       return next.length ? next : null;
     });
   const clearAccess = () => void bulkApply("Cleared access", () => null);
+
+  // ── Per-column one-click: grant/revoke one category for ALL visible accounts ──
+  // (the "too many accounts" shortcut — independent of row selection, scoped to
+  // the current filter via `sorted`). super_admin rows are excluded (always all).
+  const columnTargets = useMemo(
+    () => sorted.filter((u) => u.role !== "super_admin"),
+    [sorted],
+  );
+  const categoryColumnState = (category: ToolCategory): TriState => {
+    const have = columnTargets.reduce(
+      (n, u) => (effectiveFor(u).includes(category) ? n + 1 : n),
+      0,
+    );
+    return triState(have, columnTargets.length);
+  };
+  const toggleCategoryColumn = (category: ToolCategory, grant: boolean) =>
+    void applyToTargets(
+      columnTargets,
+      grant
+        ? `Granted ${TOOL_CATEGORY_LABELS[category]} to all`
+        : `Revoked ${TOOL_CATEGORY_LABELS[category]} from all`,
+      grant
+        ? (u) => TOOL_CATEGORIES.filter((c) => c === category || effectiveFor(u).includes(c))
+        : (u) => {
+            const next = effectiveFor(u).filter((c) => c !== category);
+            return next.length ? next : null;
+          },
+    );
 
   const busy = (id: number) => busyId === id || bulkBusy;
 
@@ -326,6 +369,24 @@ export function CategoryOverrides({
               <span className="text-sm text-gray-600">Select all ({selectableIds.length})</span>
             </div>
           )}
+          {/* Per-category one-click over ALL visible accounts (phones have no
+              column headers — this is the desktop header toggles' equivalent). */}
+          {columnTargets.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-gray-100 bg-gray-50/40 px-4 py-2 text-sm">
+              <span className="text-gray-500">All {columnTargets.length}:</span>
+              {TOOL_CATEGORIES.map((c) => (
+                <label key={`col-${c}`} className="flex items-center gap-1.5">
+                  <SelectAllCheckbox
+                    state={categoryColumnState(c)}
+                    onChange={(on) => toggleCategoryColumn(c, on)}
+                    className={bulkBusy ? "opacity-50" : undefined}
+                    aria-label={`Give ${TOOL_CATEGORY_LABELS[c]} to all ${columnTargets.length} visible accounts`}
+                  />
+                  <span className="text-gray-600">{TOOL_CATEGORY_LABELS[c]}</span>
+                </label>
+              ))}
+            </div>
+          )}
           {sorted.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-gray-400">No accounts match.</p>
           ) : (
@@ -358,7 +419,17 @@ export function CategoryOverrides({
                 <SortTh label="Role" sortKey="role" sort={sort} onSort={toggleSort} />
                 {TOOL_CATEGORIES.map((c) => (
                   <th key={c} className="px-4 py-2 text-center">
-                    {TOOL_CATEGORY_LABELS[c]}
+                    <div className="flex flex-col items-center gap-1">
+                      <span>{TOOL_CATEGORY_LABELS[c]}</span>
+                      {columnTargets.length > 0 && (
+                        <SelectAllCheckbox
+                          state={categoryColumnState(c)}
+                          onChange={(on) => toggleCategoryColumn(c, on)}
+                          className={bulkBusy ? "opacity-50" : undefined}
+                          aria-label={`Give ${TOOL_CATEGORY_LABELS[c]} to all ${columnTargets.length} visible accounts`}
+                        />
+                      )}
+                    </div>
                   </th>
                 ))}
               </tr>
