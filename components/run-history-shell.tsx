@@ -1,13 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Eye, Trash2 } from "lucide-react";
+import { Download, Eye, Search, Trash2 } from "lucide-react";
 import { Card, Spinner } from "@/components/ui";
+import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
+import {
+  FilterBar,
+  FilterSelect,
+  SearchInput,
+  SortTh,
+  TableToolbar,
+  includesText,
+  makeComparator,
+  useSortState,
+} from "@/components/table-controls";
 import { formatDate, rm } from "@/lib/utils";
+
+/** Sort keys: the fixed columns plus one per dynamic stat column (`stat:<i>`). */
+type ShellSortKey = "period" | "saved" | "total" | `stat:${number}`;
 
 /** One saved month, pre-mapped by the caller into the shared shape. */
 export type RunHistoryRow = {
@@ -49,6 +63,46 @@ export function RunHistoryShell({
   const router = useRouter();
   const toast = useToast();
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [q, setQ] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
+  const { sort, toggleSort } = useSortState<ShellSortKey>();
+  const filterActive = q.trim() !== "" || yearFilter !== "";
+  function resetFilters() {
+    setQ("");
+    setYearFilter("");
+  }
+
+  const yearOptions = useMemo(
+    () =>
+      [...new Set(rows.map((r) => r.periodLabel.slice(0, 4)))]
+        .sort()
+        .reverse()
+        .map((y) => ({ value: y, label: y })),
+    [rows],
+  );
+
+  // Build sort accessors: the period/saved/total columns plus one per stat,
+  // keyed by the stat's index so a stat header drives its own column.
+  const accessors = useMemo(() => {
+    const map: Record<string, (r: RunHistoryRow) => string | number> = {
+      period: (r) => r.periodLabel,
+      saved: (r) => r.createdAt.getTime(),
+      total: (r) => r.total,
+    };
+    (rows[0]?.stats ?? []).forEach((_, i) => {
+      map[`stat:${i}`] = (r) => r.stats[i]?.value ?? "";
+    });
+    return map as Record<ShellSortKey, (r: RunHistoryRow) => string | number>;
+  }, [rows]);
+
+  const visible = useMemo(() => {
+    const filtered = rows.filter((r) => {
+      if (!includesText(r.periodLabel, q)) return false;
+      if (yearFilter && r.periodLabel.slice(0, 4) !== yearFilter) return false;
+      return true;
+    });
+    return sort ? [...filtered].sort(makeComparator(accessors, sort)) : filtered;
+  }, [rows, q, yearFilter, sort, accessors]);
 
   async function remove(id: number, label: string) {
     if (!confirm(deletePrompt(label))) return;
@@ -73,8 +127,36 @@ export function RunHistoryShell({
 
   return (
     <Card className="overflow-hidden">
+      <TableToolbar className="flex-col items-stretch lg:flex-row lg:items-center">
+        <SearchInput
+          value={q}
+          onChange={setQ}
+          placeholder="Search month…"
+          className="lg:max-w-xs"
+        />
+        {yearOptions.length > 1 && (
+          <FilterBar active={filterActive} onClear={resetFilters}>
+            <FilterSelect
+              label="Year"
+              value={yearFilter}
+              onChange={setYearFilter}
+              options={yearOptions}
+              allLabel="All years"
+            />
+          </FilterBar>
+        )}
+      </TableToolbar>
+
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No months match the current filters"
+          body="Try clearing a filter or widening the search."
+        />
+      ) : (
+        <>
       <MobileCards>
-        {rows.map((r) => (
+        {visible.map((r) => (
           <div key={r.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -127,19 +209,32 @@ export function RunHistoryShell({
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-overline text-muted">
-              <th className="px-3 py-2">Period</th>
-              <th className="px-3 py-2">Saved</th>
-              {statLabels.map((label) => (
-                <th key={label} className="px-3 py-2 text-right">
-                  {label}
-                </th>
+              <SortTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} className="px-3" />
+              <SortTh label="Saved" sortKey="saved" sort={sort} onSort={toggleSort} className="px-3" />
+              {statLabels.map((label, i) => (
+                <SortTh
+                  key={label}
+                  label={label}
+                  sortKey={`stat:${i}` as ShellSortKey}
+                  sort={sort}
+                  onSort={toggleSort}
+                  align="right"
+                  className="px-3"
+                />
               ))}
-              <th className="px-3 py-2 text-right">{totalLabel}</th>
+              <SortTh
+                label={totalLabel}
+                sortKey="total"
+                sort={sort}
+                onSort={toggleSort}
+                align="right"
+                className="px-3"
+              />
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {rows.map((r) => (
+            {visible.map((r) => (
               <tr key={r.id} className="tabular-nums">
                 <td className="px-3 py-2 font-medium text-gray-900">
                   <Link href={r.href} className="hover:text-brand hover:underline">
@@ -176,6 +271,8 @@ export function RunHistoryShell({
           </tbody>
         </table>
       </DesktopTable>
+        </>
+      )}
     </Card>
   );
 }

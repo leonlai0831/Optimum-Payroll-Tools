@@ -4,13 +4,16 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, ChevronDown, ChevronRight, History, Lock, LockOpen, Search } from "lucide-react";
-import { Button, Card, Input, Select, Spinner } from "@/components/ui";
+import { Button, Card, Input, Spinner } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { ConfirmModal, Modal } from "@/components/modal";
 import { AllowanceExportButton } from "@/components/allowance-export-button";
 import { previousPeriod } from "@/lib/allowance/period";
 import {
+  FilterBar,
+  FilterSelect,
+  SearchInput,
   SortTh,
   TableToolbar,
   includesText,
@@ -199,6 +202,11 @@ export function AllowanceHistoryView({
   // expands every group so search results aren't hidden behind a collapsed month.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const filterActive = q.trim() !== "" || centerFilter !== "" || positionFilter !== "";
+  function resetFilters() {
+    setQ("");
+    setCenterFilter("");
+    setPositionFilter("");
+  }
   function toggleExpand(period: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -209,11 +217,17 @@ export function AllowanceHistoryView({
   }
 
   const centerOptions = useMemo(
-    () => [...new Set(rows.flatMap((r) => splitCenters(r.center)))].sort(),
+    () =>
+      [...new Set(rows.flatMap((r) => splitCenters(r.center)))]
+        .sort()
+        .map((c) => ({ value: c, label: c })),
     [rows],
   );
   const positionOptions = useMemo(
-    () => [...new Set(rows.map((r) => r.tier).filter(Boolean))].sort(),
+    () =>
+      [...new Set(rows.map((r) => r.tier).filter((t): t is NonNullable<typeof t> => t != null))]
+        .sort()
+        .map((p) => ({ value: p as string, label: p })),
     [rows],
   );
 
@@ -252,37 +266,29 @@ export function AllowanceHistoryView({
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
-        <TableToolbar className="border-b-0">
-          <Input
+        <TableToolbar className="flex-col items-stretch border-b-0 lg:flex-row lg:items-center">
+          <SearchInput
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={setQ}
             placeholder="Search staff…"
-            className="w-44 py-1.5 text-xs"
+            className="lg:max-w-xs"
           />
-          <Select
-            value={centerFilter}
-            onChange={(e) => setCenterFilter(e.target.value)}
-            className="w-auto py-1.5 text-xs"
-          >
-            <option value="">All centers</option>
-            {centerOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={positionFilter}
-            onChange={(e) => setPositionFilter(e.target.value)}
-            className="w-auto py-1.5 text-xs"
-          >
-            <option value="">All positions</option>
-            {positionOptions.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </Select>
+          <FilterBar active={filterActive} onClear={resetFilters}>
+            <FilterSelect
+              label="Center"
+              value={centerFilter}
+              onChange={setCenterFilter}
+              options={centerOptions}
+              allLabel="All centers"
+            />
+            <FilterSelect
+              label="Position"
+              value={positionFilter}
+              onChange={setPositionFilter}
+              options={positionOptions}
+              allLabel="All positions"
+            />
+          </FilterBar>
         </TableToolbar>
       </Card>
 
