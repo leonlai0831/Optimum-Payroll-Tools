@@ -17,13 +17,47 @@ roles + a capability matrix (see "Auth"); the original shared password is long g
 > the implementation diverged from that plan, this file reflects **the code**, not the proposal
 > (see "Divergences from the original plan").
 
-> **Pending work / next session:** the active backlog (in-progress branch + the
-> operator decisions behind each item) lives in **`HANDOFF.md`**, with intent in
-> **`ROADMAP.md`**. As of 2026-06-13: A) Clock-in entry redesign ✅ and
-> B) notification badges (launcher cards + section-nav tabs) ✅ are SHIPPED;
-> remaining: C) center-scoped approvals, D) Permissions/User-overrides redesign,
-> E) list-control standardization (Search/Sort/Filter/select-all via a shared
-> kit), plus the Marketing-card visibility (owner config, no code).
+> **Pending work / next session:** the **live backlog** (in-progress branch + the
+> operator decisions behind each item) is in **`HANDOFF.md`**; intent + priorities
+> in **`ROADMAP.md`**. Those move per session — check them for current status
+> rather than enumerating it here (this file records the **stable** system).
+
+## Table of contents
+
+- **Start here:** [Non-negotiable rules](#non-negotiable-rules-read-first) · [Communicating with the operator](#communicating-with-the-operator) · [Development SOP](#development-sop--per-feature-loop-follow-every-session) · [Doc-maintenance policy](#doc-maintenance-policy-do-not-update-all-three-files-every-time)
+- **Product / engine:** [Goal & decisions](#goal--decisions) · [Tech stack](#tech-stack-as-built) · [App structure](#app-structure) · [KPI scoring engine](#kpi-scoring-engine-libkpi) · [Name merge](#name-merge)
+- **Modules:** [Student Progress](#student-progress-progress-libingest) · [Freelancer Payment](#freelancer-payment-libfreelancer-freelancer) · [Lesson Plan](#lesson-plan-liblesson-plan-lesson-plans) · [Clock-in / Timesheet](#clock-in--timesheet-libtimesheet-timesheets)
+- **Platform:** [Design language](#design-language-since-the-2026-06-redesign) · [Data model](#data-model-drizzle--postgres) · [Auth](#auth) · [AI](#ai-libaianthropicts) · [Error tracking & logs](#error-tracking--logs) · [Attention badges](#attention-badges-launcher-cards--section-nav-tabs) · [Environment variables](#environment-variables) · [Commands](#commands)
+- **Rules & history:** [Conventions & gotchas](#conventions--gotchas) · [Settings IA — frozen rules](#settings-ia--frozen-rules-dont-move-things-again) · [Divergences](#divergences-from-the-original-plan) · [Deploy](#deploy) · [gstack](#gstack-recommended) · [Vendored skills](#vendored-skills-claudeskills)
+- **Companion docs:** `HANDOFF.md` (session backlog) · `ROADMAP.md` (intent) · `docs/design-notes.md` (visual/animation narrative) · `docs/DECISIONS.md` (settled decisions + divergences)
+
+## Non-negotiable rules (read first)
+
+The rules most likely to bite if missed; each points to its full section below.
+
+1. **Reply to the operator in Chinese; keep every artifact in English** — code,
+   identifiers, commits, PR text, code comments, and the docs. → *Communicating with the operator*
+2. **Mobile-first, no side-scroll tables.** Every data view ships `MobileCards`
+   (phone) + `DesktopTable` (`lg+`); touch targets ≥ ~44px, no hover-only
+   affordances. → *Conventions & gotchas*
+3. **Payroll logic is pure + Vitest-locked.** Anything computing pay / hours /
+   scores lives in `lib/**` (no DB/HTTP) with a test — a rounding or merge bug is
+   wrong pay. → *KPI engine, Freelancer, Clock-in, Conventions*
+4. **Dates only via `formatDate` / `formatDateTime`** (`lib/utils.ts`), never bare
+   `toLocale*` — server/client locale drift breaks hydration. → *Conventions & gotchas*
+5. **Read-then-write DB sequences must be atomic** — go through the advisory-lock /
+   `onConflict` helpers in `lib/db/queries.ts`, never a separate check + write. → *Conventions & gotchas*
+6. **This is Next 16:** middleware is **`proxy.ts`**, not `middleware.ts`; read
+   `node_modules/next/dist/docs/` before using a Next API (per `AGENTS.md`). → *Conventions & gotchas*
+7. **KPI defaults reproduce v11.1 byte-for-byte** — don't touch the scoring curve;
+   it's locked by `lib/kpi/calc.test.ts`. → *KPI scoring engine*
+8. **Removable list rows reconcile by a stable `_key`, never array index** (index
+   keys shift focus onto a neighbour). → *Conventions & gotchas*
+9. **Per-feature SOP, one clean PR at a time:** `/code-review` + lint + typecheck +
+   test + build → **mandatory gstack browser QA for any UI change** → auto-merge
+   only when CI green **and** QA passed. → *Development SOP*
+10. **Settings IA is frozen** — resolve "where should X go?" with the rules; don't
+    relocate UI. → *Settings IA — frozen rules*
 
 ## Communicating with the operator
 
@@ -465,65 +499,21 @@ Vitest-locked like the freelancer/allowance engines (payroll).
 
 ## Design language (since the 2026-06 redesign)
 
-Notion-calm base × Optimum CI: warm paper canvas `#f6f5f4`, warm-grey ink ramp
-(the Tailwind `gray-*` tokens are remapped — don't re-introduce cool greys),
-hairline borders + the layered `.shadow-card` micro-shadow, Nunito 800 headings
-with negative tracking, **pill** primary/secondary/danger buttons vs 8px
-outline/ghost utility chrome, form fields `text-base` at phone widths (iOS
-anti-zoom). The CI guide's footer wave is traced 1:1 into
-`components/ci-wave.tsx` (launcher hero + login). Brand skins still come from
-`data-brand` CSS variables. Every legacy side-scroll table has been converted to
-`MobileCards`/`DesktopTable` — new data views must ship both layouts.
+Notion-calm base × Optimum CI: warm paper canvas `#f6f5f4`, **remapped warm-grey
+`gray-*` tokens (don't re-introduce cool greys)**, hairline borders + the layered
+`.shadow-card` micro-shadow, Nunito 800 headings with negative tracking, **pill**
+primary/secondary/danger buttons vs 8px outline/ghost utility chrome, form fields
+`text-base` at phone widths (iOS anti-zoom). Brand skins come from `data-brand`
+CSS variables. **Every data view ships BOTH layouts** — `MobileCards` on phones /
+`DesktopTable` on `lg+`, never a side-scroll table (see the mobile-first rule in
+Conventions). A decorative rig (the CI footer wave `components/ci-wave.tsx`, the
+lg+-only racing-stripe band, the login/hero mascot, and the click toys) sits on
+the login + launcher.
 
-**Racing-stripe system (lg+ only; phones never render it)**: the gym deck's
-four-bar motif (yellow/yellow/BLUE/yellow, blue third) runs as SVG dash-snakes
-along paths with deck-style concentric corners. Login
-(`components/login-stripe-band.tsx`): band enters from the left on the hero's
-beat, rests pointing at the sign-in card behind a chevron arrow
-(`components/stripe-arrow.tsx`), and on success EXTENDS — under the card, bend
-up, out the top — while the screen camera-pans (login drops away,
-`ArrivalSlide` descends the launcher). Launcher
-(`components/hub-stripe-band.tsx`): a PERMANENT ribbon behind the content
-(-z-10) draws itself in on every visit after the loading overlay clears. Both
-bands share `stripeLegsMidX` so the cut is continuous, and their runs use the
-**Web Animations API** with keyframe offsets computed from real segment lengths
-(constant speed through bends — CSS keyframes' static percentages stutter);
-reduced-motion is handled explicitly (WAAPI ignores the global CSS kill rule).
-The login→launcher handshake lives in `lib/arrival.ts` (sessionStorage; also
-stands the loading clip down for that navigation).
-
-**Login interactivity (2026-06)**: a poseable mascot rig
-(`components/login-mascot.tsx`, drawn to match `logo-mark.png` — oval yellow
-goggles, smooth cap, yellow arms) peeks over the sign-in card — watches the email
-being typed (pupils track), covers its goggles during password entry (peeks
-when revealed), cheers on success; poses are CSS transitions in globals.css
-(`.mascot-*`), stilled by the global reduced-motion rule. The form ships a
-password reveal toggle, a Caps Lock hint, failure feedback on three channels
-(card shake + `role="alert"` + a short vibration), and a one-tap
-`@optimumtrain.page` completion chip (`suggestLoginEmail` in
-`lib/auth/email-suggest.ts`, unit-tested; applied on mousedown so the blur
-can't eat the tap). While the sign-in request is in flight the stripe band runs
-white glints toward the card (`charging` prop, WAAPI with an explicit
-reduced-motion skip; the page holds the in-flight state ≥ `MIN_CHARGE_MS`
-700ms — warm sign-ins resolve too fast for the glints to register); the footer
-wave leans gently with the mouse (lg+ pointers); five quick taps on the card's
-logo row send the mascot swimming across the wave (one-shot, unmounts on
-animationend). Click toys: tapping the painted wave surges its drift 6× for 2s
-(WAAPI `updatePlaybackRate` + a one-shot crest rear-up — shared
-`components/splash-wave.tsx`), tapping a stripe bar or the arrow fires a
-one-shot glint "current", and tapping the mascot pokes a transient reaction
-(alternating "boop" surprise / cheer). To let those clicks reach the
-decorative layers, the login content wrapper is `pointer-events-none` with its
-two children re-enabled, and the band/wave re-enable hits on their painted
-strokes only (containers stay `pointer-events-none`, so empty areas pass
-through). **The launcher carries the same toys**: the hero hosts `SplashWave`
-plus `components/hero-mascot.tsx` (the rig floating half-submerged in the
-hero wave, rendered before it so the crest paints over its lower half), and
-the hub ribbon answers clicks with the glint current — but at `-z-10` its
-strokes can never win hit-testing, so `hub-stripe-band.tsx` listens on the
-document and tests the click point against the ribbon's known geometry
-(legs/arc/runs ± half-bar; interactive elements and `#hub-hero` excluded;
-held until the draw-in finishes).
+> **Full design narrative** — the racing-stripe system, login interactivity
+> (mascot rig, charging glints, click toys), and the launcher ribbon geometry —
+> moved to **`docs/design-notes.md`** (2026-06-14, to keep this file focused).
+> Edit there when touching that chrome.
 
 ## Data model (Drizzle / Postgres)
 
@@ -812,12 +802,11 @@ rule below rather than relocating UI:
 
 ## Divergences from the original plan
 
-- **Next.js 16** (plan said 15) → the gate is `proxy.ts`, not `middleware.ts`.
-- **In-repo Tailwind components** (`components/ui.tsx`), not **shadcn/ui**.
-- **PGlite** local fallback was added so the app runs with no cloud DB (not in the original plan).
-- The **scoring-curve redesign** (continuous floor, capped growth) was **not** implemented; defaults
-  stay byte-for-byte v11.1. What landed beyond v11.1: the configurable metric registry, a
-  **lower-is-better** mode, and the two opt-in metrics above.
+Moved to **`docs/DECISIONS.md`** (2026-06-14) — the home for settled history +
+frozen decisions, so dated rationale doesn't accrete as noise here. The headline
+divergences (Next 16 → `proxy.ts` not `middleware.ts`; in-repo `components/ui.tsx`
+not shadcn/ui; PGlite local fallback; the v11.1 scoring curve kept byte-for-byte
+rather than the proposed redesign) live there.
 
 ## Deploy
 
