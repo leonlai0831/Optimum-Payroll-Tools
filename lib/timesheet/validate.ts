@@ -135,7 +135,12 @@ export function parseTimesheetSession(
 
   const raw = b.lines;
   if (!Array.isArray(raw) || raw.length === 0) return { error: "add at least one class line" };
-  const lines: { classType: TimesheetClassType; hours: number }[] = [];
+  // One row per class type (operator decision 2026-06-14): to log more of a type
+  // the coach raises that row's HOURS, not adds a second row. The form already
+  // prevents duplicate types; merging same-type lines here (summing their hours)
+  // is the server backstop, so the session always fans out to one row per type.
+  const byType = new Map<TimesheetClassType, number>();
+  const order: TimesheetClassType[] = [];
   let sum = 0;
   for (const [i, item] of raw.entries()) {
     if (typeof item !== "object" || item === null) return { error: `line ${i + 1}: must be an object` };
@@ -143,9 +148,14 @@ export function parseTimesheetSession(
     if (!isClassType(li.classType)) return { error: `line ${i + 1}: needs a valid classType` };
     const hours = typeof li.hours === "number" ? li.hours : Number(li.hours);
     if (!Number.isFinite(hours) || hours <= 0) return { error: `line ${i + 1}: hours must be a positive number` };
-    lines.push({ classType: li.classType, hours });
+    if (!byType.has(li.classType)) order.push(li.classType);
+    byType.set(li.classType, (byType.get(li.classType) ?? 0) + hours);
     sum += hours;
   }
+  const lines: { classType: TimesheetClassType; hours: number }[] = order.map((classType) => ({
+    classType,
+    hours: byType.get(classType)!,
+  }));
   if (Math.abs(sum - span) > SESSION_HOURS_TOLERANCE) {
     return {
       error: `class hours (${sum.toFixed(2)}) must match the ${span.toFixed(2)} h between start and end`,

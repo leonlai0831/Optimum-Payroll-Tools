@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { createTimesheetEntry, listTimesheetsForCoach } from "@/lib/db/queries";
+import {
+  createTimesheetEntry,
+  deleteTimesheetEntries,
+  getTimesheetEntry,
+  listTimesheetsForCoach,
+} from "@/lib/db/queries";
 import { timesheetAccess } from "@/lib/timesheet/access";
 import {
   parsePeriod,
@@ -76,4 +81,34 @@ export async function POST(req: Request) {
 
   const row = await createTimesheetEntry({ coachId: user.coachId, periodLabel: period, ...parsed.value });
   return NextResponse.json({ ok: true, id: row.id });
+}
+
+/**
+ * Delete a whole clocked window at once — the per-line rows of one lesson
+ * session share (date, center, start, end) and are deleted together. Body:
+ * `{ ids: number[] }`. Each id is re-checked against the same rule as the
+ * single delete (own draft, or a reviewer acting on anyone's entry); stale or
+ * out-of-scope ids are silently dropped so a partial id set can't half-delete.
+ */
+export async function DELETE(req: Request) {
+  const gate = await timesheetAccess();
+  if ("error" in gate) return gate.error;
+  const { access } = gate;
+
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is number => Number.isInteger(x)) : [];
+  if (ids.length === 0) {
+    return NextResponse.json({ error: "ids must be a non-empty integer array" }, { status: 400 });
+  }
+
+  const allowed: number[] = [];
+  for (const id of ids) {
+    const entry = await getTimesheetEntry(id);
+    if (!entry) continue;
+    const ownDraft =
+      access.canSubmit && access.user.coachId === entry.coachId && entry.status === "draft";
+    if (ownDraft || access.canReview) allowed.push(entry.id);
+  }
+  const deleted = await deleteTimesheetEntries(allowed);
+  return NextResponse.json({ ok: true, deleted });
 }

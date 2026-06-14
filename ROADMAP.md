@@ -62,14 +62,17 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   center-restricted admin can't review/finalize/reopen/delete a run at all
   (reserved for super_admin + all-centers admins). Pure helpers + queue filters
   Vitest-locked.
-- **F. Clock-in lesson session v2** (operator request 2026-06-14, with screenshots).
-  Refine the multi-line lesson session (#175): ① **one row per class type** — no
-  duplicate rows (Add only offers unused types; raise the row's number to log more);
-  ② label the per-row number as **hours** + note **Young Swimmer = 0.5 h/class,
-  others = 1 h** (the footer already sums it as hours); ③ the saved record, the
-  coach's delete, and the admin's approve all act on the **whole clock-in window
-  together**, not per class line. Number = hours is operator-confirmed. Full spec +
-  the group-by-window-key vs `sessionId`-column decision in `HANDOFF.md`.
+- ✅ **F. Clock-in lesson session v2** (operator request 2026-06-14) — DONE:
+  ① **one row per class type** — the type dropdown only offers unused types, "Add
+  class" disables once all are used, and `parseTimesheetSession` merges duplicate
+  types (raise hours to log more); ② the per-line number is labelled **hours** with
+  a note **Young Swimmer = 0.5 h/class, others = 1 h** (0.5-h steps; ±0.25 h gate
+  kept); ③ the per-line rows collapse back into the clocked window via the pure,
+  Vitest-locked `groupSessionWindows` so the coach's list + reviewer's queue show
+  **one record**, and the coach's delete (bulk `DELETE /api/timesheets`) + the
+  reviewer's approve/request-changes act on the **whole window together**. Chose
+  group-by-window-key (no `sessionId` migration); persistence stays one row per
+  class line so payroll aggregation/reconcile are untouched.
 - **D. Permissions / User-overrides redesign** — the "User overrides" tab lists
   **203 accounts with NO search / sort / filter and NO select-all/clear** (operator
   flagged 2026-06-14), on BOTH the category-overrides card AND the new Center-scope

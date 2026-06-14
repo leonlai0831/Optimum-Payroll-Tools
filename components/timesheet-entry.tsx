@@ -7,6 +7,7 @@ import { MobileCards, DesktopTable } from "@/components/responsive-table";
 import { cn } from "@/lib/utils";
 import { CENTERS } from "@/lib/allowance/types";
 import { SESSION_HOURS_TOLERANCE } from "@/lib/timesheet/validate";
+import { groupSessionWindows, type SessionWindow } from "@/lib/timesheet/group";
 import {
   TIMESHEET_CLASS_TYPE_LABELS,
   TIMESHEET_CLASS_TYPES,
@@ -42,10 +43,19 @@ const STATUS_LABEL: Record<Status, string> = {
   changes_requested: "Changes requested",
 };
 
-function describe(r: Row): string {
-  if (r.entryType === "shift") return `Shift ${r.startTime ?? ""}–${r.endTime ?? ""}`;
-  const label = r.classType ? TIMESHEET_CLASS_TYPE_LABELS[r.classType] : "Lesson";
-  return r.startTime && r.endTime ? `${label} · ${r.startTime}–${r.endTime}` : label;
+/** The headline for a displayed record: a shift's span, a lesson window's
+ *  clocked start–end, or a bare "Lesson" for a legacy window-less row. */
+function windowLabel(w: SessionWindow<Row>): string {
+  if (w.entryType === "shift") return `Shift ${w.startTime ?? ""}–${w.endTime ?? ""}`;
+  return w.startTime && w.endTime ? `${w.startTime}–${w.endTime}` : "Lesson";
+}
+
+/** The per-class breakdown inside a lesson window: "Low 1.00 h · Medium 2.00 h". */
+function classBreakdown(w: SessionWindow<Row>): string {
+  return w.rows
+    .filter((r) => r.classType)
+    .map((r) => `${TIMESHEET_CLASS_TYPE_LABELS[r.classType!]} ${r.hours.toFixed(2)} h`)
+    .join(" · ");
 }
 
 /** A single (class type, hours) line within a lesson session. Carries a stable
@@ -122,16 +132,33 @@ export function TimesheetEntry({
     void refresh(p);
   }
 
+  // Collapse the per-line lesson rows back into the windows the coach actually
+  // clocked, so the list shows — and delete acts on — the whole window. Rows that
+  // differ in status (a half-reviewed window) stay separate so each shows the
+  // right badge/note.
+  const windows = useMemo(() => groupSessionWindows(rows, (r) => r.status), [rows]);
+
   const totals = useMemo(() => {
-    const total = rows.reduce((s, r) => s + r.hours, 0);
-    const drafts = rows.filter((r) => r.status === "draft" || r.status === "changes_requested").length;
+    const total = windows.reduce((s, w) => s + w.hours, 0);
+    const drafts = windows.filter((w) => {
+      const st = w.rows[0].status;
+      return st === "draft" || st === "changes_requested";
+    }).length;
     return { total, drafts };
-  }, [rows]);
+  }, [windows]);
+
+  // One row per class type (operator decision 2026-06-14): the type dropdown only
+  // offers types not already in the session, and "Add class" adds the next unused
+  // one (disabled once all are used). To log more of a type, raise its HOURS.
+  const usedTypes = useMemo(() => new Set(lines.map((l) => l.classType)), [lines]);
+  const allTypesUsed = usedTypes.size >= TIMESHEET_CLASS_TYPES.length;
 
   function addLine() {
+    const next = TIMESHEET_CLASS_TYPES.find((c) => !usedTypes.has(c));
+    if (!next) return;
     lineKeyRef.current += 1;
     const key = lineKeyRef.current;
-    setLines((ls) => [...ls, { _key: key, classType: "low", hours: "1" }]);
+    setLines((ls) => [...ls, { _key: key, classType: next, hours: "1" }]);
   }
   function removeLine(key: number) {
     setLines((ls) => (ls.length > 1 ? ls.filter((l) => l._key !== key) : ls));
@@ -186,11 +213,16 @@ export function TimesheetEntry({
     }
   }
 
-  async function remove(id: number) {
+  // Delete a whole clocked window at once — every per-line row that shares it.
+  async function removeWindow(ids: number[]) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/timesheets/${id}`, { method: "DELETE" });
+      const res = await fetch("/api/timesheets", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
         throw new Error(json.error ?? "Failed to delete");
@@ -298,6 +330,16 @@ export function TimesheetEntry({
         {entryMode === "lesson" && (
           <div className="space-y-2">
             <Label>Classes taught in this window</Label>
+            <p className="text-xs text-gray-500">
+              Enter <strong>hours</strong>, not class count — each class is 1 h, except Young
+              Swimmer at 0.5 h/class (so 2 Young Swimmer classes = 1&nbsp;h). One row per class
+              type; to log more of a type, raise its hours.
+            </p>
+            <div className="flex items-center gap-2 px-0.5 text-xs font-medium text-gray-500">
+              <span className="flex-1">Class</span>
+              <span className="w-24">Hours</span>
+              <span className="w-9" aria-hidden />
+            </div>
             {lines.map((line, i) => (
               <div key={line._key} className="flex items-end gap-2">
                 <div className="flex-1">
@@ -308,7 +350,9 @@ export function TimesheetEntry({
                       updateLine(line._key, { classType: e.target.value as TimesheetClassType })
                     }
                   >
-                    {TIMESHEET_CLASS_TYPES.map((c) => (
+                    {TIMESHEET_CLASS_TYPES.filter(
+                      (c) => c === line.classType || !usedTypes.has(c),
+                    ).map((c) => (
                       <option key={c} value={c}>
                         {TIMESHEET_CLASS_TYPE_LABELS[c]}
                       </option>
@@ -320,7 +364,7 @@ export function TimesheetEntry({
                     aria-label={`Hours, line ${i + 1}`}
                     type="number"
                     min="0"
-                    step="0.25"
+                    step="0.5"
                     value={line.hours}
                     onChange={(e) => updateLine(line._key, { hours: e.target.value })}
                   />
@@ -336,7 +380,7 @@ export function TimesheetEntry({
                 </button>
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={addLine}>
+            <Button variant="outline" size="sm" onClick={addLine} disabled={allTypesUsed}>
               <Plus className="h-4 w-4" /> Add class
             </Button>
             <p
@@ -382,30 +426,36 @@ export function TimesheetEntry({
         ) : (
           <>
             <MobileCards>
-              {rows.map((r) => (
-                <div key={r.id} className="space-y-1 p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-900">{r.date}</span>
-                    <Badge className={STATUS_STYLE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+              {windows.map((w) => {
+                const st = w.rows[0].status;
+                const reviewNote = w.rows[0].reviewNote;
+                const breakdown = w.entryType === "lesson" ? classBreakdown(w) : "";
+                return (
+                  <div key={w.key} className="space-y-1 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-900">{w.date}</span>
+                      <Badge className={STATUS_STYLE[st]}>{STATUS_LABEL[st]}</Badge>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {w.center} · {windowLabel(w)} · {w.hours.toFixed(2)} h
+                    </div>
+                    {breakdown && <div className="text-xs text-gray-500">{breakdown}</div>}
+                    {st === "changes_requested" && reviewNote && (
+                      <p className="text-xs text-red-600">Reviewer: {reviewNote}</p>
+                    )}
+                    {st === "draft" && (
+                      <button
+                        type="button"
+                        onClick={() => removeWindow(w.ids)}
+                        disabled={busy}
+                        className="mt-1 inline-flex items-center gap-1 text-sm text-red-600 hover:underline disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete
+                      </button>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-600">
-                    {r.center} · {describe(r)} · {r.hours.toFixed(2)} h
-                  </div>
-                  {r.status === "changes_requested" && r.reviewNote && (
-                    <p className="text-xs text-red-600">Reviewer: {r.reviewNote}</p>
-                  )}
-                  {r.status === "draft" && (
-                    <button
-                      type="button"
-                      onClick={() => remove(r.id)}
-                      disabled={busy}
-                      className="mt-1 inline-flex items-center gap-1 text-sm text-red-600 hover:underline disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </MobileCards>
 
             <DesktopTable>
@@ -421,32 +471,42 @@ export function TimesheetEntry({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id} className="border-b border-gray-50">
-                      <td className="px-4 py-2 font-medium text-gray-900">{r.date}</td>
-                      <td className="px-4 py-2">{r.center}</td>
-                      <td className="px-4 py-2">{describe(r)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{r.hours.toFixed(2)}</td>
-                      <td className="px-4 py-2">
-                        <Badge className={STATUS_STYLE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
-                        {r.status === "changes_requested" && r.reviewNote && (
-                          <span className="ml-2 text-xs text-red-600">{r.reviewNote}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {r.status === "draft" && (
-                          <button
-                            type="button"
-                            onClick={() => remove(r.id)}
-                            disabled={busy}
-                            className="inline-flex items-center gap-1 text-red-600 hover:underline disabled:opacity-50"
-                          >
-                            <Trash2 className="h-4 w-4" /> Delete
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {windows.map((w) => {
+                    const st = w.rows[0].status;
+                    const reviewNote = w.rows[0].reviewNote;
+                    const breakdown = w.entryType === "lesson" ? classBreakdown(w) : "";
+                    return (
+                      <tr key={w.key} className="border-b border-gray-50">
+                        <td className="px-4 py-2 font-medium text-gray-900">{w.date}</td>
+                        <td className="px-4 py-2">{w.center}</td>
+                        <td className="px-4 py-2">
+                          {windowLabel(w)}
+                          {breakdown && (
+                            <span className="block text-xs text-gray-500">{breakdown}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">{w.hours.toFixed(2)}</td>
+                        <td className="px-4 py-2">
+                          <Badge className={STATUS_STYLE[st]}>{STATUS_LABEL[st]}</Badge>
+                          {st === "changes_requested" && reviewNote && (
+                            <span className="ml-2 text-xs text-red-600">{reviewNote}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          {st === "draft" && (
+                            <button
+                              type="button"
+                              onClick={() => removeWindow(w.ids)}
+                              disabled={busy}
+                              className="inline-flex items-center gap-1 text-red-600 hover:underline disabled:opacity-50"
+                            >
+                              <Trash2 className="h-4 w-4" /> Delete
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </DesktopTable>

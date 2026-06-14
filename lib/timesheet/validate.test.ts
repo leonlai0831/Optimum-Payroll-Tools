@@ -137,6 +137,26 @@ describe("parseTimesheetSession — lesson (start/end + multiple class lines)", 
     expect("value" in r).toBe(true);
   });
 
+  it("merges duplicate class types into one row, summing their hours", () => {
+    const r = parseTimesheetSession({
+      date: "2026-06-08",
+      center: "PK",
+      startTime: "09:00",
+      endTime: "12:00", // 3h span
+      lines: [
+        { classType: "low", hours: 1 },
+        { classType: "medium", hours: 1 },
+        { classType: "low", hours: 1 }, // duplicate of the first — merges into it
+      ],
+    });
+    if (!("value" in r)) throw new Error("expected a valid session");
+    // First-seen order preserved; the two `low` lines collapse to one (2h).
+    expect(r.value.lines).toEqual([
+      { classType: "low", hours: 2 },
+      { classType: "medium", hours: 1 },
+    ]);
+  });
+
   it("rejects when the class hours don't match the span", () => {
     const r = parseTimesheetSession({
       date: "2026-06-08",

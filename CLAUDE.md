@@ -406,17 +406,42 @@ Vitest-locked like the freelancer/allowance engines (payroll).
   (which read `entryType` + `classType` + `hours`, never the times) are unchanged.
   `POST /api/timesheets` routes a body with a `lines` array through
   `parseTimesheetSession`; a shift (or legacy single entry) still goes through
-  `parseTimesheetEntry`. v1 covers **full-time instructors + all freelancers
-  (incl. freelance front desk)**; **full-time front desk is deferred** (still
-  manual). Hours for a `shift` are derived server-side from start/end. All parsing
-  is pure + Vitest-locked (`lib/timesheet/validate.ts`).
+  `parseTimesheetEntry`. **One row per class type (operator decision 2026-06-14):**
+  the per-line number IS hours (not class count) — each class = 1 h, **Young
+  Swimmer = 0.5 h/class** (so 2 Young Swimmer classes = 1 h; 0.5-h input steps);
+  the form's type dropdown only offers types not already in the session and "Add
+  class" is disabled once all are used, so to log more of a type the coach **raises
+  its hours**, not adds a second row, and `parseTimesheetSession` **merges any
+  duplicate class types** (summing hours) as the server backstop. v1 covers
+  **full-time instructors + all freelancers (incl. freelance front desk)**;
+  **full-time front desk is deferred** (still manual). Hours for a `shift` are
+  derived server-side from start/end. All parsing is pure + Vitest-locked
+  (`lib/timesheet/validate.ts`).
+- **The clocked window is ONE record (display + delete + review).** The per-line
+  rows are collapsed back into the window the coach filed via the pure,
+  Vitest-locked `groupSessionWindows` (`lib/timesheet/group.ts`) — grouping lesson
+  rows by `(date, center, start, end)` (a shift, or a legacy window-less lesson,
+  stays its own single-row record; the entry list also keys on `status` so a
+  half-reviewed window splits). A coach can't be in two identical windows at one
+  center at once, so the key is lossless — **no `sessionId` column / migration**
+  (operator-chosen tradeoff; the watch-item is two genuinely-distinct same-window
+  sessions, which the model doesn't allow). Both the coach's list
+  (`timesheet-entry.tsx`) and the reviewer's queue (`timesheet-review.tsx`) show
+  the window as one record with its per-class breakdown; the coach's **delete**
+  (whole window via `DELETE /api/timesheets` with `{ ids }` → `deleteTimesheetEntries`,
+  re-checking each id's own-draft/reviewer permission) and the reviewer's
+  **approve / request-changes** act on **every row of the window together** (the
+  review checkbox selects all the window's ids; `reviewTimesheets` still flips by
+  id, unchanged). Persistence stays one row per class line, so payroll
+  aggregation/reconcile are untouched.
 - **Schema** (`timesheets` + `freelancer_schedules`): review workflow mirrors
   lesson plans (`draft → submitted → approved / changes_requested`); editing an
   entry resets it to draft; rows never hard-deleted. `slotType` is derived (admin
   can override). Migrations **0033** (tables), **0035** (`note` column),
   **0036** (drop schedule `class_type`).
 - **Routes** (`app/api/timesheets/*`, capability-gated, audited): `/` (GET own |
-  `?coachId=` for reviewers, POST own), `/[id]` (PATCH/DELETE), `/submit` (flip
+  `?coachId=` for reviewers, POST own, **DELETE `{ ids }` = a whole clocked
+  window**), `/[id]` (PATCH/DELETE one), `/submit` (flip
   own month draft→submitted), `/review` (GET queue + POST batch
   approve/request-changes — guarded to `submitted` only), `/aggregate`
   (`mode=allowance|freelancer`, gated `run_allowance`/`run_freelancer`).
