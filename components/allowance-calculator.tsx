@@ -30,6 +30,15 @@ interface RosterCoach {
 
 const num = (v: string) => (v === "" ? 0 : Number(v) || 0);
 
+// Teaching/other rows carry a client-only stable key so React reconciles editable
+// rows by identity, not by array index — removing a middle row must not shift a
+// focused input (or its value) onto its neighbour. Stripped before the input is
+// computed/persisted (see the `input` builder). Unique-within-list is enough.
+type KeyedTeachingRow = TeachingHoursRow & { _key: string };
+type KeyedOtherItem = OtherAllowanceItem & { _key: string };
+let alRowKeySeq = 0;
+const nextAlKey = () => `al-${alRowKeySeq++}`;
+
 export interface AllowanceEditTarget {
   runId: number;
   periodLabel: string;
@@ -56,12 +65,12 @@ export function AllowanceCalculator({
   const [tier, setTier] = useState<AllowanceTier>(initial?.input.tier ?? "T1");
   const [opHours, setOpHours] = useState(initial?.input.opHours ?? 0);
   const [leaveHours, setLeaveHours] = useState(initial?.input.leaveHours ?? 0);
-  const [teachingRows, setTeachingRows] = useState<TeachingHoursRow[]>(
-    initial?.input.teachingRows ?? [],
+  const [teachingRows, setTeachingRows] = useState<KeyedTeachingRow[]>(() =>
+    (initial?.input.teachingRows ?? []).map((r) => ({ ...r, _key: nextAlKey() })),
   );
   const [loadMsg, setLoadMsg] = useState<string | null>(null);
-  const [otherItems, setOtherItems] = useState<OtherAllowanceItem[]>(
-    initial?.input.otherItems ?? [],
+  const [otherItems, setOtherItems] = useState<KeyedOtherItem[]>(() =>
+    (initial?.input.otherItems ?? []).map((r) => ({ ...r, _key: nextAlKey() })),
   );
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -83,8 +92,19 @@ export function AllowanceCalculator({
     center,
     opHours,
     leaveHours,
-    teachingRows,
-    otherItems,
+    // Strip the client-only _key so calc + persistence see plain rows (TS enforces
+    // the exact TeachingHoursRow/OtherAllowanceItem shape here).
+    teachingRows: teachingRows.map(
+      (r): TeachingHoursRow => ({
+        center: r.center,
+        normalH: r.normalH,
+        ysH: r.ysH,
+        precompH: r.precompH,
+      }),
+    ),
+    otherItems: otherItems.map(
+      (r): OtherAllowanceItem => ({ center: r.center, reason: r.reason, amount: r.amount }),
+    ),
   };
   const result = calcAllowance(input, config);
   const warnings = validateAllowanceInput(input);
@@ -115,7 +135,7 @@ export function AllowanceCalculator({
   }
 
   function addTeachingRow() {
-    setTeachingRows((r) => [...r, { center: "", normalH: 0, ysH: 0, precompH: 0 }]);
+    setTeachingRows((r) => [...r, { center: "", normalH: 0, ysH: 0, precompH: 0, _key: nextAlKey() }]);
     dirty();
   }
   function updateTeachingRow(i: number, patch: Partial<TeachingHoursRow>) {
@@ -128,7 +148,7 @@ export function AllowanceCalculator({
   }
 
   function addOtherItem() {
-    setOtherItems((r) => [...r, { center: "", reason: "", amount: 0 }]);
+    setOtherItems((r) => [...r, { center: "", reason: "", amount: 0, _key: nextAlKey() }]);
     dirty();
   }
   function updateOtherItem(i: number, patch: Partial<OtherAllowanceItem>) {
@@ -372,7 +392,7 @@ export function AllowanceCalculator({
                 <span className="col-span-2 text-right">Subtotal</span>
               </div>
               {teachingRows.map((row, i) => (
-                <div key={i} className="grid grid-cols-12 items-center gap-2">
+                <div key={row._key} className="grid grid-cols-12 items-center gap-2">
                   <CenterSelect
                     className="col-span-4 py-1 text-xs"
                     centers={config.centers}
@@ -430,7 +450,10 @@ export function AllowanceCalculator({
                   );
                   const json = await res.json();
                   if (!res.ok) throw new Error(json.error ?? "Failed to load");
-                  const next = json.teachingRows as TeachingHoursRow[];
+                  const next = (json.teachingRows as TeachingHoursRow[]).map((r) => ({
+                    ...r,
+                    _key: nextAlKey(),
+                  }));
                   setTeachingRows(next);
                   dirty();
                   setLoadMsg(
@@ -460,7 +483,7 @@ export function AllowanceCalculator({
           {otherItems.length > 0 && (
             <div className="space-y-2">
               {otherItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-12 items-center gap-2">
+                <div key={item._key} className="grid grid-cols-12 items-center gap-2">
                   <CenterSelect
                     className="col-span-4 py-1 text-xs"
                     centers={config.centers}
