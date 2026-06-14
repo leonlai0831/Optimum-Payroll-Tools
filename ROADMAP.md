@@ -113,10 +113,13 @@ E rollout and stay tracked there; **[P0]** items also serve the June go-live.
 1. **Lesson-plan center-scope IDOR fix** (security, confirmed). `GET /api/lesson-plans/[id]`
    + the PDF route gate only on `canViewPlan`; add `canManageCenter(user.managedCenters,
    plan.center)` for non-creator reviewers (mirror the `/review` guard). +test.
-2. **allowance-calculator stable-`_key` fix** (correctness). Editable teaching/other
-   rows reconcile by **array index** (`allowance-calculator.tsx` ~L117-141), violating
-   the project rule — removing a middle row shifts focus/values to a neighbour.
-   Switch to a stable `_key` like freelancer already does.
+2. ✅ **allowance-calculator stable-`_key` fix** (correctness) — DONE. Editable
+   teaching/other rows now carry a client-only stable `_key` (`KeyedTeachingRow` /
+   `KeyedOtherItem` + `nextAlKey()`, stripped in the `input` builder), keyed
+   `key={row._key}` instead of by array index — mirrors the freelancer pattern, so
+   removing a middle row no longer shifts focus/values to a neighbour. gstack-QA'd
+   (phone 390px): focus a row's input, remove a row above it → focus + values stay
+   put; subtotals/grand total recompute correctly.
 3. **Payroll-correctness guards** (split into ≤2 PRs): ① KPI finalize **incomplete-coach
    gate** + **unlinked-allowance list** on `RunReview` (data already in `missing[]` /
    `reconcileAllowances.orphanRecs`); ② **payee-completeness gate** before the freelancer
