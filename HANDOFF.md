@@ -1,9 +1,54 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-14**). `main` is green:
-**vitest 517/517**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
-architecture + the frozen Settings IA rules; read `AGENTS.md` before touching
-Next.js APIs.
+**vitest 523/523**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
+architecture + the frozen Settings IA rules (it now opens with a TOC + a
+"Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
+
+## This session (2026-06-14, continuation 4) — F shipped, gstack-QA made mandatory, CLAUDE.md restructured (#182–#184)
+
+Three PRs, each its own branch off `main`, all squash-merged after `/code-review`
++ green CI (and, for the UI one, a real gstack browser QA):
+
+1. **#182 — Backlog F: clock-in lesson session v2.** Refined the multi-line lesson
+   session from #175. ① **One row per class type** — the form's type dropdown only
+   offers unused types, "Add class" disables once all 7 are used, and
+   `parseTimesheetSession` merges duplicate class types (summing hours) as the
+   server backstop. ② Per-line number labelled **hours** + a note (each class = 1 h,
+   Young Swimmer = 0.5 h/class); 0.5-h steps; ±0.25 h sum-vs-span gate kept. ③ The
+   clocked window is **ONE record**: new pure, Vitest-locked `groupSessionWindows`
+   (`lib/timesheet/group.ts`) collapses the per-line rows back into the window for
+   the coach's list AND the reviewer's queue; the coach's delete (new bulk
+   `DELETE /api/timesheets` `{ ids }` → `deleteTimesheetEntries`) and the reviewer's
+   approve/request-changes act on the **whole window together**. No `sessionId`
+   column — grouped by (date,center,start,end[,status]); persistence stays one row
+   per class line, so payroll aggregation/reconcile are untouched. CLAUDE.md
+   Clock-in chapter + ROADMAP updated in-PR. **vitest 517→523** (+6: dedup-merge +
+   window grouping).
+2. **#183 — gstack browser QA is now MANDATORY (operator instruction).** The SOP's
+   "browser QA when it warrants" was the loophole that let F nearly merge unQA'd.
+   SOP step 1 now requires a gstack QA for EVERY PR touching a user-facing surface
+   before merge; only no-render changes (lib/db/types/docs) may skip it. Step 2
+   (auto-merge) lists the passed QA alongside green CI as a gate.
+3. **#184 — CLAUDE.md restructure (operator request).** Added a TOC + a
+   "Non-negotiable rules (read first)" 10-rule quick-ref at the top; moved the long
+   Design-language narrative to **`docs/design-notes.md`** (summary + pointer kept)
+   and Divergences to a new **`docs/DECISIONS.md`** (settled-history archive);
+   trimmed the stale intro backlog enumeration to a HANDOFF/ROADMAP pointer.
+
+**F WAS browser-QA'd this session** (gstack, phone width 390px): created a test
+coach + linked admin to it via API (`PATCH /api/users/[id] {coachId}` — the
+`EmployeeCombobox` selects on **mousedown**, so a headless `.click()` doesn't
+register; link via the API, it's not part of F), then drove the form end-to-end —
+dropdown dedup, Add-class disabling at 7, 0.5 step, sum-vs-span gate, list/review
+window grouping (1 record, 1 checkbox), approve flips the whole window, and
+whole-window delete removed only the draft window's rows. **Zero bugs.**
+
+**Follow-ups (carry):** the Center-scope UI (#180) and A/B from earlier sessions
+are still NOT browser-QA'd — do those next (the gstack recipe below is verified
+working). DB cold-start: re-check `/system/errors` is clean, then the operator
+points `POSTGRES_URL` at the Neon **pooled** endpoint. Next build items:
+**E (list-control PR-kit)** before **D** and **G** (both build on the E kit).
 
 ## This session (2026-06-14) — backlog C shipped (#180) + clock-in v2 queued
 
@@ -150,29 +195,14 @@ Also this session (NOT a feature PR):
  review/finalize/reopen/delete entirely. `users.managedCenters` + migration 0039;
  pure helpers + queue filters Vitest-locked.
 
-**F. Clock-in lesson session v2 (operator request 2026-06-14, with screenshots). ← NEXT, START HERE.**
- Refine the multi-line lesson session from #175 — touches `components/timesheet-entry.tsx`,
- `lib/timesheet/validate.ts` (`parseTimesheetSession`/`sessionToEntries`), the history
- list, and `components/timesheet-review.tsx`. Three asks:
- 1. **One row per class type — no duplicates.** "Add class" should only offer types not
-    already in the session (or merge a dup); to log 2 hours of one type the coach raises
-    that row's number to 2, not a second identical row.
- 2. **Label the per-row number as HOURS + note Young Swimmer = 0.5 h/class, others = 1 h.**
-    The number already IS hours (the footer sums them: 1+1+1 = 3.00 h). Make it explicit
-    with a "(hours)" label + helper note so coaches enter correctly (e.g. 2 Young Swimmer
-    classes = 1 h). Probably allow 0.5-h steps; keep the ±0.25 h sum-vs-span gate
-    (`SESSION_HOURS_TOLERANCE`). **Number = hours is operator-confirmed** (point 2 + the
-    footer math) — don't flip it without a paid example.
- 3. **Whole-window record + delete + approve.** Today a session persists as N lesson rows
-    sharing (coachId, date, center, start, end); the history list (`/timesheets`) + review
-    queue (`/timesheets/review`) show each line separately. The operator wants the **whole
-    window as ONE displayed record**, and **coach delete + admin approve/request-changes to
-    act on the entire window atomically** (delete all rows of the window; review all rows of
-    the window together — `reviewTimesheets` currently flips by id). **Implementation choice:**
-    group by the shared (coachId,date,center,start,end) key (no migration — verify two
-    distinct sessions can't share that exact key) vs. add a `sessionId` column to
-    `timesheets`. Keep the per-row classType+hours persistence (aggregation/reconcile read
-    it). Engine/validator changes go through the pure Vitest-locked path (payroll).
+**F. Clock-in lesson session v2 — ✅ DONE (#182).** Shipped + browser-QA'd this
+ session (see the continuation-4 block at the top). One row per class type (form
+ dedup + server merge in `parseTimesheetSession`), the per-line number labelled
+ hours (Young Swimmer 0.5 h/class, 0.5 steps), and the clocked window is ONE
+ record across the coach's list + reviewer's queue + delete + approve via the pure,
+ Vitest-locked `groupSessionWindows` (`lib/timesheet/group.ts`) + bulk
+ `DELETE /api/timesheets`. Chose group-by-window-key (no `sessionId` migration);
+ persistence stays one row per class line so payroll is untouched.
 
 **D. Permissions / User-overrides redesign (`/system/permissions`).** Six asks:
  1. show **Full Name** (not just nickname/email);
@@ -258,8 +288,18 @@ Also this session (NOT a feature PR):
   `touch …/chromium_headless_shell-1208/{INSTALLATION_COMPLETE,DEPENDENCIES_VALIDATED}`,
   then run the binary with **`CI=1`** (bumps the 8s→30s startup wait; `--no-sandbox`
   auto-added for root). Drive: start `npm run dev`, log in `admin@local` / `swim123`,
-  `$B goto … / snapshot -i / fill / click / upload <sel> <file> / screenshot`. Note a
-  fresh daemon resets `@e` refs — `snapshot` in one step, `fill/click` in the next.
+  `$B goto … / snapshot -i / fill / click / upload <sel> <file> / screenshot`.
+  **Verified working 2026-06-14** (drove all of F's QA). Gotchas learned: `@e` refs
+  only live **within one Bash call** — each new `$B` invocation after a re-render
+  drops them, so do `snapshot -i` + the `fill`/`click` that use its refs in the
+  **same** bash command; for a repeated action (click a button N times, with a
+  re-render between each) drive it as `$B js "[...].find(b=>/Add class/.test(b.textContent)).click()"`
+  (re-queries the live DOM). A custom widget that selects on **mousedown** (e.g.
+  `EmployeeCombobox`) ignores a JS `.click()` — dispatch real mouse events, or for
+  QA *setup* just hit the API (e.g. link a login↔coach with
+  `PATCH /api/users/[id] {coachId}`, seed via `fetch` in `$B js`). The two
+  responsive layouts both render in the DOM (CSS hides one), so DOM counts double —
+  assert per-layout.
 - Merging via the GitHub MCP API **bypasses branch protection** here (admin);
   still confirm CI green first. **Force-push is blocked** → fresh branch + new PR per
   change; after a squash-merge, cut the next branch from fresh `origin/main` (fetch).
