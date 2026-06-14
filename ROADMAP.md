@@ -200,6 +200,12 @@ E rollout and stay tracked there; **[P0]** items also serve the June go-live.
 
 ## Decided — do not reopen without the owner
 
+- **No one-click "Compute KPI draft" button** (2026-06-14) — a staged delivery
+  reaches KPI only via **"Load into calculator"** (manual merge → compute → save).
+  The operator wants hands-on control of the payroll-critical name merge +
+  management inputs, so the server-side auto-compute button was removed. The
+  `POST /api/kpi/ingests/[id]/compute` route + `buildRunCoaches` engine/test are
+  **kept dormant** (no UI entry point) so the path can be re-enabled later.
 - **Remember-last-email on login: NO** (2026-06-12) — shared front-desk
   devices must not leak who signed in. The 10-minute idle auto-logout
   (PR #148) is the direction login security moves in.
