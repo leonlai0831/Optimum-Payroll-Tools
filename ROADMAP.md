@@ -98,6 +98,74 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   idempotent/replay-safe). Verified in dev: pre-existing accounts snapshotted to
   all-three, a freshly-created account sees nothing.
 
+## P2 — System review backlog + execution order (2026-06-14)
+
+A four-dimension system review (product / code-quality / UI-UX / security) ran
+2026-06-14; the operator asked to fold **every** finding into the plan and let
+the agent set the order. The ordered execution plan below is the source of
+truth for "what's next"; the grouped findings under it are the detail. Do
+**one clean PR at a time** per the SOP (correctness + security first, then
+high-value product, then cleanup). Items marked **[E]** belong to the existing
+E rollout and stay tracked there; **[P0]** items also serve the June go-live.
+
+**Execution order (one PR each, top first):**
+
+1. **Lesson-plan center-scope IDOR fix** (security, confirmed). `GET /api/lesson-plans/[id]`
+   + the PDF route gate only on `canViewPlan`; add `canManageCenter(user.managedCenters,
+   plan.center)` for non-creator reviewers (mirror the `/review` guard). +test.
+2. **allowance-calculator stable-`_key` fix** (correctness). Editable teaching/other
+   rows reconcile by **array index** (`allowance-calculator.tsx` ~L117-141), violating
+   the project rule — removing a middle row shifts focus/values to a neighbour.
+   Switch to a stable `_key` like freelancer already does.
+3. **Payroll-correctness guards** (split into ≤2 PRs): ① KPI finalize **incomplete-coach
+   gate** + **unlinked-allowance list** on `RunReview` (data already in `missing[]` /
+   `reconcileAllowances.orphanRecs`); ② **payee-completeness gate** before the freelancer
+   bank-file export (block/confirm with the names missing IC/bank/account). **[P0]**
+4. **Payee PII scoping** (security). `swim_view_staff` returns every staff member's IC +
+   bank account via `/api/coaches`; drop those from the default projection, serve only to
+   a payee capability (`run_freelancer`/`swim_edit_staff`).
+5. **Monthly-close cycle dashboard** (product, biggest gap). A "This month" status strip
+   on the launcher computed from existing `runs`/`allowanceRuns`/`freelancerRuns` +
+   pending ingests — Not started / Draft / Finalized per module in dependency order. Pure
+   rollup, no new tables.
+6. **Allowance bank XLSX export** (product gap). Allowance has only client CSV; freelancer
+   + commission have bank XLSX. Add a bank-transfer XLSX (reuse `lib/freelancer/banks.ts`
+   + payee fields).
+7. **[E] continue list-control batches ②③④** — `/progress` · `/system/audit` ·
+   `/system/errors` · `/timesheets/schedules` → `/lesson-plans/history` (also gets the
+   UI-review's search+sort) → KPI run detail · `/staff/payees`. The UI-review's
+   `kpi-ingest-editor` one-off search folds in here. (batch ① shipped #191.)
+8. **Code cleanup quick wins** (S each, Vitest-lockable): `useConfirmAction` +
+   `<ConfirmActionButton>` (5 + 2 inline clones); `xlsxResponse(buf, filename)` (6 export
+   routes); **`lib/money.ts` `round2` + `canonicalCenter()`** — consolidation forces a
+   decision on the **real latent inconsistency** (timesheet upper-case vs freelancer
+   lower-case center keys; commission's `+EPSILON` round); `requireCapabilityWithUser` +
+   `recordAuditAs` (~40 routes re-read the session just for the audit actor).
+9. **UI quick wins** (S): shared `IconButton` (ui.tsx) with required `aria-label` + migrate
+   icon-only buttons (a11y); `RunReview` Save/Finalize spinner; `loading.tsx` skeletons for
+   `freelancer/` + `timesheets/`; `SortTh` resting-opacity (drop hover-only hint).
+10. **Larger refactors** (M-L, opportunistic): grouped `RunHistoryShell` (fold
+    allowance + freelancer accordions in); generic `<MultiSeriesTrends>` (4 near-dupe
+    trends views, ~600→~150 lines); calculator shared hooks (`useSaveRun` /
+    `useCoachPicker` / `useLoadFromClockIn`); base `SearchableDropdown` (employee/staff
+    comboboxes bypass `ui.tsx`); `OverridesTable<T>` (category vs center, ~570 lines each);
+    `singletonConfigRoute<T>()` + `defineSingletonConfig()` (5 config routes + 5 query
+    triplets). **[P0]** freelancer Excel-vs-system **parallel-run diff tool** sits here.
+11. **Product glue** (M): carry-over **staleness badges** (mgmt assessment / allowance age
+    from the stored `*At`); **instructor-360 setup-health** (logins unlinked / freelancers
+    with no schedule / missing payees); **badge deep-links** (badged card → pre-filtered
+    review queue); **P+1 "data arrived" signal** on the cycle dashboard + Student Progress.
+12. **Security hardening (low)**: login dummy-hash for constant-time on missing user;
+    back login/ingest rate-limits with a shared store (or Vercel WAF); `Number.isInteger`
+    400 + center/ownership scope on the bare-id DELETE routes (notes/assessments/gym-staff/
+    coaches).
+
+**Needs an owner decision (not auto-scheduled):**
+- **Outbound notifications** (email/push/WhatsApp) — today staff must log in to learn of
+  an approval/rejection; there is no notification layer at all. Big, product-shaped.
+- **Bulk-overwrite password reset** — `users.bulk` overwrite resets passwords with no
+  force-change-on-next-login flag; confirm the intended blast radius.
+
 ## Backlog (unordered — pick with the owner)
 
 - **Staff self-service**: a coach/freelancer signs in and sees their OWN
