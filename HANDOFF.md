@@ -5,6 +5,62 @@ Snapshot for the next session (last updated **2026-06-14**). `main` is green:
 architecture + the frozen Settings IA rules (it now opens with a TOC + a
 "Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
 
+## This session (2026-06-14, continuation 9) — PR4 calculator allowance guards (draft)
+
+One feature this session, built on the designated branch `claude/hopeful-sagan-hzz2od`
+(remote-execution session ⇒ one branch, draft PR — NOT auto-merged; recommend merge
+after a glance). Picked **PR4 — calculator allowance guards** (the next clear,
+no-decision-needed operator request from continuation 8's START-HERE list).
+
+**What shipped (`components/dashboard.tsx` only, +~120/-30):** two payroll-safety
+guards on the KPI calculator —
+1. **Guard A — "no allowance saved" prompt.** When a loaded month's allowance fetch
+   resolves with **zero** records (`allowanceChecked && period && allowanceRecs.length
+   === 0`), an amber banner tells the operator the values below are last month's
+   carry-over and links to the Allowance Calculator. New `allowanceChecked` state
+   (set false at the start of `applyAllowanceForPeriod`, true at both exits) gates it
+   so it never flashes during the in-flight fetch.
+2. **Guard B — manual-diverges-from-saved warning.** A top banner (count) + an inline
+   **"⚠ saved RM x"** hint under each diverging row, when a coach's **manual** allowance
+   differs from the period's saved Allowance run. Both read ONE helper
+   `divergedAllowance(savedAllowanceByGroup, g)` (module-level, pure) so the count and
+   the per-row marks can't disagree; `savedAllowanceByGroup` re-links via the shared
+   `linkAllowance` (mirrors the auto-overlay).
+
+**`/code-review` (high) findings, addressed before QA:** float-equality false positives
+→ `ALLOWANCE_EPSILON` (0.005) tolerance; manual-cleared/`null` → guarded in the helper
+(also moot — `appearsInLeaderboard` needs allowance > 0); concurrent period-fetch race →
+monotonic `allowanceReq` ref ignores a superseded response; divergence banner left a
+stale **blank-period** banner → gated on `period`; count(over `ranked`) vs inline(over
+`visible`) copy softened ("rows that differ are marked below"). Accepted (not fixed):
+one allowance record can map to two same-name groups — consistent with the existing
+auto-overlay, an advisory **over-report** (never hides). Cleanup folded in: extracted a
+shared **`AmberAlert`** component (the 2 new banners + the existing readiness banner now
+share it) and the `divergedAllowance` helper.
+
+**JSX gotcha found + fixed:** this build's transform **drops the space in
+`</strong> text`** (so `<strong>{x}</strong> coach(es)` rendered "1coach(es)" — a
+**pre-existing** bug visible on the readiness banner too). Fixed all three touched
+banners with an explicit `{" "}`.
+
+**gstack browser-QA'd at 390px (phone):** seeded a coach + a 2026-05 allowance run
+(teaching=1200) via a throwaway `tsx` script against `./.pglite` (deleted after),
+uploaded `KPI_2026-05.csv` → **auto-linked** badge → edited to 1500 → divergence banner
++ two "⚠ saved RM 1,200" hints (mobile card + desktop table) → reverted to 1200 →
+warning cleared (value-based, not edit-based) → switched period to **2026-04** (no run)
+→ Guard A banner, divergence banner gone. Screenshots captured; console clean (only
+benign vercel-insights/devtools). **typecheck + lint + test 550/550 + build all green.**
+
+**Still queued (next session START-HERE):**
+- **#199 — per-column one-click on Per-account access** (draft, branch
+  `claude/per-column-bulk-category`): browser-QA then merge (seed a few `role:"staff"`
+  accounts first — the per-column checkbox only renders with non-super-admin rows).
+- **PR3 — Center-scope swim-gating** (`components/center-overrides.tsx`): needs the
+  operator's **design decision** (disabled "no swim access" note vs hide vs group) —
+  ask before building. Thread each user's effective `swim` visibility into `CenterOverrides`.
+- Then the **P2 list** (`ROADMAP.md`): #3② payee-completeness gate before the freelancer
+  bank export **[P0]**, #4 payee-PII scoping, #5 monthly-close dashboard, E batches ②③④.
+
 ## This session (2026-06-14, continuation 8) — P2 #2/#3① + KPI/permissions operator requests (#196–#199)
 
 Three PRs merged, one open (QA-pending), all one-PR-per-branch off `main`:
