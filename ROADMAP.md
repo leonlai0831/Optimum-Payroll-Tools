@@ -62,6 +62,14 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   center-restricted admin can't review/finalize/reopen/delete a run at all
   (reserved for super_admin + all-centers admins). Pure helpers + queue filters
   Vitest-locked.
+- **F. Clock-in lesson session v2** (operator request 2026-06-14, with screenshots).
+  Refine the multi-line lesson session (#175): ① **one row per class type** — no
+  duplicate rows (Add only offers unused types; raise the row's number to log more);
+  ② label the per-row number as **hours** + note **Young Swimmer = 0.5 h/class,
+  others = 1 h** (the footer already sums it as hours); ③ the saved record, the
+  coach's delete, and the admin's approve all act on the **whole clock-in window
+  together**, not per class line. Number = hours is operator-confirmed. Full spec +
+  the group-by-window-key vs `sessionId`-column decision in `HANDOFF.md`.
 - **D. Permissions / User-overrides redesign** — full name, search + per-column
   sort/filter, bulk check/uncheck filtered rows, move category control off the
   Roles tab, rename "User overrides", drop the Visibility column.

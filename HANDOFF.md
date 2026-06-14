@@ -1,9 +1,37 @@
 # Session Handoff — Optimum People Hub
 
-Snapshot for the next session (last updated **2026-06-13**, end of a long
-continuation session). `main` is green: **vitest 508/508**, typecheck + lint
-clean, `next build` OK. Read `CLAUDE.md` for architecture + the frozen Settings
-IA rules; read `AGENTS.md` before touching Next.js APIs.
+Snapshot for the next session (last updated **2026-06-14**). `main` is green:
+**vitest 517/517**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
+architecture + the frozen Settings IA rules; read `AGENTS.md` before touching
+Next.js APIs.
+
+## This session (2026-06-14) — backlog C shipped (#180) + clock-in v2 queued
+
+1. **#180 — Backlog C: center-scoped approvals.** `users.managedCenters` (jsonb,
+   NULL/empty = all, super_admin = all; **migration 0039**). Assigned per-user on
+   the **`/system/permissions` "User overrides" tab** (new "Center scope" card,
+   `components/center-overrides.tsx`) — super_admin-only to write (like categories),
+   validated + **canonicalized against the configured centers**, and **selecting
+   every center collapses to NULL** (= unrestricted). Resolved onto
+   `CurrentUser.managedCenters` via `effectiveManagedCenters`. Enforcement: timesheet
+   + lesson-plan review **queues, badge counts, and batch-approve** all filter by the
+   reviewer's centers (the SSR `/timesheets/review` + `/lesson-plans/history` pages,
+   the APIs, AND the counts — scoped consistently; the SSR pages were the
+   `/code-review` catch); lesson-plan single-review guards on `canManageCenter`. **KPI
+   is the exception** — a month is one company-wide run, so a center-restricted admin
+   can't review/finalize/reopen/delete it at all (`companyKpiDenied`). Pure helpers +
+   queue filters Vitest-locked; `/code-review` (high) run + addressed before merge.
+   Operator decision confirmed this session: assignment UI on `/system/permissions`
+   (super_admin-only authority boundary), per-user only (no per-role center defaults).
+   **NOT browser-QA'd** (the new Center-scope UI).
+2. **New operator request (2026-06-14): clock-in lesson session v2** — captured as
+   backlog **F** below (the next START-HERE). NOT built this session (queued per the
+   operator's "新增一个开发计划").
+
+**Follow-ups (carry):** browser-QA the Center-scope UI (#180) + A/B from last
+session; the DB cold-start follow-up (verify `/system/errors` is clean now, then the
+operator points `POSTGRES_URL` at the Neon **pooled** endpoint). Next build items:
+**F (clock-in v2, START-HERE)**, then the E PR-kit before D (D builds on it).
 
 ## This session (2026-06-13→14, continuation 3) — SOP + backlog A & B + DB fix (#174–#178)
 
@@ -115,23 +143,36 @@ Also this session (NOT a feature PR):
  `launcherBadgeCount`) + shared `components/count-badge.tsx`; lights up launcher
  cards AND section-nav tabs. **C will add a center filter inside `attentionBadges`.**
 
-**C. Center-scoped approvals (admin approves only their branch). ← NEXT, START HERE.**
- super_admin = all (confirmed by operator). Large + architecturally significant
- (permission model + a migration + payroll-finalize path), so it was deliberately
- left for a fresh session. **Open decision to confirm with the operator first:** does
- the per-admin center assignment UI live on `/system/users` or on
- `/system/permissions` (it overlaps D)? Full code map:
- - Store `users.managedCenters` (jsonb `string[]`, mirror `visibleCategories`;
-   NULL/empty → role default; super_admin → all). Add per-role defaults to
-   `PermissionConfig` + an `effectiveAdminCenters()` resolver in `lib/auth/types.ts`;
-   expose on `CurrentUser` in `lib/auth/session.ts`.
- - Assign on `/system/users` (or the Permissions page) — multi-select of
-   `AllowanceConfig.centers`.
- - Enforce by **filtering review queues by the request's center**: timesheet review
-   (`timesheets.center`, `app/api/timesheets/review` + `listTimesheetsForReview`),
-   lesson-plan review (`lessonPlans.center`, `app/api/lesson-plans`), and **validate
-   on KPI finalize** (`coaches.center`, `app/api/runs/[id]`). Center fields already
-   exist on every entity.
+**C. Center-scoped approvals — ✅ DONE (#180).** Shipped this session (see the
+ 2026-06-14 block above). Operator chose `/system/permissions` for the assignment UI;
+ per-user only (no per-role center defaults); "select all centers" collapses to
+ unrestricted; KPI runs are company-wide so center-restricted admins are blocked from
+ review/finalize/reopen/delete entirely. `users.managedCenters` + migration 0039;
+ pure helpers + queue filters Vitest-locked.
+
+**F. Clock-in lesson session v2 (operator request 2026-06-14, with screenshots). ← NEXT, START HERE.**
+ Refine the multi-line lesson session from #175 — touches `components/timesheet-entry.tsx`,
+ `lib/timesheet/validate.ts` (`parseTimesheetSession`/`sessionToEntries`), the history
+ list, and `components/timesheet-review.tsx`. Three asks:
+ 1. **One row per class type — no duplicates.** "Add class" should only offer types not
+    already in the session (or merge a dup); to log 2 hours of one type the coach raises
+    that row's number to 2, not a second identical row.
+ 2. **Label the per-row number as HOURS + note Young Swimmer = 0.5 h/class, others = 1 h.**
+    The number already IS hours (the footer sums them: 1+1+1 = 3.00 h). Make it explicit
+    with a "(hours)" label + helper note so coaches enter correctly (e.g. 2 Young Swimmer
+    classes = 1 h). Probably allow 0.5-h steps; keep the ±0.25 h sum-vs-span gate
+    (`SESSION_HOURS_TOLERANCE`). **Number = hours is operator-confirmed** (point 2 + the
+    footer math) — don't flip it without a paid example.
+ 3. **Whole-window record + delete + approve.** Today a session persists as N lesson rows
+    sharing (coachId, date, center, start, end); the history list (`/timesheets`) + review
+    queue (`/timesheets/review`) show each line separately. The operator wants the **whole
+    window as ONE displayed record**, and **coach delete + admin approve/request-changes to
+    act on the entire window atomically** (delete all rows of the window; review all rows of
+    the window together — `reviewTimesheets` currently flips by id). **Implementation choice:**
+    group by the shared (coachId,date,center,start,end) key (no migration — verify two
+    distinct sessions can't share that exact key) vs. add a `sessionId` column to
+    `timesheets`. Keep the per-row classType+hours persistence (aggregation/reconcile read
+    it). Engine/validator changes go through the pure Vitest-locked path (payroll).
 
 **D. Permissions / User-overrides redesign (`/system/permissions`).** Six asks:
  1. show **Full Name** (not just nickname/email);
