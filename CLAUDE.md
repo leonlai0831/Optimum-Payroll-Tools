@@ -39,18 +39,28 @@ this loop **per feature** and **do not stop until every queued task is done** �
 until the conversation's token budget runs low (step 4). Keep the existing **one
 clean PR at a time** rule; each pass through the loop is one PR.
 
-1. **Build → review → test.** Implement ONE feature on its branch, then review and
-   test it before doing anything else: run the `/code-review` skill on the diff and
-   address its findings, plus `npm run lint`, `npm run typecheck`, `npm test`, and a
-   `npm run build` / browser QA when the change warrants. A red check means it is
-   NOT done — fix it, don't move on. **Doc edits ride in THIS PR** per the
-   doc-maintenance policy below: if the feature changed a system fact/rule, update
-   `CLAUDE.md` here; if it cleared a roadmap item or changed direction, update
-   `ROADMAP.md` here. (Do NOT touch `HANDOFF.md` per-feature — that's session-end.)
-2. **Auto-merge when clean.** Once review + tests pass **and CI is green on the
-   PR**, merge it — this is standing authorization, no need to ask per-PR. Never
-   merge a red or still-pending PR: confirm CI green first (merging here bypasses
-   branch protection, so the green check is the real gate).
+1. **Build → review → test → QA.** Implement ONE feature on its branch, then review
+   and test it before doing anything else: run the `/code-review` skill on the diff
+   and address its findings, plus `npm run lint`, `npm run typecheck`, `npm test`,
+   and `npm run build`. A red check means it is NOT done — fix it, don't move on.
+   **gstack browser QA is MANDATORY (operator instruction 2026-06-14), not
+   "when it warrants" — every PR that touches a user-facing surface** (any
+   page / component / style / client interaction) **must be driven in a real
+   browser via gstack BEFORE the PR is merged** — log in, exercise the new flow on
+   a phone-width viewport, and confirm it behaves. The ONLY changes that may skip it
+   are ones with literally no rendered surface (pure `lib/**` logic, DB queries,
+   types, docs); when you skip, say so and why. A red/failed QA blocks the merge
+   exactly like a red test. (See "Environment notes" in `HANDOFF.md` for the gstack
+   Playwright-bridge recipe in Claude Code on the web.) **Doc edits ride in THIS
+   PR** per the doc-maintenance policy below: if the feature changed a system
+   fact/rule, update `CLAUDE.md` here; if it cleared a roadmap item or changed
+   direction, update `ROADMAP.md` here. (Do NOT touch `HANDOFF.md` per-feature —
+   that's session-end.)
+2. **Auto-merge when clean.** Once review + tests pass, **the mandatory gstack QA
+   has passed** (step 1), **and CI is green on the PR**, merge it — this is standing
+   authorization, no need to ask per-PR. Never merge a red or still-pending PR, or
+   one whose UI hasn't been browser-QA'd: confirm CI green + QA done first (merging
+   here bypasses branch protection, so those checks are the real gate).
 3. **Check the token budget, then continue or hand off.** If there is comfortably
    enough conversation budget left for another full build→review→merge cycle, cut a
    fresh branch from the updated `main` and loop back to step 1 with the next
