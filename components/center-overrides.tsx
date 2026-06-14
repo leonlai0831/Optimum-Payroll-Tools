@@ -27,6 +27,9 @@ export interface CenterScopeUser {
   role: Role;
   /** Stored per-user override; null/empty = manages ALL centers. */
   managedCenters: string[] | null;
+  /** Effective launcher access to the swim brand. The centers are all swim
+   *  centers, so center scope is a no-op for an account without it. */
+  hasSwimAccess: boolean;
   active: boolean;
 }
 
@@ -107,7 +110,8 @@ export function CenterOverrides({
       if (roleFilter && u.role !== roleFilter) return false;
       if (activeFilter && (activeFilter === "active") !== u.active) return false;
       if (scopeFilter) {
-        if (u.role === "super_admin") return false; // locked rows have no scope
+        // Locked (super_admin) and no-swim accounts have no meaningful scope.
+        if (u.role === "super_admin" || !u.hasSwimAccess) return false;
         const all = managesAllFor(u);
         if (scopeFilter === "all" && !all) return false;
         if (scopeFilter === "restricted" && all) return false;
@@ -124,7 +128,7 @@ export function CenterOverrides({
   });
 
   const selectableIds = useMemo(
-    () => sorted.filter((u) => u.role !== "super_admin").map((u) => u.id),
+    () => sorted.filter((u) => u.role !== "super_admin" && u.hasSwimAccess).map((u) => u.id),
     [sorted],
   );
   // Selection persists across filtering, but the bulk bar + actions only apply
@@ -172,7 +176,9 @@ export function CenterOverrides({
 
   // ── Bulk actions over the current selection ────────────────────────────────
   async function bulkApply(label: string, compute: (user: CenterScopeUser) => string[] | null) {
-    const targets = sorted.filter((u) => u.role !== "super_admin" && sel.has(u.id));
+    const targets = sorted.filter(
+      (u) => u.role !== "super_admin" && u.hasSwimAccess && sel.has(u.id),
+    );
     if (targets.length === 0) return;
     const previous = new Map(targets.map((u) => [u.id, overrideById[u.id] ?? null]));
     const nextById = new Map(targets.map((u) => [u.id, compute(u)] as const));
@@ -423,6 +429,7 @@ export function CenterOverrides({
 }
 
 const LOCKED_NOTE = "Always manages every center.";
+const NO_SWIM_NOTE = "No swim access — center scope doesn't apply.";
 
 /** Purely presentational — state and mutations live in the parent. */
 function CenterRow({
@@ -449,6 +456,9 @@ function CenterRow({
   onReset: () => void;
 }) {
   const locked = user.role === "super_admin";
+  // Centers are swim-only, so an account without swim access can't reach the
+  // review/finalize surfaces this scopes — show the row but disable the control.
+  const noSwim = !locked && !user.hasSwimAccess;
   const editing = override !== null;
   const selectedCenters = override ?? [];
   const managesAll = !editing || selectedCenters.length === 0;
@@ -515,7 +525,7 @@ function CenterRow({
       </p>
     ) : null;
 
-  const selectBox = !locked && (
+  const selectBox = !locked && !noSwim && (
     <input
       type="checkbox"
       className="h-4 w-4 accent-indigo-600"
@@ -537,6 +547,8 @@ function CenterRow({
         </div>
         {locked ? (
           <p className="text-xs text-gray-400">{LOCKED_NOTE}</p>
+        ) : noSwim ? (
+          <p className="text-xs text-gray-400">{NO_SWIM_NOTE}</p>
         ) : (
           <>
             <div>{stateBadge}</div>
@@ -563,6 +575,10 @@ function CenterRow({
       {locked ? (
         <td colSpan={2} className="px-4 py-2 text-center text-xs text-gray-400">
           {LOCKED_NOTE}
+        </td>
+      ) : noSwim ? (
+        <td colSpan={2} className="px-4 py-2 text-center text-xs text-gray-400">
+          {NO_SWIM_NOTE}
         </td>
       ) : (
         <>
