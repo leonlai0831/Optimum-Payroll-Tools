@@ -160,11 +160,24 @@ E rollout and stay tracked there; **[P0]** items also serve the June go-live.
     400 + center/ownership scope on the bare-id DELETE routes (notes/assessments/gym-staff/
     coaches).
 
-**Needs an owner decision (not auto-scheduled):**
-- **Outbound notifications** (email/push/WhatsApp) — today staff must log in to learn of
-  an approval/rejection; there is no notification layer at all. Big, product-shaped.
-- **Bulk-overwrite password reset** — `users.bulk` overwrite resets passwords with no
-  force-change-on-next-login flag; confirm the intended blast radius.
+**Owner decisions made 2026-06-14 — now scheduled:**
+- **Bulk-overwrite password safety** — DECIDED: **decouple + force-change**.
+  `users.bulk` overwrite must **not** reset the password of an existing **active**
+  account (only update role/full name); password-setting stays the explicit
+  one-off reset. AND add a **`mustChangePassword`** flag (migration) so any
+  admin-set password (bulk seed or one-off reset) is **one-time** — the login
+  flow forces a change on next sign-in. Contained + high-value security; slot
+  early (right after the payroll-correctness/PII items, before the larger
+  refactors). Login flow change → needs browser QA.
+- **Outbound notification layer** — DECIDED channels: **(1) in-app inbox first**
+  (a `notifications` table + bell/unread-count + feed; zero external deps — the
+  foundation), **then (2) Web Push (PWA)** so an approval/rejection reaches the
+  phone with the app closed (needs PWA setup: manifest + service worker + VAPID
+  keys + per-user push-subscription storage + `web-push` sender; **iOS needs
+  16.4+ and the app added to the home screen**). Email/WhatsApp NOT chosen now.
+  Trigger events are the existing lesson-plan / timesheet `approved` /
+  `changes_requested` status flips. A multi-PR initiative (inbox → Web Push);
+  schedule as its own track after the bulk-password fix.
 
 ## Backlog (unordered — pick with the owner)
 
