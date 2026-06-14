@@ -1,9 +1,61 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-14**). `main` is green:
-**vitest 546/546**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
+**vitest 550/550**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
 architecture + the frozen Settings IA rules (it now opens with a TOC + a
 "Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
+
+## This session (2026-06-14, continuation 8) — P2 #2/#3① + KPI/permissions operator requests (#196–#199)
+
+Three PRs merged, one open (QA-pending), all one-PR-per-branch off `main`:
+
+1. **#196 — allowance-calculator stable-`_key` fix (P2 #2).** Teaching/other
+   editable rows now reconcile by a client-only stable `_key` (mirrors freelancer;
+   stripped in the `input` builder), not array index. gstack-QA'd (390px): focus a
+   row, remove a row above it → focus + values stay put.
+2. **#197 — unlinked-allowance panel on `RunReview` (P2 #3①).** The incomplete-coach
+   finalize gate already existed (client + server); added a **read-only "unlinked
+   allowance" panel** — the month's teaching-tier allowance records that linked to
+   no coach in the run, via the new pure, Vitest-locked `orphanLinkableAllowances`
+   (`lib/kpi/allowance-link.ts`; the dashboard's orphan panel now reuses it). Review
+   agent flagged the reconcile uses the saved/filtered `coachResults` (a subset) →
+   **over-reports only, never hides a real orphan** (documented at the call site).
+   gstack-QA'd (seeded draft + orphan).
+3. **#198 — remove the "Compute KPI draft" button (operator request 2026-06-14).**
+   A staged delivery now reaches KPI **only via "Load into calculator"** (manual).
+   **Only the button/handler removed; the route `POST /api/kpi/ingests/[id]/compute`
+   + `buildRunCoaches` engine/test are KEPT dormant** (operator chose button-only).
+   CLAUDE.md Student Progress chapter + ROADMAP "Decided" updated. gstack-QA'd.
+4. **#199 — per-column one-click on Per-account access (operator request) — OPEN,
+   ⚠️ NOT browser-QA'd.** Each category COLUMN header gets a tri-state one-click
+   toggle (desktop) + an "All visible" row (mobile) that grants/revokes that
+   category for ALL visible accounts at once (extracted `applyToTargets`; reused by
+   the selection bar). typecheck/lint/test 550/build green. **NEXT SESSION: browser-QA
+   then merge** (dev DB only has the super_admin — seed a few `role:"staff"` accounts
+   with varied `visibleCategories` first; the per-column checkbox only renders when
+   there are non-super-admin rows).
+
+**Still-queued operator requests (this session's START-HERE for the next):**
+- **PR3 — Center-scope swim-gating** (`components/center-overrides.tsx`): the
+  centers are all SWIM centers, so for an admin with **no swim category access**
+  (only Fit/marketing) the Center-scope card is meaningless. Operator wants it
+  **"represented differently"** — exact form NOT confirmed (my recommendation: keep
+  the row but show a disabled "No swim access — center scope doesn't apply" note;
+  alternatives = hide them / group them). Thread each user's effective `swim`
+  visibility into `CenterOverrides` (the page already resolves categories).
+- **PR4 — calculator allowance guards** (`components/dashboard.tsx`): when a loaded
+  month has **no** allowance records → prompt the operator to enter them manually;
+  when an **auto-linked** allowance is **manually edited** → show a warning. (The
+  dashboard already fetches `/api/allowance/runs?period=` + shows "auto-linked".)
+
+**Then resume the P2 list** (`ROADMAP.md`): #3② payee-completeness gate before the
+freelancer bank export, #4 payee-PII scoping, #5 monthly-close dashboard, etc.
+
+**Process note (this session):** several tool calls were emitted malformed (the
+literal `call`/`<invoke>` text leaked into chat instead of executing) and had to be
+retried — every one eventually succeeded, but it churned the session; the operator
+asked to hand off to a fresh conversation. No work was lost (verify via `git log`
+on each branch).
 
 ## This session (2026-06-14, continuation 7) — E batch ① + system review → ROADMAP P2 + IDOR fix (#191–#193)
 
