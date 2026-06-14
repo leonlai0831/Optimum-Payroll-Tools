@@ -49,3 +49,39 @@ describe("observability (Sentry)", () => {
     expect(captureException).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * The in-app error log must capture the `cause` chain — the Postgres SQLSTATE /
+ * driver code lives on `err.cause` (drizzle wraps the driver error), so without
+ * this the stored stack is an undiagnosable `Failed query: …` wrapper.
+ */
+describe("serializeError — captures the cause chain + SQLSTATE", () => {
+  it("appends a pg driver cause with its code", async () => {
+    const { serializeError } = await import("./observability");
+    const wrapper = new Error('Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"');
+    (wrapper as { cause?: unknown }).cause = { code: "53300", message: "too many connections" };
+    const { message, stack } = serializeError(wrapper);
+    expect(message).toBe('Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"');
+    expect(stack).toContain("Caused by: [code: 53300] too many connections");
+  });
+
+  it("walks a multi-level cause chain", async () => {
+    const { serializeError } = await import("./observability");
+    const inner = { code: "ECONNRESET", message: "socket hang up" };
+    const mid = new Error("connect failed");
+    (mid as { cause?: unknown }).cause = inner;
+    const outer = new Error("init failed");
+    (outer as { cause?: unknown }).cause = mid;
+    const { stack } = serializeError(outer);
+    expect(stack).toContain("Caused by: connect failed");
+    expect(stack).toContain("Caused by: [code: ECONNRESET] socket hang up");
+  });
+
+  it("returns just the wrapper stack when there's no cause", async () => {
+    const { serializeError } = await import("./observability");
+    const { message, stack } = serializeError(new Error("plain"));
+    expect(message).toBe("plain");
+    expect(stack).toContain("plain"); // err.stack includes the message
+    expect(stack).not.toContain("Caused by");
+  });
+});
