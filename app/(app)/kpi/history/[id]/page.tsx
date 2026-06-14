@@ -104,6 +104,16 @@ export default async function RunDetailPage({
       tier: r.tier,
       teaching: r.teaching,
     }));
+    // We reconcile against the SAVED coachResults — the post-leaderboard-filter
+    // coaches, each carrying only its scored (included) accounts. That's a subset
+    // of what `buildRunCoaches` linked against (all group accounts, pre-filter),
+    // so this can only ever OVER-report: a record that linked solely via an
+    // excluded-account alias, or to a ghost group later dropped for zero teaching,
+    // may show here as unlinked. Both are false positives in the SAFE direction —
+    // the panel never hides a genuinely-unlinked allowance, which is the property
+    // that matters for a "double-check before finalizing" aid. (The dominant link
+    // methods — coachId / exact / normalized name — don't use accounts at all, so
+    // in practice the result matches the run for every realistic case.)
     const coachInfos: CoachLinkInfo[] = run.coachResults.map((c) => ({
       coachId: c.coachId,
       canonicalName: c.canonicalName,
