@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
+import { canManageCenter } from "@/lib/auth/types";
 import { getLessonPlan, recordAudit, reviewLessonPlan } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,13 @@ export async function POST(req: Request, ctx: RouteContext<"/api/lesson-plans/[i
   const { id } = await ctx.params;
   const plan = await getLessonPlan(Number(id));
   if (!plan) return NextResponse.json({ error: "not found" }, { status: 404 });
+  // Center-scoped reviewers may only review plans at the center(s) they manage.
+  if (!canManageCenter(user.managedCenters, plan.center)) {
+    return NextResponse.json(
+      { error: "This lesson plan is outside the centers you manage." },
+      { status: 403 },
+    );
+  }
   if (plan.status !== "submitted") {
     return NextResponse.json({ error: "Only a submitted plan can be reviewed" }, { status: 409 });
   }

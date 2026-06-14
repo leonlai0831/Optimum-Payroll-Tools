@@ -20,7 +20,11 @@ export async function GET(req: Request) {
   const status = (STATUSES as readonly string[]).includes(statusParam ?? "")
     ? (statusParam as (typeof STATUSES)[number])
     : undefined;
-  return NextResponse.json({ entries: await listTimesheetsForReview({ periodLabel: period, status }) });
+  // Center-scoped reviewers only see their centers' entries (null = all).
+  const centers = gate.access.user.managedCenters ?? undefined;
+  return NextResponse.json({
+    entries: await listTimesheetsForReview({ periodLabel: period, status, centers }),
+  });
 }
 
 /** Batch approve / request-changes for the given entry ids. `review_timesheet`
@@ -48,7 +52,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "a note is required when requesting changes" }, { status: 400 });
   }
 
-  const count = await reviewTimesheets(ids, body.action, note, user.id);
+  // Defense-in-depth: a center-scoped reviewer can only flip their centers'
+  // entries, so a crafted out-of-scope id is skipped (like a stale one).
+  const count = await reviewTimesheets(ids, body.action, note, user.id, user.managedCenters ?? undefined);
   await recordAudit({
     actorId: user.id,
     actorEmail: user.email,

@@ -116,6 +116,11 @@ export const users = pgTable("users", {
   // permission matrix; a non-null array pins this account to exactly that list.
   // super_admin ignores this and always sees everything.
   visibleCategories: jsonb("visible_categories").$type<ToolCategory[] | null>(),
+  // Per-user CENTER scope for approvals (System Setting → Permissions → User
+  // overrides). NULL/empty = manages ALL centers (unrestricted, the default); a
+  // non-empty list restricts review / approve / finalize to those centers.
+  // super_admin ignores this and always manages every center.
+  managedCenters: jsonb("managed_centers").$type<string[] | null>(),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

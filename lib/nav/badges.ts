@@ -22,9 +22,12 @@ export async function attentionBadges(
   caps: Set<Capability>,
 ): Promise<Record<string, number>> {
   const isSuperAdmin = user.role === "super_admin";
+  // Center-scoped reviewers only count their centers' pending items (null = all),
+  // so the badge matches the queue they'll actually see.
+  const centers = user.managedCenters ?? undefined;
   const [timesheets, lessonPlans, errors] = await Promise.all([
-    caps.has("review_timesheet") ? safeCount(countTimesheetsForReview) : 0,
-    caps.has("review_lesson_plans") ? safeCount(countLessonPlansForReview) : 0,
+    caps.has("review_timesheet") ? safeCount(() => countTimesheetsForReview(undefined, centers)) : 0,
+    caps.has("review_lesson_plans") ? safeCount(() => countLessonPlansForReview(centers)) : 0,
     isSuperAdmin ? safeCount(countAppErrors) : 0,
   ]);
   const out: Record<string, number> = {};

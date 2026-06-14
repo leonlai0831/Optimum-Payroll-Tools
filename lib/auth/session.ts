@@ -2,7 +2,12 @@ import { cache } from "react";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 import { isSessionIdleExpired } from "./idle";
-import { effectiveCategories, type Role, type ToolCategory } from "./types";
+import {
+  effectiveCategories,
+  effectiveManagedCenters,
+  type Role,
+  type ToolCategory,
+} from "./types";
 
 export interface SessionData {
   userId?: number;
@@ -81,6 +86,12 @@ export interface CurrentUser {
    * layouts via `canSeeCategory`) read this list as-is.
    */
   visibleCategories: ToolCategory[];
+  /**
+   * EFFECTIVE center scope for approvals (review queues + KPI finalize):
+   * null = unrestricted (all centers / super_admin); a non-empty list restricts
+   * to those centers. Resolved by `getCurrentUser()` via `effectiveManagedCenters`.
+   */
+  managedCenters: string[] | null;
   active: boolean;
 }
 
@@ -120,6 +131,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     coachId: user.coachId,
     gymStaffId: user.gymStaffId,
     visibleCategories,
+    managedCenters: effectiveManagedCenters(user.role, user.managedCenters),
     active: user.active,
   };
 });

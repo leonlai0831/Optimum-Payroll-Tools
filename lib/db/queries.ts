@@ -2686,6 +2686,8 @@ export async function updateUser(
     gymStaffId?: number | null;
     /** Array = pin an override; null = reset to inherit the role default. */
     visibleCategories?: ToolCategory[] | null;
+    /** Center scope override; null/empty = manages all centers (see schema). */
+    managedCenters?: string[] | null;
     password?: string;
   },
 ): Promise<void> {
@@ -2706,6 +2708,7 @@ export async function updateUser(
   if (patch.coachId !== undefined) set.coachId = patch.coachId;
   if (patch.gymStaffId !== undefined) set.gymStaffId = patch.gymStaffId;
   if (patch.visibleCategories !== undefined) set.visibleCategories = patch.visibleCategories;
+  if (patch.managedCenters !== undefined) set.managedCenters = patch.managedCenters;
   if (patch.password) set.passwordHash = hashPassword(patch.password);
   await db.update(users).set(set).where(eq(users.id, id));
 }
@@ -3094,7 +3097,7 @@ export interface LessonPlanListRow {
  * lesson-plan picker for the assessed coach).
  */
 export async function listLessonPlans(
-  opts: { forUserId?: number; coachId?: number } = {},
+  opts: { forUserId?: number; coachId?: number; centers?: string[] } = {},
 ): Promise<LessonPlanListRow[]> {
   const db = await getDb();
   const projection = {
@@ -3117,6 +3120,7 @@ export async function listLessonPlans(
   const conditions = [
     ...(opts.forUserId != null ? [eq(lessonPlans.createdByUserId, opts.forUserId)] : []),
     ...(opts.coachId != null ? [eq(lessonPlans.coachId, opts.coachId)] : []),
+    ...(opts.centers && opts.centers.length > 0 ? [inArray(lessonPlans.center, opts.centers)] : []),
   ];
   const base = db.select(projection).from(lessonPlans);
   const query = conditions.length > 0 ? base.where(and(...conditions)) : base;
@@ -3133,13 +3137,15 @@ export async function submitLessonPlan(id: number): Promise<void> {
 }
 
 /** How many lesson plans are awaiting review (`submitted`) — drives the Lesson
- *  Plan launcher/section badge. */
-export async function countLessonPlansForReview(): Promise<number> {
+ *  Plan launcher/section badge. Optionally scoped to a center-scoped reviewer's
+ *  managed centers (omit = all centers). */
+export async function countLessonPlansForReview(centers?: string[]): Promise<number> {
   const db = await getDb();
-  const [row] = await db
-    .select({ n: count() })
-    .from(lessonPlans)
-    .where(eq(lessonPlans.status, "submitted"));
+  const conditions = [
+    eq(lessonPlans.status, "submitted"),
+    ...(centers && centers.length > 0 ? [inArray(lessonPlans.center, centers)] : []),
+  ];
+  const [row] = await db.select({ n: count() }).from(lessonPlans).where(and(...conditions));
   return row?.n ?? 0;
 }
 
@@ -3281,12 +3287,18 @@ export interface TimesheetReviewRow {
  * so the UI can group by person. Ordered by coach then date.
  */
 export async function listTimesheetsForReview(
-  opts: { periodLabel?: string; status?: TimesheetReviewRow["status"] } = {},
+  opts: {
+    periodLabel?: string;
+    status?: TimesheetReviewRow["status"];
+    /** Center-scoped reviewer: only entries at these centers (omit = all). */
+    centers?: string[];
+  } = {},
 ): Promise<TimesheetReviewRow[]> {
   const db = await getDb();
   const conditions = [
     eq(timesheets.status, opts.status ?? "submitted"),
     ...(opts.periodLabel != null ? [eq(timesheets.periodLabel, opts.periodLabel)] : []),
+    ...(opts.centers && opts.centers.length > 0 ? [inArray(timesheets.center, opts.centers)] : []),
   ];
   return db
     .select({
@@ -3312,12 +3324,17 @@ export async function listTimesheetsForReview(
 }
 
 /** How many timesheet entries are awaiting review (`submitted`) — drives the
- *  Clock-in launcher/section "Review" badge. Optionally scoped to a period. */
-export async function countTimesheetsForReview(periodLabel?: string): Promise<number> {
+ *  Clock-in launcher/section "Review" badge. Optionally scoped to a period and
+ *  to a center-scoped reviewer's managed centers (omit = all centers). */
+export async function countTimesheetsForReview(
+  periodLabel?: string,
+  centers?: string[],
+): Promise<number> {
   const db = await getDb();
   const conditions = [
     eq(timesheets.status, "submitted"),
     ...(periodLabel != null ? [eq(timesheets.periodLabel, periodLabel)] : []),
+    ...(centers && centers.length > 0 ? [inArray(timesheets.center, centers)] : []),
   ];
   const [row] = await db.select({ n: count() }).from(timesheets).where(and(...conditions));
   return row?.n ?? 0;
@@ -3334,6 +3351,9 @@ export async function reviewTimesheets(
   action: "approve" | "request_changes",
   note: string,
   reviewerId: number,
+  /** Center-scoped reviewer: only flip entries at these centers (omit = all).
+   *  Defense-in-depth — a crafted out-of-scope id is skipped like a stale one. */
+  centers?: string[],
 ): Promise<number> {
   if (ids.length === 0) return 0;
   const db = await getDb();
@@ -3346,7 +3366,13 @@ export async function reviewTimesheets(
       reviewedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(and(inArray(timesheets.id, ids), eq(timesheets.status, "submitted")))
+    .where(
+      and(
+        inArray(timesheets.id, ids),
+        eq(timesheets.status, "submitted"),
+        ...(centers && centers.length > 0 ? [inArray(timesheets.center, centers)] : []),
+      ),
+    )
     .returning({ id: timesheets.id });
   return rows.length;
 }

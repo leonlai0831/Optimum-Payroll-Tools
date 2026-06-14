@@ -115,6 +115,35 @@ describe("Timesheet DB layer (PGlite in-memory)", () => {
     expect((await queries.getTimesheetEntry(e1.id))!.status).toBe("approved");
   });
 
+  it("scopes the review queue, count, and batch-review to the reviewer's centers", async () => {
+    const period = "2026-12";
+    const pk = await queries.createTimesheetEntry(
+      lesson({ coachId: 51, periodLabel: period, date: "2026-12-01", center: "PK" }),
+    );
+    const usj = await queries.createTimesheetEntry(
+      lesson({ coachId: 52, periodLabel: period, date: "2026-12-02", center: "USJ" }),
+    );
+    await queries.submitTimesheetsForPeriod(51, period);
+    await queries.submitTimesheetsForPeriod(52, period);
+
+    // Unscoped (omit centers) sees both; scoping to PK sees only the PK entry.
+    const all = await queries.listTimesheetsForReview({ periodLabel: period });
+    expect(all.map((e) => e.center).sort()).toEqual(["PK", "USJ"]);
+    const pkOnly = await queries.listTimesheetsForReview({ periodLabel: period, centers: ["PK"] });
+    expect(pkOnly.map((e) => e.id)).toEqual([pk.id]);
+
+    // The count respects the same center filter.
+    expect(await queries.countTimesheetsForReview(period)).toBe(2);
+    expect(await queries.countTimesheetsForReview(period, ["PK"])).toBe(1);
+
+    // A PK-only reviewer batch-approving both ids flips ONLY the PK entry —
+    // the out-of-scope USJ id is skipped (defense-in-depth on the write path).
+    const reviewed = await queries.reviewTimesheets([pk.id, usj.id], "approve", "", 1, ["PK"]);
+    expect(reviewed).toBe(1);
+    expect((await queries.getTimesheetEntry(pk.id))!.status).toBe("approved");
+    expect((await queries.getTimesheetEntry(usj.id))!.status).toBe("submitted");
+  });
+
   it("loads only APPROVED teaching hours into allowance teachingRows", async () => {
     const e1 = await queries.createTimesheetEntry(lesson({ coachId: 41, periodLabel: "2026-11", date: "2026-11-02", classType: "low", hours: 2 }));
     const e2 = await queries.createTimesheetEntry(lesson({ coachId: 41, periodLabel: "2026-11", date: "2026-11-03", classType: "youngSwimmer", hours: 1 }));

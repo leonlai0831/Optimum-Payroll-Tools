@@ -555,6 +555,28 @@ tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role 
 all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in the brand-section
 layouts. The old `/system/categories` page 301-redirects to `/system/permissions`.
 
+**Center-scoped approvals (`users.managedCenters`, migration 0039).** An admin / supervisor can be
+restricted to **review, approve, and finalize only for the center(s) they manage** (jsonb `string[] |
+null`; **NULL/empty = all centers** = the historical behavior; **super_admin always all**). It mirrors
+`visibleCategories`: assigned per-user on the **`/system/permissions` "User overrides" tab** (a second
+"Center scope" card under the category overrides — `components/center-overrides.tsx`, listing only
+accounts whose role can review/finalize), written via `PATCH /api/users/[id]` with the `managedCenters`
+field **gated super_admin-only** (like categories) even though that route is otherwise `manage_users`.
+The write is validated + **canonicalized against `AllowanceConfig.centers`** (`sanitizeManagedCenters`),
+and **selecting every configured center collapses to NULL** (= unrestricted). `getCurrentUser()` resolves
+`CurrentUser.managedCenters` via `effectiveManagedCenters` (super_admin → null). Enforcement (centers
+already exist on every entity): the **timesheet review** queue + count + batch-approve
+(`listTimesheetsForReview`/`countTimesheetsForReview`/`reviewTimesheets` take a `centers` filter; the
+`/timesheets/review` page + API both pass it) and **lesson-plan review** list + single-review
+(`listLessonPlans` centers filter on the reviewer view; the `[id]/review` route guards on
+`canManageCenter(user.managedCenters, plan.center)`). Matching is exact on the configured center value
+for the SQL filters (entries pick from the configured/`CENTERS` list) and trimmed/case-insensitive in
+the pure `canManageCenter`. **KPI is the exception — a KPI month is one company-wide run, so a
+center-restricted admin can't review / finalize / reopen / delete it at all** (`companyKpiDenied` in
+`app/api/runs/[id]`; reserved for super_admin + all-centers admins). Helpers
+(`sanitizeManagedCenters` / `effectiveManagedCenters` / `canManageCenter`) are pure + Vitest-locked in
+`lib/auth/auth.test.ts`; the queue filters in `lib/timesheet/queries.test.ts`.
+
 **User management is hierarchy-scoped** (`ROLE_RANK` + `canViewUserRole` / `canManageUserRole`
 in `lib/auth/types.ts`): a `manage_users` holder manages only accounts ranked **strictly below**
 their own role, sees same-rank accounts **read-only** ("View only" rows; 403 on write), and never
@@ -655,8 +677,10 @@ super_admin-only) and **best-effort** — a failing count degrades to 0 and neve
 nav or launcher; non-reviewers run **zero** count queries (the gates short-circuit). The launcher
 rolls a card's count up from its section's destinations (`launcherBadgeCount` +
 `LAUNCHER_BADGE_HREFS`, Vitest-locked); `SectionNav` takes an optional `badges` prop and the
-system/timesheets/lesson layouts pass it. Counts gain a **center filter** here once
-center-scoped approvals (backlog C) land.
+system/timesheets/lesson layouts pass it. The **Clock-in → Review** and **Lesson Plan → History**
+counts are **center-filtered** for a center-scoped reviewer (`user.managedCenters` threaded into
+`countTimesheetsForReview`/`countLessonPlansForReview`), so a badge matches the scoped queue the
+reviewer actually sees (see "Center-scoped approvals" under Auth).
 
 ## Environment variables
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import {
   deleteRun,
@@ -10,6 +10,26 @@ import {
   updateRunReview,
 } from "@/lib/db/queries";
 import type { RunCoach } from "@/lib/types";
+
+/**
+ * Center-scope guard for KPI run mutation. A KPI month is a single company-wide
+ * run (every center in one batch, scored together), so a center-restricted admin
+ * has no per-branch action here — reviewing / finalizing / reopening / deleting a
+ * month is a whole-company action reserved for Super Admins and all-centers
+ * admins (`managedCenters === null` = unrestricted). Returns a 403 to
+ * short-circuit with, or null when allowed. (Unlike timesheets / lesson plans,
+ * which carry one center per row and ARE scoped per-center.)
+ */
+function companyKpiDenied(actor: CurrentUser): NextResponse | null {
+  if (actor.managedCenters === null) return null;
+  return NextResponse.json(
+    {
+      error:
+        "A KPI month covers the whole company; you manage only specific centers, so you can't review, finalize, reopen, or delete it. Ask a super admin or an all-centers admin.",
+    },
+    { status: 403 },
+  );
+}
 
 export async function GET(_req: Request, ctx: RouteContext<"/api/runs/[id]">) {
   // A saved run holds per-coach bonus/pay data — same gate as the list + siblings.
@@ -32,6 +52,9 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/runs/[id]">) {
   const denied = await requireCapability("finalize_kpi");
   if (denied) return denied;
   const actor = await getCurrentUser();
+  if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const scopeDenied = companyKpiDenied(actor);
+  if (scopeDenied) return scopeDenied;
   const { id } = await ctx.params;
   const runId = Number(id);
   const run = await getRun(runId);
@@ -94,6 +117,9 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/runs/[id]">)
   const denied = await requireCapability("finalize_kpi");
   if (denied) return denied;
   const actor = await getCurrentUser();
+  if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const scopeDenied = companyKpiDenied(actor);
+  if (scopeDenied) return scopeDenied;
   const { id } = await ctx.params;
   const runId = Number(id);
   const run = await getRun(runId);

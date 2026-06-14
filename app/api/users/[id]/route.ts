@@ -3,11 +3,19 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { requireCapability } from "@/lib/auth/permissions";
 import { resolveEmployeeLink } from "@/lib/auth/user-link";
 import { DUPLICATE_EMAIL_MESSAGE, LOOSE_EMAIL_RE, isDuplicateEmailError } from "@/lib/auth/email";
-import { deleteUser, getUserById, listUsers, recordAudit, updateUser } from "@/lib/db/queries";
+import {
+  deleteUser,
+  getAllowanceConfig,
+  getUserById,
+  listUsers,
+  recordAudit,
+  updateUser,
+} from "@/lib/db/queries";
 import {
   ROLES,
   canManageUserRole,
   canViewUserRole,
+  sanitizeManagedCenters,
   sanitizeToolCategories,
   type Role,
 } from "@/lib/auth/types";
@@ -59,6 +67,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
     coachId?: number | null;
     gymStaffId?: number | null;
     visibleCategories?: unknown;
+    managedCenters?: unknown;
     password?: string;
   };
 
@@ -156,6 +165,41 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
       patch.visibleCategories = categories;
     }
   }
+  if (body.managedCenters !== undefined) {
+    // Center scope decides who can approve/finalize a branch's payroll — a hard
+    // authority boundary, so it is super_admin-only (like category visibility),
+    // even though this route is otherwise open to any manage_users holder.
+    if (actor.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Only a super admin can change an account's center scope." },
+        { status: 403 },
+      );
+    }
+    // A super_admin always manages every center; a stored restriction would be
+    // ignored everywhere and silently re-apply on a later demotion.
+    if (target.role === "super_admin") {
+      return NextResponse.json(
+        { error: "Super admins always manage every center." },
+        { status: 400 },
+      );
+    }
+    if (body.managedCenters === null) {
+      patch.managedCenters = null; // Reset → manages all centers.
+    } else {
+      const { centers } = await getAllowanceConfig();
+      const cleaned = sanitizeManagedCenters(body.managedCenters, centers);
+      if (!cleaned) {
+        return NextResponse.json({ error: "Invalid centers." }, { status: 400 });
+      }
+      // Empty, or covering EVERY configured center, means "all" → store null
+      // (unrestricted) so it reads identically to a reset / Super Admin and the
+      // company-wide KPI guard treats it as unrestricted.
+      const coversAll =
+        centers.length > 0 &&
+        centers.every((c) => cleaned.some((x) => x.toUpperCase() === c.trim().toUpperCase()));
+      patch.managedCenters = cleaned.length > 0 && !coversAll ? cleaned : null;
+    }
+  }
   if (typeof body.password === "string" && body.password) patch.password = body.password;
 
   // Never strand the system without an active super_admin.
@@ -192,6 +236,10 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/users/[id]">) 
       (patch.visibleCategories === null
         ? "categories→inherit role default"
         : `categories→${patch.visibleCategories.join("+") || "none"}`),
+    patch.managedCenters !== undefined &&
+      (patch.managedCenters === null
+        ? "centers→all"
+        : `centers→${patch.managedCenters.join("+")}`),
     patch.password !== undefined && "password reset",
   ].filter(Boolean);
   await recordAudit({

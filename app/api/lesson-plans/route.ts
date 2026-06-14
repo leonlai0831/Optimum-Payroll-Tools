@@ -34,7 +34,11 @@ export async function GET(req: Request) {
   const gate = await lessonPlanAccess();
   if ("error" in gate) return gate.error;
   const { user, canReview } = gate.access;
-  const plans = await listLessonPlans(canReview ? {} : { forUserId: user.id });
+  // Reviewers see all plans, narrowed to their managed centers when scoped
+  // (null = all); editors always see their own, regardless of center.
+  const plans = await listLessonPlans(
+    canReview ? { centers: user.managedCenters ?? undefined } : { forUserId: user.id },
+  );
   return NextResponse.json({ plans });
 }
 
