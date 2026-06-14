@@ -48,7 +48,6 @@ import {
 } from "./schema";
 import { hashPassword } from "@/lib/auth/password";
 import {
-  ALL_TOOL_CATEGORIES,
   CAPABILITIES,
   CONFIGURABLE_ROLES,
   DEFAULT_PERMISSION_CONFIG,
@@ -2747,8 +2746,10 @@ const BACKFILL_CAPS: Capability[] = [
  * - Backfills any configurable role missing from `capabilities` with its
  *   defaults (lets a newly added role work with no migration), plus the
  *   {@link BACKFILL_CAPS}.
- * - Backfills `categories` to ALL THREE launcher categories per role — the
- *   pre-unification behavior — until the owner tightens them in Settings.
+ * - Resolves `categories` to the stored per-role list, or **[]** (no access)
+ *   when a role's entry is missing/invalid — launcher visibility is default-deny
+ *   (Backlog G), so a missing default must DENY, never silently grant all three.
+ *   Existing deployments are snapshotted + flipped to [] by migration 0040.
  */
 export function normalizePermissionConfig(
   data: PermissionConfig | LegacyPermissionConfig,
@@ -2787,8 +2788,9 @@ export function normalizePermissionConfig(
       if (DEFAULT_PERMISSION_CONFIG.capabilities[role].includes(cap)) add(cap);
     }
     out.capabilities[role] = caps;
-    // Unknown/invalid stored values fall back to all (sanitize self-heals order/dupes).
-    out.categories[role] = sanitizeToolCategories(rawCats[role]) ?? [...ALL_TOOL_CATEGORIES];
+    // Default-deny: a missing/invalid stored value resolves to NONE, not all
+    // three (sanitize self-heals order/dupes for valid lists).
+    out.categories[role] = sanitizeToolCategories(rawCats[role]) ?? [];
   }
   return out;
 }

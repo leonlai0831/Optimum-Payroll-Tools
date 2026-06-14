@@ -73,15 +73,12 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   reviewer's approve/request-changes act on the **whole window together**. Chose
   group-by-window-key (no `sessionId` migration); persistence stays one row per
   class line so payroll aggregation/reconcile are untouched.
-- **D. Permissions / User-overrides redesign** — list-controls portion ✅ DONE:
-  both cards (now the **"Per-account access" tab**, renamed from "User overrides")
-  ship **Full Name + Search + per-column Sort + Role/state/Status Filter + select-all
-  + a bulk action bar** (一键勾选/取消 — bulk grant/revoke a category or center, or
-  reset, across the filtered selection), built on the E list-control kit. Asks #1
-  (full name), #2 (search/sort/filter), #3 (bulk check/uncheck), #5 (rename) are
-  shipped. **Still open:** ask #4 (move the category control OFF the Roles tab /
-  remove the role-default categories) and ask #6 (drop the Visibility column) — both
-  entangle with **G** (default-deny categories) so do them together in that PR.
+- ✅ **D. Permissions / "Per-account access" redesign** — DONE (all six asks).
+  Both cards (the renamed **"Per-account access" tab**) ship Full Name + Search +
+  per-column Sort + Role/Access/Status Filter + select-all + a bulk action bar
+  (一键勾选/取消), built on the E kit. #4 (category control removed from the Roles
+  tab — capabilities only now) + #6 (Visibility column dropped; the category card
+  is now **direct-edit** checkboxes, no Override/Reset/inherit) shipped with **G**.
 - **E. List-control standardization** — every data list must ship Search + Sort +
   Filter, plus select-all/clear where it has row checkboxes; all via the shared
   `components/table-controls.tsx` kit (no more one-off `useState("")` + `.filter()`).
@@ -92,14 +89,14 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   Conventions — THEN convert the ~15 missing lists in per-module batches (one clean
   PR each). Inventory baseline (2026-06-13): 23 lists — search 8, sort 9, filter 6,
   select-all 2.
-- **G. Default-deny launcher categories + drop the Visibility column** (operator
-  request 2026-06-14). Flip category defaults from **all-three** to **none** — an
-  account sees no department until an admin manually ticks one on the User-overrides
-  tab — and drop the Visibility column (= D #6). Code lever: role-default categories
-  → `[]` (super_admin always all). **Existing 203 accounts:** snapshot current
-  effective categories into per-user overrides BEFORE flipping the default (safe
-  rollout) so they keep access; only NEW accounts default-deny. **Supersedes** the
-  old marketing-only visibility item.
+- ✅ **G. Default-deny launcher categories + drop the Visibility column** — DONE.
+  `DEFAULT_PERMISSION_CONFIG.categories` flipped to `[]` per role (super_admin always
+  all); the Roles tab no longer edits categories; the per-account card is direct-edit.
+  **Migration 0040** does the safe rollout: snapshot each inheriting account's current
+  effective categories into a per-user override, THEN flip the stored role defaults to
+  `[]` — existing accounts keep access, only NEW accounts default-deny (audited,
+  idempotent/replay-safe). Verified in dev: pre-existing accounts snapshotted to
+  all-three, a freshly-created account sees nothing.
 
 ## Backlog (unordered — pick with the owner)
 

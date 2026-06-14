@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, Save, ShieldCheck } from "lucide-react";
+import { Save, ShieldCheck } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
@@ -12,12 +12,10 @@ import {
   CAPABILITY_LABELS,
   CONFIGURABLE_ROLES,
   ROLE_LABELS,
-  TOOL_CATEGORIES,
   TOOL_CATEGORY_LABELS,
   type Capability,
   type ConfigurableRole,
   type PermissionConfig,
-  type ToolCategory,
 } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 
@@ -54,16 +52,14 @@ const GROUPS: CapGroup[] = [
   },
 ];
 
-const CATEGORIES_GROUP_TITLE = "Launcher categories";
-
 type Tab = "roles" | "overrides";
 
 /**
  * System Setting → Permissions: one page for the whole access model.
- * "Roles" = the role → capability matrix plus per-role default launcher
- * categories; "Per-account access" = per-account category + center-scope
- * overrides (an account inherits its role's defaults until explicitly
- * overridden).
+ * "Roles" = the role → capability matrix; "Per-account access" = per-account
+ * launcher-category + center-scope overrides. Launcher visibility is
+ * default-deny (Backlog G) and managed per-account on the overrides tab — there
+ * is no per-role category default to edit here anymore.
  */
 export function PermissionsForm({
   initial,
@@ -94,22 +90,6 @@ export function PermissionsForm({
           [role]: has
             ? c.capabilities[role].filter((x) => x !== cap)
             : [...c.capabilities[role], cap],
-        },
-      };
-    });
-  }
-
-  function toggleCat(role: ConfigurableRole, category: ToolCategory) {
-    setCfg((c) => {
-      const has = c.categories[role].includes(category);
-      return {
-        ...c,
-        categories: {
-          ...c.categories,
-          [role]: has
-            ? c.categories[role].filter((x) => x !== category)
-            : // Keep canonical order so saved lists stay comparable.
-              TOOL_CATEGORIES.filter((x) => x === category || c.categories[role].includes(x)),
         },
       };
     });
@@ -183,8 +163,10 @@ export function PermissionsForm({
       ) : (
         <>
           <p className="text-sm text-gray-500">
-            Choose which capabilities and launcher categories each role has by default.
-            Super Admin always has full access and cannot be changed.
+            Choose which capabilities each role has by default. Super Admin always
+            has full access and cannot be changed. Launcher visibility is managed
+            per-account on the <strong>Per-account access</strong> tab (new accounts
+            see no department until granted).
           </p>
 
           <Card className="overflow-hidden p-0">
@@ -242,33 +224,6 @@ export function PermissionsForm({
                   </div>
                 </div>
               ))}
-              <div className="px-4 py-3">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                  <LayoutGrid className="h-3.5 w-3.5" /> {CATEGORIES_GROUP_TITLE}
-                </div>
-                <p className="mt-1 text-xs text-gray-400">
-                  Home-screen groups {ROLE_LABELS[mobileRole]} accounts see by default
-                  (per-user overrides win).
-                </p>
-                <div className="mt-1">
-                  {TOOL_CATEGORIES.map((category) => (
-                    <label
-                      key={category}
-                      className="flex min-h-11 cursor-pointer items-center justify-between gap-3 py-1.5"
-                    >
-                      <span className="text-sm text-gray-700">
-                        {TOOL_CATEGORY_LABELS[category]}
-                      </span>
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5 shrink-0 accent-indigo-600"
-                        checked={cfg.categories[mobileRole].includes(category)}
-                        onChange={() => toggleCat(mobileRole, category)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              </div>
             </MobileCards>
             <DesktopTable>
               <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -288,39 +243,6 @@ export function PermissionsForm({
                 <tbody className="divide-y divide-gray-100">
                   {GROUPS.map((group) => (
                     <GroupRows key={group.title} group={group} cfg={cfg} onToggle={toggleCap} />
-                  ))}
-                  <tr className="bg-gray-50/60">
-                    <td
-                      colSpan={CONFIGURABLE_ROLES.length + 2}
-                      className="px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500"
-                    >
-                      {CATEGORIES_GROUP_TITLE} · role defaults (per-user overrides win)
-                    </td>
-                  </tr>
-                  {TOOL_CATEGORIES.map((category) => (
-                    <tr key={category}>
-                      <td className="px-4 py-2 text-gray-700">
-                        {TOOL_CATEGORY_LABELS[category]}
-                      </td>
-                      {CONFIGURABLE_ROLES.map((role) => (
-                        <td key={role} className="px-4 py-2 text-center">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-indigo-600"
-                            checked={cfg.categories[role].includes(category)}
-                            onChange={() => toggleCat(role, category)}
-                          />
-                        </td>
-                      ))}
-                      <td className="px-4 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-gray-300"
-                          checked
-                          disabled
-                        />
-                      </td>
-                    </tr>
                   ))}
                 </tbody>
               </table>

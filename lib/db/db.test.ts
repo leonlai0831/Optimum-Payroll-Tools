@@ -335,22 +335,22 @@ describe("DB layer (PGlite in-memory)", () => {
     expect(normalized.capabilities.staff).toEqual(
       expect.arrayContaining(["view_own"]),
     );
-    // …and categories backfill to ALL THREE per role (the pre-unification
-    // behavior) until the owner tightens them.
+    // …and a config with no categories key resolves to NONE per role
+    // (default-deny, Backlog G) — a missing default must DENY, never grant all.
     for (const role of ["admin", "supervisor", "staff"] as const) {
-      expect(normalized.categories[role]).toEqual(["swim", "fit", "marketing"]);
+      expect(normalized.categories[role]).toEqual([]);
     }
   });
 
-  it("keeps stored categories and backfills only invalid/missing role entries", () => {
+  it("keeps stored categories and resolves invalid/missing role entries to none (default-deny)", () => {
     const normalized = queries.normalizePermissionConfig({
       capabilities: { admin: ["run_kpi"], supervisor: [], staff: ["view_own"] },
       // staff narrowed; supervisor invalid (unknown value); admin missing.
       categories: { staff: ["fit"], supervisor: ["nope"] },
     } as never);
     expect(normalized.categories.staff).toEqual(["fit"]);
-    expect(normalized.categories.supervisor).toEqual(["swim", "fit", "marketing"]);
-    expect(normalized.categories.admin).toEqual(["swim", "fit", "marketing"]);
+    expect(normalized.categories.supervisor).toEqual([]); // invalid → deny
+    expect(normalized.categories.admin).toEqual([]); // missing → deny
   });
 
   it("migrates retired cross-brand capability keys to both brand-scoped keys", () => {
