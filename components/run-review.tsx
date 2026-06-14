@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeftRight,
   CheckCircle2,
+  Link2,
   Save,
   TriangleAlert,
   Users,
@@ -31,6 +32,13 @@ export interface ReviewRun {
 interface ReviewRow {
   rc: RunCoach;
   missing: string[];
+}
+
+/** A month's allowance record that linked to no coach in this run (read-only). */
+export interface OrphanAllowance {
+  canonicalName: string;
+  tier: string | null;
+  teaching: number;
 }
 
 /** Recompute a coach's outputs + readiness from its (possibly edited) inputs. */
@@ -66,12 +74,18 @@ export function RunReview({
   run,
   assessmentByCoach,
   centers,
+  orphanAllowances = [],
+  nonLinkableAllowanceCount = 0,
 }: {
   run: ReviewRun;
   /** coachId → latest assessment final % — auto-fills + locks that coach's Mgmt %. */
   assessmentByCoach: Record<number, number>;
   /** Configured center codes — options for a supervisor's group-hours editor. */
   centers: string[];
+  /** Month allowance records that linked to no coach in this run (awareness only). */
+  orphanAllowances?: OrphanAllowance[];
+  /** Admin/T0 records hidden from the orphan list — they never teach. */
+  nonLinkableAllowanceCount?: number;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -266,6 +280,48 @@ export function RunReview({
         also remembers the corrected accounts for future uploads (manage the standing rules on the
         Links page). <strong>Finalize</strong> unlocks once every coach is complete.
       </p>
+
+      {/* Unlinked-allowance awareness: month allowance records that bound to no
+          coach in this run, so their teaching allowance feeds no KPI payout.
+          Read-only — re-linking happens in the calculator / Links page. */}
+      {orphanAllowances.length > 0 && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3">
+          <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-indigo-900">
+            <Link2 className="h-4 w-4" />
+            {orphanAllowances.length} allowance record(s) for {run.periodLabel}{" "}
+            didn&apos;t link to a coach
+          </p>
+          <p className="mb-2 text-xs text-indigo-800/80">
+            These were keyed in the Allowance Calculator but matched no coach in this run, so their
+            teaching allowance isn&apos;t feeding any KPI payout. Confirm none of them should
+            have before finalizing — a coach who taught but whose allowance didn&apos;t link gets a
+            wrong payout base. Fix the name match in the calculator (or the Links page) and recompute
+            if one belongs here.
+            {nonLinkableAllowanceCount > 0 && (
+              <>
+                {" "}
+                {nonLinkableAllowanceCount}{" "}
+                admin/T0 record(s) are hidden — those tiers don&apos;t teach.
+              </>
+            )}
+          </p>
+          <div className="space-y-1">
+            {orphanAllowances.map((r, i) => (
+              <div
+                key={`${r.canonicalName}-${i}`}
+                className="flex items-center justify-between gap-2 rounded border border-indigo-100 bg-white px-2 py-1 text-xs"
+              >
+                <span className="truncate">
+                  <span className="font-medium text-gray-900">{r.canonicalName}</span>{" "}
+                  <span className="text-gray-400">
+                    · {r.tier ?? "—"} · {rm(r.teaching)}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {rows.map((r, idx) => {
         const empty = r.rc.accounts.length === 0;

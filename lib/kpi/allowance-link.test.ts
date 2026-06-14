@@ -2,15 +2,29 @@ import { describe, expect, it } from "vitest";
 import {
   linkAllowance,
   normalizeName,
+  orphanLinkableAllowances,
   reconcileAllowances,
   type AllowanceLinkRec,
   type CoachLinkInfo,
+  type TieredAllowanceRec,
 } from "./allowance-link";
+import type { AllowanceTier } from "@/lib/allowance/types";
 
 const rec = (canonicalName: string, extra: Partial<AllowanceLinkRec> = {}): AllowanceLinkRec => ({
   coachId: null,
   canonicalName,
   aliases: [],
+  ...extra,
+});
+const tieredRec = (
+  canonicalName: string,
+  tier: AllowanceTier | null,
+  extra: Partial<TieredAllowanceRec> = {},
+): TieredAllowanceRec => ({
+  coachId: null,
+  canonicalName,
+  aliases: [],
+  tier,
   ...extra,
 });
 const coach = (canonicalName: string, extra: Partial<CoachLinkInfo> = {}): CoachLinkInfo => ({
@@ -110,5 +124,44 @@ describe("reconcileAllowances — full picture", () => {
     expect(links[0].coach.canonicalName).toBe("BOB");
     expect(links[0].method).toBe("coachId");
     expect(unmatchedCoaches.map((c) => c.canonicalName)).toEqual(["SAM"]);
+  });
+});
+
+describe("orphanLinkableAllowances", () => {
+  it("reports a teaching-tier record that matched no coach, hides matched ones", () => {
+    const list = [
+      tieredRec("LINKED COACH", "T2", { coachId: 1 }),
+      tieredRec("Nobody This Month", "T3"),
+    ];
+    const coaches = [coach("LINKED COACH", { coachId: 1 }), coach("OTHER")];
+    const { orphans, nonLinkableCount } = orphanLinkableAllowances(list, coaches);
+    expect(orphans.map((r) => r.canonicalName)).toEqual(["Nobody This Month"]);
+    expect(nonLinkableCount).toBe(0);
+  });
+
+  it("excludes admin/T0 orphans from the list but counts them", () => {
+    const list = [
+      tieredRec("DESK STAFF", "A1"), // admin tier — never links, hidden
+      tieredRec("NOT YET PASSED", "T0"), // T0 — never links, hidden
+      tieredRec("REAL TEACHER", "T1"), // teaching tier — surfaced
+    ];
+    const { orphans, nonLinkableCount } = orphanLinkableAllowances(list, []);
+    expect(orphans.map((r) => r.canonicalName)).toEqual(["REAL TEACHER"]);
+    expect(nonLinkableCount).toBe(2);
+  });
+
+  it("treats an unknown (null) tier as linkable — don't silently hide it", () => {
+    const list = [tieredRec("MYSTERY", null)];
+    const { orphans, nonLinkableCount } = orphanLinkableAllowances(list, []);
+    expect(orphans.map((r) => r.canonicalName)).toEqual(["MYSTERY"]);
+    expect(nonLinkableCount).toBe(0);
+  });
+
+  it("returns nothing when every record links", () => {
+    const list = [tieredRec("AMY", "T1", { coachId: 2 })];
+    const coaches = [coach("AMY", { coachId: 2 })];
+    const { orphans, nonLinkableCount } = orphanLinkableAllowances(list, coaches);
+    expect(orphans).toHaveLength(0);
+    expect(nonLinkableCount).toBe(0);
   });
 });

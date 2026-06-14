@@ -314,6 +314,13 @@ manager reviews + finalizes (`finalize_kpi`) on the `RunReview` screen. `RunRevi
 management assessment, the account merge, **the Position (Instructor / Pool Supervisor) and a
 supervisor's group center + hours (/40)** — the supervision hours are entered by hand because
 allowance + clock-in only track *teaching* hours (a supervisor's actual hours are longer).
+Finalize is gated on every coach being complete (client button + server re-check in
+`PATCH /api/runs/[id]`), and the screen surfaces a **read-only "unlinked allowance" panel** —
+the month's teaching-tier Allowance records that matched no coach in this run
+(`orphanLinkableAllowances` in `lib/kpi/allowance-link.ts`, the same reconcile the dashboard's
+interactive linker uses; admin/T0 records are hidden + counted) — so the manager sees a
+coach-taught-but-allowance-didn't-link payroll risk before finalizing, since the
+auto-compute → draft path never passes through the dashboard.
 Persists exactly like the dashboard save (`createRun` + `importKpiIngest`, same per-period
 advisory lock + closed-month guards); a 409 returns the existing draft's `runId` to redirect
 to. **Compute is NEVER automatic on upload/push (operator decision 2026-06-13):** a delivery

@@ -120,10 +120,13 @@ E rollout and stay tracked there; **[P0]** items also serve the June go-live.
    removing a middle row no longer shifts focus/values to a neighbour. gstack-QA'd
    (phone 390px): focus a row's input, remove a row above it → focus + values stay
    put; subtotals/grand total recompute correctly.
-3. **Payroll-correctness guards** (split into ≤2 PRs): ① KPI finalize **incomplete-coach
-   gate** + **unlinked-allowance list** on `RunReview` (data already in `missing[]` /
-   `reconcileAllowances.orphanRecs`); ② **payee-completeness gate** before the freelancer
-   bank-file export (block/confirm with the names missing IC/bank/account). **[P0]**
+3. **Payroll-correctness guards** (split into ≤2 PRs): ① ✅ **DONE** — KPI finalize
+   **incomplete-coach gate** was already enforced (client Finalize button + server re-check in
+   `PATCH /api/runs/[id]`); added the **unlinked-allowance panel** on `RunReview` (read-only:
+   the month's teaching-tier allowance records that linked to no coach in the run, via the new
+   pure `orphanLinkableAllowances` helper — admin/T0 hidden + counted; the dashboard's existing
+   orphan panel now reuses the same helper). ② **payee-completeness gate** before the freelancer
+   bank-file export (block/confirm with the names missing IC/bank/account) — still TODO. **[P0]**
 4. **Payee PII scoping** (security). `swim_view_staff` returns every staff member's IC +
    bank account via `/api/coaches`; drop those from the default projection, serve only to
    a payee capability (`run_freelancer`/`swim_edit_staff`).

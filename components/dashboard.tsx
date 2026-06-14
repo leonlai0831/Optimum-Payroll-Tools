@@ -13,7 +13,11 @@ import { mapCsvRows, getCleanName } from "@/lib/kpi/csv";
 import { makeCenterNormalizer } from "@/lib/allowance/centers";
 import { buildGroups, uniqueInstructorNames } from "@/lib/kpi/merge";
 import { classifyAccount, type AccountKind } from "@/lib/kpi/classify";
-import { linkAllowance, reconcileAllowances, type CoachLinkInfo } from "@/lib/kpi/allowance-link";
+import {
+  linkAllowance,
+  orphanLinkableAllowances,
+  type CoachLinkInfo,
+} from "@/lib/kpi/allowance-link";
 import { appearsInLeaderboard } from "@/lib/kpi/leaderboard";
 import type { CsvAnomaly } from "@/lib/ai/anthropic";
 import { isLinkableTier, nonLinkableReason } from "@/lib/allowance/tier-rules";
@@ -450,11 +454,11 @@ export function Dashboard({
       canonicalName: g.meta.canonicalName,
       accounts: g.accounts.map((a) => a.name),
     }));
-    const orphans = reconcileAllowances(allowanceRecs, coachInfos).orphanRecs;
-    const linkable = orphans.filter((r) => isLinkableTier(r.tier));
+    const { orphans, nonLinkableCount } = orphanLinkableAllowances(allowanceRecs, coachInfos);
     return {
-      orphanAllowances: linkable.filter((r) => !naRecs.has(r.coachId ?? -1)),
-      nonLinkableCount: orphans.length - linkable.length,
+      // Hide records the operator explicitly marked "not applicable" this session.
+      orphanAllowances: orphans.filter((r) => !naRecs.has(r.coachId ?? -1)),
+      nonLinkableCount,
     };
   }, [allowanceRecs, groups, naRecs]);
 
