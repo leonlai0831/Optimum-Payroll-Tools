@@ -274,6 +274,13 @@
       "when": 1781375468278,
       "tag": "0038_tense_timeslip",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1781412326983,
+      "tag": "0039_perfect_fat_cobra",
+      "breakpoints": true
     }
   ]
 }

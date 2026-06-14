@@ -13,6 +13,8 @@ export default async function TimesheetReviewPage() {
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
   if (!caps.has("review_timesheet")) redirect("/timesheets");
-  const entries = await listTimesheetsForReview({});
+  // Center-scoped reviewers only see their centers' queue (null = all) — must
+  // match the /api/timesheets/review scoping so the SSR paint doesn't leak.
+  const entries = await listTimesheetsForReview({ centers: user.managedCenters ?? undefined });
   return <TimesheetReview initialEntries={entries} />;
 }

@@ -7,6 +7,7 @@ import { Button, Card, Spinner } from "@/components/ui";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
 import { useToast } from "@/components/toast";
 import { CategoryOverrides, type OverrideUser } from "@/components/category-overrides";
+import { CenterOverrides, type CenterScopeUser } from "@/components/center-overrides";
 import {
   CAPABILITY_LABELS,
   CONFIGURABLE_ROLES,
@@ -66,9 +67,13 @@ type Tab = "roles" | "overrides";
 export function PermissionsForm({
   initial,
   users,
+  centerUsers,
+  allCenters,
 }: {
   initial: PermissionConfig;
   users: OverrideUser[];
+  centerUsers: CenterScopeUser[];
+  allCenters: string[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -170,7 +175,10 @@ export function PermissionsForm({
       </div>
 
       {tab === "overrides" ? (
-        <CategoryOverrides users={users} roleDefaults={initial.categories} />
+        <div className="space-y-8">
+          <CategoryOverrides users={users} roleDefaults={initial.categories} />
+          <CenterOverrides users={centerUsers} allCenters={allCenters} />
+        </div>
       ) : (
         <>
           <p className="text-sm text-gray-500">

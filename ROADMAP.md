@@ -53,9 +53,15 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   (`countTimesheetsForReview`), Lesson Plan → History (`countLessonPlansForReview`).
   Capability-gated (super_admin = all); best-effort; non-reviewers run zero queries.
   Counts gain a center filter for free once C lands.
-- **C. Center-scoped approvals** — `users.managedCenters`; admins approve only
-  their branch's requests (super_admin = all). Filter the review queues by the
-  request's center.
+- ✅ **C. Center-scoped approvals** — DONE: `users.managedCenters` (jsonb, NULL/empty
+  = all, super_admin = all; migration 0039), assigned per-user on the
+  `/system/permissions` "User overrides" tab (super_admin-only, canonicalized
+  against the configured centers; selecting all collapses to unrestricted).
+  Timesheet + lesson-plan review queues / counts / batch-approve filter by the
+  reviewer's centers; the badge counts match. KPI is company-wide, so a
+  center-restricted admin can't review/finalize/reopen/delete a run at all
+  (reserved for super_admin + all-centers admins). Pure helpers + queue filters
+  Vitest-locked.
 - **D. Permissions / User-overrides redesign** — full name, search + per-column
   sort/filter, bulk check/uncheck filtered rows, move category control off the
   Roles tab, rename "User overrides", drop the Visibility column.

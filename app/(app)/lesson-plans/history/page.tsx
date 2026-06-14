@@ -12,7 +12,11 @@ export default async function LessonPlanHistoryPage() {
   if (!user) redirect("/login");
   const caps = await getCapabilities(user);
   const isReviewer = caps.has("review_lesson_plans");
-  const rows = await listLessonPlans(isReviewer ? {} : { forUserId: user.id });
+  // Reviewers see every plan, narrowed to their managed centers when scoped
+  // (null = all, matching /api/lesson-plans); editors always see their own.
+  const rows = await listLessonPlans(
+    isReviewer ? { centers: user.managedCenters ?? undefined } : { forUserId: user.id },
+  );
 
   return (
     <LessonPlanHistory

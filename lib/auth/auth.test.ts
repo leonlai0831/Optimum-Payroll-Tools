@@ -10,9 +10,12 @@ import { resolveSessionPassword } from "./session";
 import {
   ALL_TOOL_CATEGORIES,
   ROLES,
+  canManageCenter,
   canManageUserRole,
   canViewUserRole,
   effectiveCategories,
+  effectiveManagedCenters,
+  sanitizeManagedCenters,
   sanitizeToolCategories,
   type PermissionConfig,
 } from "./types";
@@ -200,6 +203,68 @@ describe("sanitizeToolCategories", () => {
   });
 });
 
+describe("center-scoped approvals — managed-centers helpers", () => {
+  describe("sanitizeManagedCenters", () => {
+    it("trims, drops blanks, and de-dupes case-insensitively (first casing wins)", () => {
+      expect(sanitizeManagedCenters([" PK ", "pk", "", "USJ"])).toEqual(["PK", "USJ"]);
+    });
+
+    it("keeps only configured centers, rewriting each to the configured casing", () => {
+      // "usj" is rewritten to the configured "USJ"; the unknown "ZZ" is dropped.
+      expect(sanitizeManagedCenters(["PK", "ZZ", "usj"], ["PK", "USJ", "HQ"])).toEqual([
+        "PK",
+        "USJ",
+      ]);
+      // Nothing valid → empty array (the route reads empty as "all").
+      expect(sanitizeManagedCenters(["nope"], ["PK"])).toEqual([]);
+    });
+
+    it("returns null only for a non-array (so a route can 400)", () => {
+      expect(sanitizeManagedCenters("PK")).toBeNull();
+      expect(sanitizeManagedCenters(undefined)).toBeNull();
+      expect(sanitizeManagedCenters(null)).toBeNull();
+      expect(sanitizeManagedCenters([])).toEqual([]);
+    });
+  });
+
+  describe("effectiveManagedCenters", () => {
+    it("super_admin is always unrestricted (null), whatever is stored", () => {
+      expect(effectiveManagedCenters("super_admin", ["PK"])).toBeNull();
+      expect(effectiveManagedCenters("super_admin", null)).toBeNull();
+    });
+
+    it("NULL/empty override means all centers (null)", () => {
+      expect(effectiveManagedCenters("admin", null)).toBeNull();
+      expect(effectiveManagedCenters("admin", undefined)).toBeNull();
+      expect(effectiveManagedCenters("admin", [])).toBeNull();
+    });
+
+    it("a non-empty override restricts (a fresh copy, not the stored array)", () => {
+      const stored = ["PK", "USJ"];
+      const resolved = effectiveManagedCenters("admin", stored);
+      expect(resolved).toEqual(["PK", "USJ"]);
+      expect(resolved).not.toBe(stored);
+    });
+  });
+
+  describe("canManageCenter", () => {
+    it("an unrestricted account (null) manages every center, even a blank one", () => {
+      expect(canManageCenter(null, "PK")).toBe(true);
+      expect(canManageCenter(null, "")).toBe(true);
+      expect(canManageCenter(null, null)).toBe(true);
+    });
+
+    it("a restricted account matches only its centers, trimmed + case-insensitively", () => {
+      expect(canManageCenter(["PK", "USJ"], "pk")).toBe(true);
+      expect(canManageCenter(["PK"], " PK ")).toBe(true);
+      expect(canManageCenter(["PK"], "HQ")).toBe(false);
+      // Restricted + missing/blank center → never matches.
+      expect(canManageCenter(["PK"], null)).toBe(false);
+      expect(canManageCenter(["PK"], "")).toBe(false);
+    });
+  });
+});
+
 describe("user-management hierarchy (manage_users scope)", () => {
   it("manages strictly below own rank only — same rank is view-only, higher is hidden", () => {
     // admin: manages supervisor+staff, views fellow admins, never sees super_admins.
@@ -237,6 +302,7 @@ describe("capability matrix (default permission config)", () => {
     coachId: null,
     gymStaffId: null,
     visibleCategories: ALL_TOOL_CATEGORIES,
+    managedCenters: null,
     active: true,
   });
 

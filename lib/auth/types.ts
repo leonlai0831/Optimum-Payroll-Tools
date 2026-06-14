@@ -188,6 +188,83 @@ export function effectiveCategories(
   return [...(override ?? roleDefaults[role] ?? [])];
 }
 
+/* ── Center-scoped approvals ────────────────────────────────────────────────
+ * An admin / supervisor can be restricted to review, approve, and finalize only
+ * for the center(s) they manage. Stored as a per-user override on
+ * `users.managedCenters` (jsonb `string[] | null`), mirroring
+ * `visibleCategories`:
+ *   • NULL or empty   → ALL centers (unrestricted — the historical behavior).
+ *   • a non-empty list → only those centers.
+ * super_admin is always unrestricted, whatever is stored. The resolved value
+ * (null = unrestricted) lives on `CurrentUser.managedCenters`; the review queues
+ * and the KPI-finalize guard consume it via {@link canManageCenter}. There are
+ * no per-role center defaults — center scope is inherently per-person.
+ */
+
+/**
+ * Validate + clean an untrusted managed-centers list. Trims, drops blanks, and
+ * de-dupes case-insensitively. When `validCenters` is given it keeps only
+ * configured centers AND rewrites each to the configured center's exact casing —
+ * so the stored value always matches the casing the review-queue filters compare
+ * against (`inArray(center, …)`). Without `validCenters`, first-seen casing is
+ * kept. Returns null when the input is not an array at all (so a route can
+ * reject it); otherwise an array, possibly empty (the caller treats empty as
+ * "all centers").
+ */
+export function sanitizeManagedCenters(
+  input: unknown,
+  validCenters?: readonly string[],
+): string[] | null {
+  if (!Array.isArray(input)) return null;
+  // upper-cased key → the configured center's canonical casing.
+  const canonical = validCenters
+    ? new Map(validCenters.map((c) => [c.trim().toUpperCase(), c.trim()] as const))
+    : null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of input) {
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toUpperCase();
+    if (canonical && !canonical.has(key)) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(canonical ? canonical.get(key)! : trimmed);
+  }
+  return out;
+}
+
+/**
+ * Resolve the centers an account may approve/review/finalize for:
+ * super_admin → null (all); otherwise the stored override, with NULL/empty
+ * meaning "all" (null). Pure so the rule is unit-testable — `getCurrentUser()`
+ * is the ONE place that applies it (into `CurrentUser.managedCenters`).
+ */
+export function effectiveManagedCenters(
+  role: Role,
+  override: string[] | null | undefined,
+): string[] | null {
+  if (role === "super_admin") return null;
+  return override && override.length > 0 ? [...override] : null;
+}
+
+/**
+ * May an account whose managed set is `managed` (null = unrestricted) act on
+ * something at `center`? Matching is trimmed + case-insensitive (centers come
+ * from one canonical list, but KPI rows can carry free-form names). A restricted
+ * account never matches a missing/blank center.
+ */
+export function canManageCenter(
+  managed: string[] | null,
+  center: string | null | undefined,
+): boolean {
+  if (managed === null) return true;
+  if (!center) return false;
+  const norm = center.trim().toUpperCase();
+  return managed.some((c) => c.trim().toUpperCase() === norm);
+}
+
 const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
   // The brand-scoped pairs mirror the pre-split defaults: a role that held the
   // legacy cross-brand key holds BOTH scoped keys.
