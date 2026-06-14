@@ -4,6 +4,7 @@ import { getAllowanceConfig, getPermissionConfig, listUsers } from "@/lib/db/que
 import { PermissionsForm } from "@/components/permissions-form";
 import type { OverrideUser } from "@/components/category-overrides";
 import type { CenterScopeUser } from "@/components/center-overrides";
+import { effectiveCategories } from "@/lib/auth/types";
 import type { Capability, ConfigurableRole, Role } from "@/lib/auth/types";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,8 @@ export default async function PermissionsPage() {
   const canReviewRole = (role: Role): boolean =>
     role === "super_admin" ||
     REVIEW_CAPS.some((c) => (config.capabilities[role as ConfigurableRole] ?? []).includes(c));
+  // Centers are all SWIM centers (review/finalize happen in the swim brand), so
+  // center scope only means anything for an account that can actually see swim.
   const centerUsers: CenterScopeUser[] = userRows
     .filter((u) => canReviewRole(u.role))
     .map((u) => ({
@@ -47,6 +50,9 @@ export default async function PermissionsPage() {
       role: u.role,
       managedCenters: u.managedCenters,
       active: u.active,
+      hasSwimAccess: effectiveCategories(u.role, u.visibleCategories, config.categories).includes(
+        "swim",
+      ),
     }));
 
   return (
