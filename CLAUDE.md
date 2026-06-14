@@ -581,16 +581,23 @@ hierarchy-hidden higher-ranked account falls through to a safe skip); **skip**
 (the default) leaves existing accounts untouched. Overwrites are audited
 `user.bulk_update` (creates stay `user.bulk_create`). Launcher **category
 visibility** (swim / fit / marketing) lives in the
-same permissions matrix: each role has **default categories**, and the page's "User overrides"
-tab can pin a per-user list (`users.visibleCategories`; NULL = inherit the role default).
-`getCurrentUser()` resolves the effective list (override ?? role default; super_admin always
-all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in the brand-section
-layouts. The old `/system/categories` page 301-redirects to `/system/permissions`.
+same permissions matrix: each role has **default categories**, and the page's **"Per-account
+access" tab** (formerly "User overrides") can pin a per-user list (`users.visibleCategories`;
+NULL = inherit the role default). `getCurrentUser()` resolves the effective list (override ??
+role default; super_admin always all) into `CurrentUser.visibleCategories`, enforced on the
+launcher AND in the brand-section layouts. The old `/system/categories` page 301-redirects to
+`/system/permissions`. Both cards on the "Per-account access" tab
+(`components/category-overrides.tsx` + `components/center-overrides.tsx`) ship the standard
+list-controls (Search + per-column Sort + Role/state/Status Filter via the shared
+`table-controls` kit) plus a select-all and a **bulk action bar** — bulk grant/revoke a
+category or center, or reset across the selected rows (one optimistic `PATCH /api/users/[id]`
+per selected row; only the failed rows revert on a partial failure; the "N selected" count is
+scoped to the rows visible under the current filter).
 
 **Center-scoped approvals (`users.managedCenters`, migration 0039).** An admin / supervisor can be
 restricted to **review, approve, and finalize only for the center(s) they manage** (jsonb `string[] |
 null`; **NULL/empty = all centers** = the historical behavior; **super_admin always all**). It mirrors
-`visibleCategories`: assigned per-user on the **`/system/permissions` "User overrides" tab** (a second
+`visibleCategories`: assigned per-user on the **`/system/permissions` "Per-account access" tab** (a second
 "Center scope" card under the category overrides — `components/center-overrides.tsx`, listing only
 accounts whose role can review/finalize), written via `PATCH /api/users/[id]` with the `managedCenters`
 field **gated super_admin-only** (like categories) even though that route is otherwise `manage_users`.
