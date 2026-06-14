@@ -1,7 +1,18 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Clock } from "lucide-react";
-import { getAllowanceConfig, getLatestAssessmentFinalByCoach, getRun } from "@/lib/db/queries";
+import {
+  getAllowanceConfig,
+  getLatestAssessmentFinalByCoach,
+  getRun,
+  listAllowanceRuns,
+  listCoaches,
+} from "@/lib/db/queries";
+import {
+  orphanLinkableAllowances,
+  type CoachLinkInfo,
+  type TieredAllowanceRec,
+} from "@/lib/kpi/allowance-link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
 import { Badge } from "@/components/ui";
@@ -72,6 +83,49 @@ export default async function RunDetailPage({
     const assessmentByCoach: Record<number, number> = Object.fromEntries(
       [...assessmentMap.entries()].map(([coachId, pct]) => [coachId, Math.round(pct)]),
     );
+
+    // Surface the month's teaching-allowance records that linked to NO coach in
+    // this run (a coach who taught but whose allowance didn't bind → a wrong
+    // payout base). The auto-compute → draft path never passes through the
+    // dashboard's interactive linker, so this is the only place the operator
+    // sees it before finalizing. Reconcile exactly like the compute did —
+    // enrich each record with its coach profile's CSV-account aliases so a short
+    // KPI name (VASSEN) still matches a full allowance name (VASSENTHAN).
+    const [allowanceRuns, coachRecords] = await Promise.all([
+      listAllowanceRuns(run.periodLabel),
+      listCoaches(),
+    ]);
+    const aliasById = new Map(coachRecords.map((c) => [c.id, c.aliases ?? []]));
+    type ReviewAllowanceRec = TieredAllowanceRec & { teaching: number };
+    const allowanceRecs: ReviewAllowanceRec[] = allowanceRuns.map((r) => ({
+      coachId: r.coachId,
+      canonicalName: r.canonicalName,
+      aliases: r.coachId != null ? aliasById.get(r.coachId) ?? [] : [],
+      tier: r.tier,
+      teaching: r.teaching,
+    }));
+    // We reconcile against the SAVED coachResults — the post-leaderboard-filter
+    // coaches, each carrying only its scored (included) accounts. That's a subset
+    // of what `buildRunCoaches` linked against (all group accounts, pre-filter),
+    // so this can only ever OVER-report: a record that linked solely via an
+    // excluded-account alias, or to a ghost group later dropped for zero teaching,
+    // may show here as unlinked. Both are false positives in the SAFE direction —
+    // the panel never hides a genuinely-unlinked allowance, which is the property
+    // that matters for a "double-check before finalizing" aid. (The dominant link
+    // methods — coachId / exact / normalized name — don't use accounts at all, so
+    // in practice the result matches the run for every realistic case.)
+    const coachInfos: CoachLinkInfo[] = run.coachResults.map((c) => ({
+      coachId: c.coachId,
+      canonicalName: c.canonicalName,
+      accounts: c.accounts,
+    }));
+    const { orphans, nonLinkableCount } = orphanLinkableAllowances(allowanceRecs, coachInfos);
+    const orphanAllowances = orphans.map((r) => ({
+      canonicalName: r.canonicalName,
+      tier: r.tier,
+      teaching: r.teaching,
+    }));
+
     return (
       <>
         {header}
@@ -86,6 +140,8 @@ export default async function RunDetailPage({
           }}
           assessmentByCoach={assessmentByCoach}
           centers={allowanceConfig.centers}
+          orphanAllowances={orphanAllowances}
+          nonLinkableAllowanceCount={nonLinkableCount}
         />
       </>
     );

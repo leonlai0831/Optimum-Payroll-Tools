@@ -12,6 +12,8 @@
  */
 
 import { getCleanName } from "./csv";
+import { isLinkableTier } from "@/lib/allowance/tier-rules";
+import type { AllowanceTier } from "@/lib/allowance/types";
 
 /** Minimal shape of a saved allowance record needed to link it. */
 export interface AllowanceLinkRec {
@@ -19,6 +21,12 @@ export interface AllowanceLinkRec {
   canonicalName: string;
   /** The original CSV account names this allowance's coach was saved under. */
   aliases?: string[];
+}
+
+/** An allowance record carrying its pay tier, so orphan reporting can drop the
+ *  structurally non-teaching tiers (admin / T0 never link to a KPI coach). */
+export interface TieredAllowanceRec extends AllowanceLinkRec {
+  tier: AllowanceTier | null;
 }
 
 /** Minimal shape of a KPI coach group needed to link it. */
@@ -165,4 +173,22 @@ export function reconcileAllowances<R extends AllowanceLinkRec>(
   const unmatchedCoaches = coaches.filter((_, i) => !usedCoach.has(i));
   const orphanRecs = list.filter((_, i) => !usedRec.has(i));
   return { links, unmatchedCoaches, orphanRecs };
+}
+
+/**
+ * The teaching-tier allowance records for a month that linked to NO coach — the
+ * actionable "keyed but unmatched" set a reviewer must see before finalizing (a
+ * coach who taught but whose allowance didn't link gets a wrong payout base).
+ * Admin/T0 records (`NON_TEACHING_TIERS`) never link, so they're excluded from
+ * the list and returned only as a hidden count. Pure wrapper over
+ * `reconcileAllowances` — the single source of truth for orphan reporting,
+ * shared by the dashboard panel and the finalize-review screen.
+ */
+export function orphanLinkableAllowances<R extends TieredAllowanceRec>(
+  list: R[],
+  coaches: CoachLinkInfo[],
+): { orphans: R[]; nonLinkableCount: number } {
+  const orphanRecs = reconcileAllowances(list, coaches).orphanRecs;
+  const orphans = orphanRecs.filter((r) => isLinkableTier(r.tier));
+  return { orphans, nonLinkableCount: orphanRecs.length - orphans.length };
 }
