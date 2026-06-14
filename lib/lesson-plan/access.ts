@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/session";
 import { userCan } from "@/lib/auth/permissions";
+import { canManageCenter } from "@/lib/auth/types";
 
 /**
  * The two lesson-plan capabilities resolved once per request. Visibility rules:
@@ -36,12 +37,20 @@ export async function lessonPlanAccess(): Promise<
   return { access: { user, canEdit, canReview } };
 }
 
-/** Whether this user may open the plan: its creator, or any reviewer. */
+/**
+ * Whether this user may open the plan: its creator always, or a reviewer **only
+ * for a center they manage**. A center-scoped reviewer (`managedCenters` set)
+ * must not read/export plans outside their centers — the list query already
+ * filters by center, so without this gate a restricted reviewer could fetch any
+ * plan by id (the GET / PDF routes). `managedCenters === null` = unrestricted
+ * (and super_admin), so they keep full access.
+ */
 export function canViewPlan(
   access: LessonPlanAccess,
-  plan: { createdByUserId: number },
+  plan: { createdByUserId: number; center: string | null },
 ): boolean {
-  return access.canReview || (access.canEdit && plan.createdByUserId === access.user.id);
+  if (access.canEdit && plan.createdByUserId === access.user.id) return true;
+  return access.canReview && canManageCenter(access.user.managedCenters, plan.center);
 }
 
 /** Whether this user may edit / submit the plan: its creator only. */
