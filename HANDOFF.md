@@ -1,9 +1,62 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-14**). `main` is green:
-**vitest 538/538**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
+**vitest 539/539**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
 architecture + the frozen Settings IA rules (it now opens with a TOC + a
 "Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
+
+## This session (2026-06-14, continuation 6) — Backlog D + G shipped (#188, #189)
+
+Two full build→`/code-review`→test→gstack-QA→merge cycles on the
+`/system/permissions` page; **migrations now run to 0040**.
+
+1. **#188 — Backlog D (list-controls).** The overrides tab (renamed **"User
+   overrides" → "Per-account access"**) now ships, on BOTH cards
+   (`category-overrides.tsx` + `center-overrides.tsx`), the standard kit:
+   **Full Name** in the identity cell, **Search + per-column Sort + Role/state/
+   Status Filter**, **select-all** (desktop header + a mobile select-all row) and
+   a **bulk action bar** (一键勾选/取消 — bulk grant/revoke a category or center, or
+   reset, across the *visible* selection). Built on the E kit (#186). `/code-review`
+   caught two real bugs, both fixed: ① bulk **partial-failure reverts only the
+   failed rows** (the optimistic `overrideById` is mount-seeded, `router.refresh()`
+   can't reconcile it, so reverting succeeded rows showed stale data); ② **"N
+   selected" is scoped to rows visible under the current filter** (was counting
+   filter-hidden selections). Covers D asks #1/#2/#3/#5.
+2. **#189 — Backlog G + D#4/#6 (default-deny categories).** Launcher visibility
+   flipped from all-three-by-default to **DEFAULT-DENY**: a new account sees no
+   department until a super_admin grants one per-account.
+   - `DEFAULT_PERMISSION_CONFIG.categories` → `[]` per role; `normalizePermissionConfig`
+     now resolves a missing/invalid role entry to `[]` (deny), **not** all-three.
+   - **Migration 0040** = the safe rollout: in **one atomic data-modifying CTE**,
+     snapshot each inheriting account's CURRENT effective categories into a per-user
+     override, THEN flip the stored role defaults to `[]` — existing accounts keep
+     access, only NEW accounts default-deny. Audit once (`NOT EXISTS` guard);
+     reconcile-replay-safe (a new NULL account on replay reads the now-`[]` default →
+     stays denied). `/code-review` (high) flagged 3 migration/resolver issues — all
+     fixed (deny fallback, once-only audit, atomic CTE). Verified on populated data
+     via a standalone PGlite harness (since deleted) AND in the browser.
+   - **D#4:** Roles tab no longer edits per-role categories (capabilities only).
+     **D#6:** the category card is now **direct-edit** checkboxes — Override/Reset/
+     inherit machinery + the Visibility column removed; the state filter became an
+     **Access (has/none)** filter.
+
+**Both browser-QA'd** (gstack, phone 390px + desktop 1280px): D — search 6→1, all
+filters + clear, sort, full-name sub-line, select-all (both layouts), bulk
+revoke/restrict persisted; G — after migration the pre-existing accounts kept
+all-three (as overrides), a freshly-created account is default-deny, direct-edit
+persists, Roles tab has no category section.
+
+**Follow-ups (carry):**
+- **Backlog D & G are DONE** — `/system/permissions` is fully reworked. **C (#180)
+  Center-scope UI was QA'd last session.**
+- **Next build item: E step 2** — convert the remaining ~15 control-less lists onto
+  the kit in per-module batches (one PR each): ① Allowance/Freelancer/Commission
+  history ② `/progress` · `/system/audit` · `/system/errors` · `/timesheets/schedules`
+  ③ `/lesson-plans/history` ④ KPI run detail (`RunCoachTable`) · `/staff/payees`.
+  All safe/additive, no operator decision needed.
+- **DB cold-start (operator env change, NOT code):** point `POSTGRES_URL` at the Neon
+  **pooled** (`-pooler`) endpoint; re-check `/system/errors` is clean and clear old rows.
+- Still NOT browser-QA'd from earlier sessions: A (#175), B (#176).
 
 ## This session (2026-06-14, continuation 5) — Center-scope UI QA'd + Backlog E kit shipped (#186)
 
@@ -242,23 +295,12 @@ Also this session (NOT a feature PR):
  `DELETE /api/timesheets`. Chose group-by-window-key (no `sessionId` migration);
  persistence stays one row per class line so payroll is untouched.
 
-**D. Permissions / User-overrides redesign (`/system/permissions`).** Six asks:
- 1. show **Full Name** (not just nickname/email);
- 2. **search + per-column sort/filter**;
- 3. **bulk check/uncheck the filtered rows** at once;
- 4. move the launcher-category control **off the Roles tab** — manage category
-    visibility per-user (the Roles tab's categories can be removed);
- 5. **rename "User overrides"** to something clearer;
- 6. drop the **Visibility** column.
- **Operator confirmed 2026-06-14 (with screenshot):** the "User overrides" tab
- currently lists **203 accounts with NO search / sort / filter and NO
- select-all/clear** — and this applies to **BOTH** cards on the tab now: the
- category-overrides list AND the new **Center scope** card (#180, same
- controls-less pattern). Asks #2 (search + per-column sort/filter) and #3 (bulk
- check/uncheck the filtered rows = 一键勾选/取消) cover it. Build the controls on the
- **E kit** (`SearchInput`/`FilterBar`/`useRowSelection`/`SelectAllCheckbox`), so
- **E-kit lands before D**. (C is DONE — the per-admin center assignment landed on
- this page, so the page now hosts category + center per-user overrides.)
+**D. Permissions / "Per-account access" redesign — ✅ DONE (#188 + #189).** All six
+ asks shipped: #1 Full Name, #2 search + per-column sort/filter, #3 bulk
+ check/uncheck (一键勾选/取消), #5 rename "User overrides" → "Per-account access"
+ (#188); #4 category control removed from the Roles tab + #6 Visibility column
+ dropped (the category card is now direct-edit checkboxes) (#189, with G). Built on
+ the E kit.
 
 **E. List-control standardization (operator decision 2026-06-13: kit + docs FIRST,
  then per-module batches).** Standard to enforce: **every data list ships Search +
@@ -286,31 +328,20 @@ Also this session (NOT a feature PR):
    Permissions-page redesign's "search + per-column sort/filter + bulk check/uncheck"
    asks should be built ON the same kit, so do PR-kit before D.
 
-**G. Default-deny launcher categories + drop the Visibility column (operator request
- 2026-06-14, with screenshot). Supersedes the old "Marketing visibility" item.**
- 1. **Drop the "Visibility" column** from the User-overrides tab (= D ask #6 — do them
-    together).
- 2. **Flip category visibility to default-DENY.** Today `DEFAULT_PERMISSION_CONFIG.categories`
-    grants **all three** (swim / fit / marketing) to every role, so everyone sees everything
-    by default; the operator wants the default to be **nothing** — an admin must **manually
-    tick a department** on the User-overrides tab before an account sees ANY launcher
-    category.
-    - **Code lever:** set the role-default categories to `[]` (decide per role; super_admin
-      always all). The resolver is `effectiveCategories` (override ?? role default; super_admin
-      → all) — flipping the role default to `[]` is the switch. This alone only affects FRESH
-      seeds (prod already has a stored config).
-    - **Existing prod (stored config + 203 accounts):** a hard flip locks out every
-      *inheriting* account until granted. **Safe rollout (recommended):** a migration that
-      **snapshots each account's CURRENT effective categories into a per-user override BEFORE**
-      flipping the role default to `[]` — existing users keep their access, only NEW accounts
-      default-deny. (Alt: hard flip + a bulk-grant pass.) Can ship independently of the D
-      redesign (it's a config/migration change, not the UI rework).
+**G. Default-deny launcher categories + drop the Visibility column — ✅ DONE (#189).**
+ `DEFAULT_PERMISSION_CONFIG.categories` → `[]` per role (super_admin always all);
+ `normalizePermissionConfig` resolves a missing/invalid role entry to `[]` (deny).
+ **Migration 0040** does the safe rollout in one atomic CTE: snapshot each inheriting
+ account's current effective categories into a per-user override, THEN flip the stored
+ defaults to `[]` (existing accounts keep access; new accounts default-deny; audited
+ once; reconcile-replay-safe — verified on populated data + in the browser). Roles tab
+ no longer edits categories; the per-account card is direct-edit (Visibility column gone).
 
 **Carried over (largely handled, verify):** pre-#166 wrong auto-links — #172's
  DB UNIQUE now prevents new dupes and 0038 dedups existing ones (keeping the active
  login); **verify the dedup kept the intended links** and re-run AI auto-link for
- any orphaned active accounts. Real-device QA: A (#175) and B (#176) shipped this
- session but were NOT browser-QA'd; C/D/E are unbuilt → QA when built.
+ any orphaned active accounts. Real-device QA: A (#175) and B (#176) still NOT
+ browser-QA'd (C/D/G are now QA'd + shipped). **E step 2** is the next build item.
 
 ## Environment notes (Claude Code on the web)
 
