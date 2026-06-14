@@ -580,17 +580,27 @@ outranks** (hierarchy scope, server-authoritative via `listUsers` so a
 hierarchy-hidden higher-ranked account falls through to a safe skip); **skip**
 (the default) leaves existing accounts untouched. Overwrites are audited
 `user.bulk_update` (creates stay `user.bulk_create`). Launcher **category
-visibility** (swim / fit / marketing) lives in the
-same permissions matrix: each role has **default categories**, and the page's **"Per-account
-access" tab** (formerly "User overrides") can pin a per-user list (`users.visibleCategories`;
-NULL = inherit the role default). `getCurrentUser()` resolves the effective list (override ??
-role default; super_admin always all) into `CurrentUser.visibleCategories`, enforced on the
-launcher AND in the brand-section layouts. The old `/system/categories` page 301-redirects to
-`/system/permissions`. Both cards on the "Per-account access" tab
-(`components/category-overrides.tsx` + `components/center-overrides.tsx`) ship the standard
-list-controls (Search + per-column Sort + Role/state/Status Filter via the shared
-`table-controls` kit) plus a select-all and a **bulk action bar** — bulk grant/revoke a
-category or center, or reset across the selected rows (one optimistic `PATCH /api/users/[id]`
+visibility** (swim / fit / marketing) is **default-deny** (Backlog G, migration **0040**):
+`DEFAULT_PERMISSION_CONFIG.categories` is `[]` per role, so a **new account sees NO launcher
+department until a super_admin grants one per-account** on the Permissions **"Per-account
+access" tab** (`users.visibleCategories`; NULL/`[]` = no access; a non-empty list = those
+categories). `getCurrentUser()` resolves the effective list (override ?? role default;
+super_admin always all) into `CurrentUser.visibleCategories`, enforced on the launcher AND in
+the brand-section layouts. **There is no per-role category default to edit** — the Roles tab
+only edits capabilities now (the `categories` field stays in `PermissionConfig` as the
+resolver's empty fallback + stored-shape stability). Migration **0040** flips existing
+deployments safely: it first **snapshots each inheriting account's CURRENT effective categories
+into an explicit per-user override**, THEN sets the stored role defaults to `[]`, so existing
+accounts keep their access and only NEW accounts default-deny (audited
+`permissions.default_deny_categories`; idempotent / reconcile-replay-safe — see the migration
+header). `normalizePermissionConfig` still backfills a *missing/invalid* stored category to
+all-three (a conservative anti-lockout fallback for corrupt data — post-0040 every role has an
+explicit `[]`, so it never fires). The old `/system/categories` page 301-redirects to
+`/system/permissions`. The **"Per-account access" tab** (`components/category-overrides.tsx`
+direct-edits each account's categories; `components/center-overrides.tsx` the center scope)
+ships the standard list-controls (Search + per-column Sort + Role/Access/Status Filter via the
+shared `table-controls` kit) plus a select-all and a **bulk action bar** — bulk grant/revoke a
+category or center, or clear, across the selected rows (one optimistic `PATCH /api/users/[id]`
 per selected row; only the failed rows revert on a partial failure; the "N selected" count is
 scoped to the rows visible under the current filter).
 

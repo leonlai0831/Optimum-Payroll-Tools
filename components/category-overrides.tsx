@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
@@ -34,33 +33,31 @@ export interface OverrideUser {
   displayName: string;
   fullName: string;
   role: Role;
-  /** Stored per-user override; null = inherits the role's default categories. */
+  /** Stored per-user list of launcher categories; null/[] = no access (deny). */
   visibleCategories: ToolCategory[] | null;
   active: boolean;
 }
 
-type StateFilter = "" | "inherit" | "override";
+type AccessFilter = "" | "has" | "none";
 type ActiveFilter = "" | "active" | "inactive";
-type SortKey = "account" | "role" | "state";
+type SortKey = "account" | "role";
 
 /**
  * System Setting → Permissions → "Per-account access": per-account launcher
- * categories. Every row shows the EFFECTIVE list (override ?? role default);
- * by default a row "Inherits from role", and an Override action pins the
- * account to an explicit list (Reset returns it to inheriting). super_admin
- * rows are locked — they always see every category.
+ * categories. Launcher visibility is **default-deny** (Backlog G) — there are no
+ * editable per-role defaults; a new account sees no department until a category
+ * is ticked here. Each row's category checkboxes write the account's
+ * `visibleCategories` directly (empty → null = no access). super_admin rows are
+ * locked — they always see every category.
  *
  * The list ships the standard Search + Sort + Filter controls plus a select-all
- * and a bulk action bar (grant/revoke a category or reset across the selected
- * rows) — built on the shared `table-controls` kit (see the list-control
- * standard in CLAUDE.md Conventions).
+ * and a bulk action bar (grant/revoke a category or clear access across the
+ * selected rows) — built on the shared `table-controls` kit.
  *
  * All mutation state lives HERE (not in the per-user rows): each user renders
- * twice (mobile card + desktop row, per responsive-table.tsx), so row-local
- * state would fork between the two mounts. Updates are optimistic — the
- * override flips immediately and reverts on failure — and the row stays
- * disabled while its PATCH is in flight so a quick second tap can't compute
- * the next list from stale data.
+ * twice (mobile card + desktop row), so row-local state would fork between the
+ * two mounts. Updates are optimistic — the categories flip immediately and
+ * revert on failure — and the row stays disabled while its PATCH is in flight.
  */
 export function CategoryOverrides({
   users,
@@ -71,7 +68,7 @@ export function CategoryOverrides({
 }) {
   const router = useRouter();
   const toast = useToast();
-  // Last override we know per user; starts from server props, updated optimistically.
+  // Last categories we know per user; starts from server props, updated optimistically.
   const [overrideById, setOverrideById] = useState<Record<number, ToolCategory[] | null>>(
     () =>
       Object.fromEntries(
@@ -87,7 +84,7 @@ export function CategoryOverrides({
   // ── List controls ────────────────────────────────────────────────────────
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "">("");
-  const [stateFilter, setStateFilter] = useState<StateFilter>("");
+  const [accessFilter, setAccessFilter] = useState<AccessFilter>("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("");
 
   const roleOptions = useMemo(() => {
@@ -98,7 +95,6 @@ export function CategoryOverrides({
   function effectiveFor(user: OverrideUser): ToolCategory[] {
     return effectiveCategories(user.role, overrideById[user.id], roleDefaults);
   }
-  const isInheriting = (u: OverrideUser) => (overrideById[u.id] ?? null) === null;
 
   const filtered = useMemo(() => {
     return users.filter((u) => {
@@ -106,25 +102,24 @@ export function CategoryOverrides({
       if (!includesText(hay, query)) return false;
       if (roleFilter && u.role !== roleFilter) return false;
       if (activeFilter && (activeFilter === "active") !== u.active) return false;
-      if (stateFilter) {
-        if (u.role === "super_admin") return false; // locked rows have no state
-        const inheriting = isInheriting(u);
-        if (stateFilter === "inherit" && !inheriting) return false;
-        if (stateFilter === "override" && inheriting) return false;
+      if (accessFilter) {
+        if (u.role === "super_admin") return accessFilter === "has"; // always has access
+        const hasAccess = effectiveFor(u).length > 0;
+        if (accessFilter === "has" && !hasAccess) return false;
+        if (accessFilter === "none" && hasAccess) return false;
       }
       return true;
     });
-    // overrideById feeds the state filter; recompute when it changes.
+    // overrideById feeds the access filter; recompute when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [users, query, roleFilter, stateFilter, activeFilter, overrideById]);
+  }, [users, query, roleFilter, accessFilter, activeFilter, overrideById]);
 
   const { sorted, sort, toggleSort } = useTableSort<OverrideUser, SortKey>(filtered, {
     account: (u) => u.displayName || u.fullName || u.email,
     role: (u) => ROLE_LABELS[u.role],
-    state: (u) => (u.role === "super_admin" ? 2 : isInheriting(u) ? 0 : 1),
   });
 
-  // Only non-super-admin rows are selectable (locked rows can't be overridden).
+  // Only non-super-admin rows are selectable (locked rows can't be narrowed).
   const selectableIds = useMemo(
     () => sorted.filter((u) => u.role !== "super_admin").map((u) => u.id),
     [sorted],
@@ -137,7 +132,8 @@ export function CategoryOverrides({
     [selectableIds, sel.selected],
   );
   const selectedCount = selectedVisibleIds.length;
-  const filtersActive = query !== "" || roleFilter !== "" || stateFilter !== "" || activeFilter !== "";
+  const filtersActive =
+    query !== "" || roleFilter !== "" || accessFilter !== "" || activeFilter !== "";
 
   async function patchOverride(user: OverrideUser, next: ToolCategory[] | null) {
     const previous = overrideById[user.id] ?? null;
@@ -162,18 +158,17 @@ export function CategoryOverrides({
     }
   }
 
+  /** Toggle one category for one account — writes the full list (empty → null = deny). */
   function toggle(user: OverrideUser, category: ToolCategory) {
-    const current = overrideById[user.id];
-    if (!current) return; // inheriting — Override must be enabled first
-    const next = current.includes(category)
+    if (user.role === "super_admin") return;
+    const current = effectiveFor(user);
+    const nextList = current.includes(category)
       ? current.filter((c) => c !== category)
       : TOOL_CATEGORIES.filter((c) => c === category || current.includes(c));
-    void patchOverride(user, next);
+    void patchOverride(user, nextList.length ? nextList : null);
   }
 
   // ── Bulk actions over the current selection ────────────────────────────────
-  /** Run one PATCH per target id, optimistically applying `compute`, then
-   *  refresh once. Reverts every row on the first error and reports it. */
   async function bulkApply(
     label: string,
     compute: (user: OverrideUser) => ToolCategory[] | null,
@@ -197,8 +192,7 @@ export function CategoryOverrides({
         ),
       );
       // Revert ONLY the rows whose PATCH failed; the successful ones keep their
-      // optimistic value (it matches what persisted, and router.refresh() can't
-      // re-seed this mount-initialized state).
+      // optimistic value (router.refresh() can't re-seed this mounted state).
       const failedTargets = targets.filter((_, i) => results[i].status === "rejected");
       if (failedTargets.length > 0) {
         setOverrideById((m) => ({
@@ -221,20 +215,22 @@ export function CategoryOverrides({
       TOOL_CATEGORIES.filter((c) => c === category || effectiveFor(u).includes(c)),
     );
   const revokeCategory = (category: ToolCategory) =>
-    void bulkApply(`Revoked ${TOOL_CATEGORY_LABELS[category]}`, (u) =>
-      effectiveFor(u).filter((c) => c !== category),
-    );
-  const bulkReset = () => void bulkApply("Reset to role default", () => null);
+    void bulkApply(`Revoked ${TOOL_CATEGORY_LABELS[category]}`, (u) => {
+      const next = effectiveFor(u).filter((c) => c !== category);
+      return next.length ? next : null;
+    });
+  const clearAccess = () => void bulkApply("Cleared access", () => null);
 
   const busy = (id: number) => busyId === id || bulkBusy;
 
   return (
     <div className="space-y-4">
       <Card className="p-4 text-sm text-gray-500">
-        Each account inherits its role&apos;s launcher categories (the Roles tab).
-        Override an account to pin a different list — e.g. one gym admin who also
-        needs <strong>{TOOL_CATEGORY_LABELS.swim}</strong>. Capabilities still apply
-        within a category; Super Admins always see everything.
+        Launcher visibility is <strong>default-deny</strong>: a new account sees no
+        department until you tick a category here. Tick the launcher categories
+        (<strong>{TOOL_CATEGORY_LABELS.swim}</strong> / {TOOL_CATEGORY_LABELS.fit} /{" "}
+        {TOOL_CATEGORY_LABELS.marketing}) each account should see. Capabilities still
+        apply within a category; Super Admins always see everything.
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-sm font-bold text-gray-900">
@@ -259,14 +255,14 @@ export function CategoryOverrides({
               allLabel="All roles"
             />
             <FilterSelect
-              label="State"
-              value={stateFilter}
-              onChange={(v) => setStateFilter(v as StateFilter)}
+              label="Access"
+              value={accessFilter}
+              onChange={(v) => setAccessFilter(v as AccessFilter)}
               options={[
-                { value: "inherit", label: "Inherits" },
-                { value: "override", label: "Override" },
+                { value: "has", label: "Has access" },
+                { value: "none", label: "No access" },
               ]}
-              allLabel="All"
+              allLabel="Any"
             />
             <FilterSelect
               label="Status"
@@ -309,8 +305,8 @@ export function CategoryOverrides({
                 − {TOOL_CATEGORY_LABELS[c]}
               </Button>
             ))}
-            <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={bulkReset}>
-              <RotateCcw className="h-3.5 w-3.5" /> Reset to default
+            <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={clearAccess}>
+              Clear access
             </Button>
             <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={sel.clear}>
               Clear selection
@@ -338,14 +334,11 @@ export function CategoryOverrides({
                 key={u.id}
                 user={u}
                 layout="card"
-                override={overrideById[u.id] ?? null}
                 effective={effectiveFor(u)}
                 busy={busy(u.id)}
                 selected={sel.has(u.id)}
                 onSelect={(on) => sel.toggle(u.id, on)}
                 onToggle={(c) => toggle(u, c)}
-                onOverride={() => void patchOverride(u, effectiveFor(u))}
-                onReset={() => void patchOverride(u, null)}
               />
             ))
           )}
@@ -368,13 +361,6 @@ export function CategoryOverrides({
                     {TOOL_CATEGORY_LABELS[c]}
                   </th>
                 ))}
-                <SortTh
-                  label="Visibility"
-                  sortKey="state"
-                  sort={sort}
-                  onSort={toggleSort}
-                  align="right"
-                />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -383,14 +369,11 @@ export function CategoryOverrides({
                   key={u.id}
                   user={u}
                   layout="row"
-                  override={overrideById[u.id] ?? null}
                   effective={effectiveFor(u)}
                   busy={busy(u.id)}
                   selected={sel.has(u.id)}
                   onSelect={(on) => sel.toggle(u.id, on)}
                   onToggle={(c) => toggle(u, c)}
-                  onOverride={() => void patchOverride(u, effectiveFor(u))}
-                  onReset={() => void patchOverride(u, null)}
                 />
               ))}
             </tbody>
@@ -403,7 +386,7 @@ export function CategoryOverrides({
   function resetFilters() {
     setQuery("");
     setRoleFilter("");
-    setStateFilter("");
+    setAccessFilter("");
     setActiveFilter("");
   }
 }
@@ -414,28 +397,21 @@ const LOCKED_NOTE = "Always sees every category.";
 function UserRow({
   user,
   layout,
-  override,
   effective,
   busy,
   selected,
   onSelect,
   onToggle,
-  onOverride,
-  onReset,
 }: {
   user: OverrideUser;
   layout: "card" | "row";
-  override: ToolCategory[] | null;
   effective: ToolCategory[];
   busy: boolean;
   selected: boolean;
   onSelect: (on: boolean) => void;
   onToggle: (category: ToolCategory) => void;
-  onOverride: () => void;
-  onReset: () => void;
 }) {
   const locked = user.role === "super_admin";
-  const inheriting = override === null;
 
   const identity = (
     <>
@@ -457,25 +433,6 @@ function UserRow({
     >
       {ROLE_LABELS[user.role]}
     </span>
-  );
-  const stateBadge = locked ? null : (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-        inheriting ? "bg-gray-100 text-gray-500" : "bg-amber-50 text-amber-700",
-      )}
-    >
-      {inheriting ? `Inherits from ${ROLE_LABELS[user.role]}` : "Override"}
-    </span>
-  );
-  const action = locked ? null : inheriting ? (
-    <Button size="sm" variant="outline" disabled={busy} onClick={onOverride}>
-      Override
-    </Button>
-  ) : (
-    <Button size="sm" variant="ghost" disabled={busy} onClick={onReset}>
-      <RotateCcw className="h-3.5 w-3.5" /> Reset to role default
-    </Button>
   );
 
   if (layout === "card") {
@@ -499,22 +456,17 @@ function UserRow({
         {locked ? (
           <p className="text-xs text-gray-400">{LOCKED_NOTE}</p>
         ) : (
-          <>
-            <div>{stateBadge}</div>
-            <div className="flex flex-wrap gap-2">
-              {TOOL_CATEGORIES.map((c) => (
-                <CategoryChip
-                  key={c}
-                  category={c}
-                  checked={effective.includes(c)}
-                  // Inherited chips display the role default; tap Override to edit.
-                  disabled={busy || inheriting}
-                  onToggle={() => onToggle(c)}
-                />
-              ))}
-            </div>
-            <div className="pt-1">{action}</div>
-          </>
+          <div className="flex flex-wrap gap-2">
+            {TOOL_CATEGORIES.map((c) => (
+              <CategoryChip
+                key={c}
+                category={c}
+                checked={effective.includes(c)}
+                disabled={busy}
+                onToggle={() => onToggle(c)}
+              />
+            ))}
+          </div>
         )}
       </div>
     );
@@ -536,37 +488,22 @@ function UserRow({
       <td className="px-4 py-2">{identity}</td>
       <td className="px-4 py-2">{roleBadge}</td>
       {locked ? (
-        <td
-          colSpan={TOOL_CATEGORIES.length + 1}
-          className="px-4 py-2 text-center text-xs text-gray-400"
-        >
+        <td colSpan={TOOL_CATEGORIES.length} className="px-4 py-2 text-center text-xs text-gray-400">
           {LOCKED_NOTE}
         </td>
       ) : (
-        <>
-          {TOOL_CATEGORIES.map((c) => (
-            <td key={c} className="px-4 py-2 text-center">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-indigo-600 disabled:opacity-50"
-                checked={effective.includes(c)}
-                disabled={busy || inheriting}
-                onChange={() => onToggle(c)}
-                title={
-                  inheriting
-                    ? `${TOOL_CATEGORY_LABELS[c]} — from the ${ROLE_LABELS[user.role]} role default`
-                    : TOOL_CATEGORY_LABELS[c]
-                }
-              />
-            </td>
-          ))}
-          <td className="px-4 py-2">
-            <div className="flex items-center justify-end gap-2">
-              {stateBadge}
-              {action}
-            </div>
+        TOOL_CATEGORIES.map((c) => (
+          <td key={c} className="px-4 py-2 text-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-indigo-600 disabled:opacity-50"
+              checked={effective.includes(c)}
+              disabled={busy}
+              onChange={() => onToggle(c)}
+              title={TOOL_CATEGORY_LABELS[c]}
+            />
           </td>
-        </>
+        ))
       )}
     </tr>
   );

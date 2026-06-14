@@ -281,6 +281,13 @@
       "when": 1781412326983,
       "tag": "0039_perfect_fat_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1781441994983,
+      "tag": "0040_default_deny_categories",
+      "breakpoints": true
     }
   ]
 }

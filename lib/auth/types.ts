@@ -317,12 +317,16 @@ const DEFAULT_CAPABILITIES: Record<ConfigurableRole, Capability[]> = {
 
 export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
   capabilities: DEFAULT_CAPABILITIES,
-  // Role defaults for launcher visibility. All three per role preserves the
-  // pre-unification behavior (every account saw everything unless a per-user
-  // override narrowed it) until the owner tightens these in /system/permissions.
+  // Launcher visibility is DEFAULT-DENY (Backlog G): a new account sees no
+  // department until a super_admin grants one per-user on the Permissions
+  // "Per-account access" tab. There are no editable per-role category defaults
+  // anymore — the field stays (it is the resolver's fallback and keeps the
+  // stored shape stable) but is always empty for a fresh seed. super_admin
+  // always sees everything (handled in effectiveCategories). Existing deploys
+  // are flipped + snapshotted by migration 0040 so current accounts keep access.
   categories: {
-    admin: [...TOOL_CATEGORIES],
-    supervisor: [...TOOL_CATEGORIES],
-    staff: [...TOOL_CATEGORIES],
+    admin: [],
+    supervisor: [],
+    staff: [],
   },
 };

@@ -9,6 +9,8 @@ import { getCapabilities, userCan } from "./permissions";
 import { resolveSessionPassword } from "./session";
 import {
   ALL_TOOL_CATEGORIES,
+  CONFIGURABLE_ROLES,
+  DEFAULT_PERMISSION_CONFIG,
   ROLES,
   canManageCenter,
   canManageUserRole,
@@ -136,15 +138,16 @@ describe("user accounts (PGlite in-memory)", () => {
     expect(u.visibleCategories).toEqual(["marketing"]);
   });
 
-  it("new users default to NULL (inherit role default); updateUser overrides and resets", async () => {
-    // Omitted at creation → NULL → the account inherits its role's categories,
-    // so effective = the role default from the permission matrix.
+  it("new users default to NULL (inherit role default = no access under default-deny); updateUser overrides and resets", async () => {
+    // Omitted at creation → NULL → the account inherits its role default, which
+    // is now EMPTY (default-deny, Backlog G), so the account sees no department.
     const u = await queries.createUser({ email: "cat@x.io", password: "pw", role: "staff" });
     expect(u.visibleCategories).toBeNull();
     const config = await queries.getPermissionConfig();
     expect(effectiveCategories(u.role, u.visibleCategories, config.categories)).toEqual(
       config.categories.staff,
     );
+    expect(config.categories.staff).toEqual([]); // default-deny
 
     await queries.updateUser(u.id, { visibleCategories: ["fit"] });
     let reread = await queries.getUserById(u.id);
@@ -185,6 +188,14 @@ describe("effectiveCategories (override ?? role default; super_admin all)", () =
   it("super_admin always sees every category, override or not", () => {
     expect(effectiveCategories("super_admin", null, defaults)).toEqual(ALL_TOOL_CATEGORIES);
     expect(effectiveCategories("super_admin", ["fit"], defaults)).toEqual(ALL_TOOL_CATEGORIES);
+  });
+
+  it("default-deny: the role defaults grant no launcher categories (Backlog G)", () => {
+    for (const role of CONFIGURABLE_ROLES) {
+      expect(DEFAULT_PERMISSION_CONFIG.categories[role]).toEqual([]);
+      // An untouched (inheriting) account of any configurable role sees nothing.
+      expect(effectiveCategories(role, null, DEFAULT_PERMISSION_CONFIG.categories)).toEqual([]);
+    }
   });
 });
 
