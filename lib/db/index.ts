@@ -61,6 +61,51 @@ function isMigrationRaceError(err: unknown): boolean {
 }
 
 /**
+ * SQLSTATEs / driver codes for a TRANSIENT connection failure during a
+ * serverless cold-start storm: the DB compute is waking from scale-to-zero
+ * (`57P03 cannot_connect_now`), the connection limit is momentarily exhausted
+ * (`53300 too_many_connections` — many instances cold-starting at once), or a
+ * socket dropped mid-connect (`ECONNRESET` / `CONNECT_TIMEOUT` / …). Because
+ * `migrate()`'s FIRST statement (`CREATE SCHEMA IF NOT EXISTS "drizzle"`) is what
+ * runs first, these surface AS that query failing. They're transient — a retry
+ * after the sibling frees connections / the compute finishes waking succeeds — so
+ * they get the same retry treatment as a migration race. Deliberately EXCLUDES
+ * permanent misconfig (bad host `ENOTFOUND`, refused `ECONNREFUSED`, auth `28P01`,
+ * privilege `42501`) so those still surface immediately instead of looping 5×.
+ */
+const TRANSIENT_CONNECTION_CODES = new Set([
+  // Postgres SQLSTATEs: server starting/stopping, connection/resource limits, link failure.
+  "57P03",
+  "57P01",
+  "53300",
+  "53400",
+  "08006",
+  "08001",
+  "08004",
+  "08000",
+  // postgres-js / Node socket codes.
+  "CONNECT_TIMEOUT",
+  "CONNECTION_CLOSED",
+  "CONNECTION_ENDED",
+  "CONNECTION_DESTROYED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENETUNREACH",
+  "EAI_AGAIN",
+]);
+
+function isTransientConnectionError(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let depth = 0; cur != null && depth < 6; depth++) {
+    const e = cur as { code?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && TRANSIENT_CONNECTION_CODES.has(e.code)) return true;
+    cur = e.cause;
+  }
+  return false;
+}
+
+/**
  * SQLSTATEs for "object does not exist" (column/table/object). The mirror of
  * ALREADY_EXISTS_CODES: a DROP/ALTER whose target is already gone is a no-op for
  * reconcileSchema's purpose (make the DB match the migrations), so it's skipped
@@ -168,19 +213,21 @@ export async function migrateWithFallback(
   db: Pick<DB, "execute">,
   runMigrate: () => Promise<void>,
 ): Promise<void> {
-  // Retry on a concurrent-migration race: another cold-start instance is
-  // mid-migration (e.g. racing CREATE SCHEMA "drizzle"). migrate() is idempotent,
-  // so by the next attempt the schema + journal exist and it's a no-op. Backs off
-  // with jitter; a genuine error (bad URL, no privilege) isn't a race code and so
-  // surfaces immediately.
+  // Retry on a concurrent-migration race OR a transient cold-start connection
+  // failure: another instance is mid-migration (racing CREATE SCHEMA "drizzle"),
+  // or the DB compute is waking / momentarily out of connections. Both surface as
+  // `migrate()`'s first statement failing and both clear on retry (migrate() is
+  // idempotent). Backs off with jitter; a genuine error (bad URL, no privilege)
+  // matches neither code set and so surfaces immediately.
   const MAX_ATTEMPTS = 5;
   for (let attempt = 1; ; attempt++) {
     try {
       await migrateOnce(db, runMigrate);
       return;
     } catch (err) {
-      if (attempt >= MAX_ATTEMPTS || !isMigrationRaceError(err)) throw err;
-      logger.warn("migration race — retrying", { attempt, err });
+      const retryable = isMigrationRaceError(err) || isTransientConnectionError(err);
+      if (attempt >= MAX_ATTEMPTS || !retryable) throw err;
+      logger.warn("migration race / transient connection — retrying", { attempt, err });
       await new Promise((r) => setTimeout(r, 150 * 2 ** (attempt - 1) + Math.random() * 100));
     }
   }

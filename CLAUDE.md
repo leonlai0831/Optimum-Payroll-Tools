@@ -762,17 +762,27 @@ a fresh prod database needs no manual SQL; you can still run `npm run db:migrate
 DB to apply them explicitly ahead of traffic. See `README.md` for step-by-step details.
 
 **Migration robustness (`lib/db/index.ts`, hardened 2026-06-13).** Three layers
-keep auto-migrate from wedging serverless startup: (1) a **concurrent-race
-retry** — multiple cold-start instances racing `CREATE SCHEMA "drizzle"` /
-the journal insert fail with `23505`/`XX000`/etc.; `migrate()` is idempotent so
-it's retried with backoff. (2) `reconcileSchema` (the fallback when the journal
-is out of sync — e.g. a `db:push`-bootstrapped prod DB) replays every migration
+keep auto-migrate from wedging serverless startup: (1) a **transient-failure
+retry** — `migrate()`'s first statement (`CREATE SCHEMA "drizzle"`) / the journal
+insert can fail either from a **concurrent race** (two cold-start instances:
+`23505`/`XX000`/etc.) OR a **cold-start connection storm** (the compute waking
+`57P03`, the connection limit `53300`, a dropped socket `ECONNRESET`/
+`CONNECT_TIMEOUT`/etc. — `isTransientConnectionError`); both are transient and
+`migrate()` is idempotent, so both are retried with backoff. Permanent misconfig
+(bad host/`ENOTFOUND`, auth `28P01`, privilege `42501`) matches neither set and
+surfaces immediately. (2) `reconcileSchema` (the fallback when the journal is out
+of sync — e.g. a `db:push`-bootstrapped prod DB) replays every migration
 statement-by-statement, **skipping both "already exists" AND "already gone"**
 SQLSTATEs, so `DROP COLUMN`/`ALTER` replays are no-ops (write new DROP migrations
 as `DROP COLUMN IF EXISTS`). (3) After a reconcile, `recordMigrationsAsApplied`
 **backfills `drizzle.__drizzle_migrations`** (drizzle's own hash + folderMillis)
 so the NEXT migrate is a clean no-op — no perpetual per-cold-start reconcile.
-Locked by `lib/db/migrate-repair.test.ts`.
+Locked by `lib/db/migrate-repair.test.ts`. **The error log captures the `cause`
+chain** (`serializeError` in `lib/observability.ts`): the Postgres SQLSTATE lives
+on `err.cause` (drizzle wraps the driver error), so the stored stack appends
+`Caused by: [code: …]` — otherwise a DB error reads as an opaque `Failed query: …`
+wrapper. (For serverless connection storms the real fix is the **pooled** Postgres
+endpoint — Neon `-pooler` — so set `POSTGRES_URL` to it.)
 
 ## gstack (recommended)
 

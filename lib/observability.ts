@@ -60,13 +60,39 @@ function recordToErrorLog(entry: {
     });
 }
 
+/**
+ * Serialize an Error for the in-app error log INCLUDING its `cause` chain. The
+ * Postgres SQLSTATE / driver code lives on `err.cause` (drizzle wraps the driver
+ * error), so without walking the chain the stored stack shows only the opaque
+ * wrapper — e.g. `Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"` with no
+ * code, which is undiagnosable. Each cause is appended as `Caused by: [code: …]
+ * <message>`. Depth-capped like the DB error walkers. Exported for unit-locking.
+ */
+export function serializeError(err: Error): { message: string; stack: string | null } {
+  const chain: string[] = [];
+  let cur: unknown = (err as { cause?: unknown }).cause;
+  for (let depth = 0; cur != null && depth < 6; depth++) {
+    const e = cur as { message?: unknown; code?: unknown; cause?: unknown };
+    const code =
+      typeof e.code === "string" || typeof e.code === "number" ? ` [code: ${e.code}]` : "";
+    const message =
+      e instanceof Error ? e.message : typeof e.message === "string" ? e.message : String(cur);
+    chain.push(`Caused by:${code} ${message}`);
+    cur = e.cause;
+  }
+  const stack = (err.stack ?? "") + (chain.length ? `\n${chain.join("\n")}` : "");
+  return { message: err.message, stack: stack || null };
+}
+
 /** Sink for error-level logs: in-app error log always, Sentry when configured. */
 function forwardLog(msg: string, fields?: Record<string, unknown>): void {
   const cause = fields?.err ?? fields?.error;
-  recordToErrorLog({
-    message: cause instanceof Error ? `${msg}: ${cause.message}` : msg,
-    stack: cause instanceof Error ? cause.stack : null,
-  });
+  if (cause instanceof Error) {
+    const { message, stack } = serializeError(cause);
+    recordToErrorLog({ message: `${msg}: ${message}`, stack });
+  } else {
+    recordToErrorLog({ message: msg, stack: null });
+  }
   if (!sentry) return;
   try {
     if (cause instanceof Error) {
@@ -96,9 +122,10 @@ export function captureRequestError(
   context: { routePath?: string; routeType?: string },
 ): void {
   const err = error instanceof Error ? error : null;
+  const serialized = err ? serializeError(err) : { message: String(error), stack: null };
   recordToErrorLog({
-    message: err?.message ?? String(error),
-    stack: err?.stack ?? null,
+    message: serialized.message,
+    stack: serialized.stack,
     path: [request?.method, request?.path ?? context?.routePath].filter(Boolean).join(" ") || null,
   });
   captureException(error, {

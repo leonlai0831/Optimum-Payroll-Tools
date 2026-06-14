@@ -47,3 +47,60 @@ describe("migration journal repair (out-of-sync DB)", () => {
     await migrate(db, { migrationsFolder: FOLDER });
   });
 });
+
+/**
+ * Cold-start connection storms (many serverless instances waking a scaled-to-zero
+ * compute at once) make migrate()'s FIRST statement — CREATE SCHEMA "drizzle" —
+ * fail transiently. migrateWithFallback must retry those (like a migration race)
+ * so the app self-heals instead of logging "database init failed", but must still
+ * surface a genuine misconfig (bad URL / no privilege) immediately.
+ */
+describe("migrateWithFallback retries transient cold-start connection failures", () => {
+  // execute() is never reached: these errors aren't "already exists", so
+  // migrateOnce rethrows before reconcileSchema would run.
+  const fakeDb = {
+    execute: async () => {
+      throw new Error("reconcileSchema should not run for a connection error");
+    },
+  } as unknown as DB;
+
+  function pgError(code: string): Error {
+    const err = new Error('Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"');
+    (err as { cause?: unknown }).cause = { code, message: `simulated ${code}` };
+    return err;
+  }
+
+  it("retries a connection-limit error (53300) then succeeds", async () => {
+    const { migrateWithFallback } = await import("./index");
+    let calls = 0;
+    await migrateWithFallback(fakeDb, async () => {
+      calls++;
+      if (calls < 3) throw pgError("53300");
+    });
+    expect(calls).toBe(3);
+  });
+
+  it("retries a Neon-waking error (57P03) and a socket reset (ECONNRESET)", async () => {
+    const { migrateWithFallback } = await import("./index");
+    for (const code of ["57P03", "ECONNRESET"]) {
+      let calls = 0;
+      await migrateWithFallback(fakeDb, async () => {
+        calls++;
+        if (calls < 2) throw pgError(code);
+      });
+      expect(calls, code).toBe(2);
+    }
+  });
+
+  it("does NOT retry a permanent error (permission denied 42501)", async () => {
+    const { migrateWithFallback } = await import("./index");
+    let calls = 0;
+    await expect(
+      migrateWithFallback(fakeDb, async () => {
+        calls++;
+        throw pgError("42501");
+      }),
+    ).rejects.toThrow("Failed query");
+    expect(calls).toBe(1);
+  });
+});
