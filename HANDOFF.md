@@ -5,61 +5,58 @@ Snapshot for the next session (last updated **2026-06-14**). `main` is green:
 architecture + the frozen Settings IA rules (it now opens with a TOC + a
 "Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
 
-## This session (2026-06-14, continuation 9) — PR4 calculator allowance guards (draft)
+## This session (2026-06-14, continuation 9) — PR4 + #199 + PR3 merged (#201, #199, #202)
 
-One feature this session, built on the designated branch `claude/hopeful-sagan-hzz2od`
-(remote-execution session ⇒ one branch, draft PR — NOT auto-merged; recommend merge
-after a glance). Picked **PR4 — calculator allowance guards** (the next clear,
-no-decision-needed operator request from continuation 8's START-HERE list).
+**Three PRs merged**, all on the designated branch `claude/hopeful-sagan-hzz2od`
+(remote-execution session ⇒ one branch). Each feature ran the full loop —
+build → `/code-review` → typecheck/lint/test **550/550**/build → **gstack browser-QA**
+→ CI green → **squash-merge** — and the branch was re-synced to `main` via a merge
+commit between features so each PR's diff stayed scoped to its own change.
 
-**What shipped (`components/dashboard.tsx` only, +~120/-30):** two payroll-safety
-guards on the KPI calculator —
-1. **Guard A — "no allowance saved" prompt.** When a loaded month's allowance fetch
-   resolves with **zero** records (`allowanceChecked && period && allowanceRecs.length
-   === 0`), an amber banner tells the operator the values below are last month's
-   carry-over and links to the Allowance Calculator. New `allowanceChecked` state
-   (set false at the start of `applyAllowanceForPeriod`, true at both exits) gates it
-   so it never flashes during the in-flight fetch.
-2. **Guard B — manual-diverges-from-saved warning.** A top banner (count) + an inline
-   **"⚠ saved RM x"** hint under each diverging row, when a coach's **manual** allowance
-   differs from the period's saved Allowance run. Both read ONE helper
-   `divergedAllowance(savedAllowanceByGroup, g)` (module-level, pure) so the count and
-   the per-row marks can't disagree; `savedAllowanceByGroup` re-links via the shared
-   `linkAllowance` (mirrors the auto-overlay).
+1. **#201 — PR4: calculator allowance guards** (`components/dashboard.tsx`). **Guard A**
+   — a "no allowance saved for {period}" amber banner when a loaded month's allowance
+   fetch resolves with zero records (gated on a new `allowanceChecked` flag so it doesn't
+   flash). **Guard B** — a top banner + an inline **"⚠ saved RM x"** hint when a coach's
+   MANUAL allowance differs from the saved Allowance run (one pure helper
+   `divergedAllowance`, ε=0.005 float tolerance, null-safe). `/code-review` (high)
+   hardening: a monotonic `allowanceReq` ref ignores a superseded concurrent
+   period-fetch; the divergence banner is gated on `period`. Cleanup: shared
+   **`AmberAlert`** component (readiness banner adopted it) + a `{" "}` fix for this
+   build's `</strong> text` space-drop (a pre-existing "1coach(es)" glitch). gstack-QA'd
+   390px: auto-link → edit → divergence → revert → switch to a no-run month → Guard A.
+2. **#199 — per-column one-click on Per-account access** (`components/category-overrides.tsx`;
+   carried draft from continuation 8). Each category COLUMN gets a tri-state one-click
+   toggle (desktop header + mobile "All N:" row) that grants/revokes that category for
+   ALL visible accounts at once. **Browser-QA'd this session** (seeded 4 accounts with
+   varied `visibleCategories`): some→all→none cycle, grant/revoke-all PATCHes every
+   visible row (200) + persists, **filter-scoped** ("All 3" under a Staff filter),
+   super_admin excluded, both layouts.
+3. **#202 — PR3: center scope N/A for no-swim accounts** (`components/center-overrides.tsx`
+   + `system/permissions/page.tsx`). **Operator decision asked + confirmed this session:
+   keep the row + a disabled note.** The Center scope card lists swim centers, so for an
+   admin/supervisor with no effective swim access the row now shows **"No swim access —
+   center scope doesn't apply."** instead of the Restrict control, and is excluded from
+   select-all / bulk targets / the scope filter / the row checkbox. `hasSwimAccess` is
+   resolved via the shared Vitest-locked `effectiveCategories` (super_admin = all → stays
+   "locked"). gstack-QA'd both layouts: swim supervisor → editable; fit-only supervisor +
+   admin → the note; super_admin → "Always manages every center".
 
-**`/code-review` (high) findings, addressed before QA:** float-equality false positives
-→ `ALLOWANCE_EPSILON` (0.005) tolerance; manual-cleared/`null` → guarded in the helper
-(also moot — `appearsInLeaderboard` needs allowance > 0); concurrent period-fetch race →
-monotonic `allowanceReq` ref ignores a superseded response; divergence banner left a
-stale **blank-period** banner → gated on `period`; count(over `ranked`) vs inline(over
-`visible`) copy softened ("rows that differ are marked below"). Accepted (not fixed):
-one allowance record can map to two same-name groups — consistent with the existing
-auto-overlay, an advisory **over-report** (never hides). Cleanup folded in: extracted a
-shared **`AmberAlert`** component (the 2 new banners + the existing readiness banner now
-share it) and the `divergedAllowance` helper.
+**Env note:** the GitHub MCP token expired mid-session (right as #202's CI started); the
+operator re-authorized and #202 merged on green. The "modified by linter" reminders during
+the session were just branch checkouts (#199 was QA'd on its own branch) — no work lost.
+The seed-then-QA pattern (throwaway `tsx` against `./.pglite`, dev stopped) worked again;
+gstack bridge (rev 1208→1194, `CI=1`) is healthy. `send_later` is NOT available here — used
+a background `sleep` timer to re-check CI for the success case (webhooks only deliver CI
+failures), which works.
 
-**JSX gotcha found + fixed:** this build's transform **drops the space in
-`</strong> text`** (so `<strong>{x}</strong> coach(es)` rendered "1coach(es)" — a
-**pre-existing** bug visible on the readiness banner too). Fixed all three touched
-banners with an explicit `{" "}`.
-
-**gstack browser-QA'd at 390px (phone):** seeded a coach + a 2026-05 allowance run
-(teaching=1200) via a throwaway `tsx` script against `./.pglite` (deleted after),
-uploaded `KPI_2026-05.csv` → **auto-linked** badge → edited to 1500 → divergence banner
-+ two "⚠ saved RM 1,200" hints (mobile card + desktop table) → reverted to 1200 →
-warning cleared (value-based, not edit-based) → switched period to **2026-04** (no run)
-→ Guard A banner, divergence banner gone. Screenshots captured; console clean (only
-benign vercel-insights/devtools). **typecheck + lint + test 550/550 + build all green.**
-
-**Still queued (next session START-HERE):**
-- **#199 — per-column one-click on Per-account access** (draft, branch
-  `claude/per-column-bulk-category`): browser-QA then merge (seed a few `role:"staff"`
-  accounts first — the per-column checkbox only renders with non-super-admin rows).
-- **PR3 — Center-scope swim-gating** (`components/center-overrides.tsx`): needs the
-  operator's **design decision** (disabled "no swim access" note vs hide vs group) —
-  ask before building. Thread each user's effective `swim` visibility into `CenterOverrides`.
-- Then the **P2 list** (`ROADMAP.md`): #3② payee-completeness gate before the freelancer
-  bank export **[P0]**, #4 payee-PII scoping, #5 monthly-close dashboard, E batches ②③④.
+**Next session START-HERE — the P2 list (`ROADMAP.md`), all unblocked (no decision pending —
+PR3 + PR4 from continuation 8's queue are DONE):**
+- **#3② payee-completeness gate [P0]** — before the freelancer bank-file export, block/
+  confirm with the names missing IC / bank / account (serves the June go-live).
+- **#4 payee-PII scoping** — drop IC + bank account from the default `/api/coaches`
+  projection; serve only to a payee capability (`run_freelancer`/`swim_edit_staff`).
+- **#5 monthly-close cycle dashboard** — a "This month" status strip on the launcher.
+- then #6 allowance bank XLSX, the **E batches ②③④**, code/UI cleanups, larger refactors.
 
 ## This session (2026-06-14, continuation 8) — P2 #2/#3① + KPI/permissions operator requests (#196–#199)
 
