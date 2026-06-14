@@ -218,12 +218,25 @@ Also this session (NOT a feature PR):
    Permissions-page redesign's "search + per-column sort/filter + bulk check/uncheck"
    asks should be built ON the same kit, so do PR-kit before D.
 
-**#3 Marketing visibility — owner action, NO code.** Swim staff see the "Optimum
- Marketing" card because `DEFAULT_PERMISSION_CONFIG.categories` grants **all three**
- categories to every role and the Marketing KPI card has **no capability gate**.
- Owner unticks "Optimum Marketing" for staff/supervisor on
- `/system/permissions → Role defaults`. (If a code default is wanted later: drop
- `marketing` from the role defaults so it's opt-in.)
+**G. Default-deny launcher categories + drop the Visibility column (operator request
+ 2026-06-14, with screenshot). Supersedes the old "Marketing visibility" item.**
+ 1. **Drop the "Visibility" column** from the User-overrides tab (= D ask #6 — do them
+    together).
+ 2. **Flip category visibility to default-DENY.** Today `DEFAULT_PERMISSION_CONFIG.categories`
+    grants **all three** (swim / fit / marketing) to every role, so everyone sees everything
+    by default; the operator wants the default to be **nothing** — an admin must **manually
+    tick a department** on the User-overrides tab before an account sees ANY launcher
+    category.
+    - **Code lever:** set the role-default categories to `[]` (decide per role; super_admin
+      always all). The resolver is `effectiveCategories` (override ?? role default; super_admin
+      → all) — flipping the role default to `[]` is the switch. This alone only affects FRESH
+      seeds (prod already has a stored config).
+    - **Existing prod (stored config + 203 accounts):** a hard flip locks out every
+      *inheriting* account until granted. **Safe rollout (recommended):** a migration that
+      **snapshots each account's CURRENT effective categories into a per-user override BEFORE**
+      flipping the role default to `[]` — existing users keep their access, only NEW accounts
+      default-deny. (Alt: hard flip + a bulk-grant pass.) Can ship independently of the D
+      redesign (it's a config/migration change, not the UI rework).
 
 **Carried over (largely handled, verify):** pre-#166 wrong auto-links — #172's
  DB UNIQUE now prevents new dupes and 0038 dedups existing ones (keeping the active

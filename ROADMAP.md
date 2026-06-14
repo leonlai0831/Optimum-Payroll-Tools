@@ -87,9 +87,14 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   Conventions — THEN convert the ~15 missing lists in per-module batches (one clean
   PR each). Inventory baseline (2026-06-13): 23 lists — search 8, sort 9, filter 6,
   select-all 2.
-- **Marketing visibility** — owner unticks "Optimum Marketing" for staff/supervisor
-  on `/system/permissions` (no code); root cause: all roles default to all 3
-  launcher categories + the Marketing card has no capability gate.
+- **G. Default-deny launcher categories + drop the Visibility column** (operator
+  request 2026-06-14). Flip category defaults from **all-three** to **none** — an
+  account sees no department until an admin manually ticks one on the User-overrides
+  tab — and drop the Visibility column (= D #6). Code lever: role-default categories
+  → `[]` (super_admin always all). **Existing 203 accounts:** snapshot current
+  effective categories into per-user overrides BEFORE flipping the default (safe
+  rollout) so they keep access; only NEW accounts default-deny. **Supersedes** the
+  old marketing-only visibility item.
 
 ## Backlog (unordered — pick with the owner)
 
