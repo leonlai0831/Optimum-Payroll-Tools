@@ -182,7 +182,15 @@ Also this session (NOT a feature PR):
     visibility per-user (the Roles tab's categories can be removed);
  5. **rename "User overrides"** to something clearer;
  6. drop the **Visibility** column.
- (Overlaps C — the per-admin center assignment likely lives on this same page.)
+ **Operator confirmed 2026-06-14 (with screenshot):** the "User overrides" tab
+ currently lists **203 accounts with NO search / sort / filter and NO
+ select-all/clear** — and this applies to **BOTH** cards on the tab now: the
+ category-overrides list AND the new **Center scope** card (#180, same
+ controls-less pattern). Asks #2 (search + per-column sort/filter) and #3 (bulk
+ check/uncheck the filtered rows = 一键勾选/取消) cover it. Build the controls on the
+ **E kit** (`SearchInput`/`FilterBar`/`useRowSelection`/`SelectAllCheckbox`), so
+ **E-kit lands before D**. (C is DONE — the per-admin center assignment landed on
+ this page, so the page now hosts category + center per-user overrides.)
 
 **E. List-control standardization (operator decision 2026-06-13: kit + docs FIRST,
  then per-module batches).** Standard to enforce: **every data list ships Search +
