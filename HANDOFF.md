@@ -1,9 +1,60 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-14**). `main` is green:
-**vitest 539/539**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
+**vitest 546/546**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
 architecture + the frozen Settings IA rules (it now opens with a TOC + a
 "Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
+
+## This session (2026-06-14, continuation 7) — E batch ① + system review → ROADMAP P2 + IDOR fix (#191–#193)
+
+Three PRs, each its own branch off `main`, all squash-merged after `/code-review`
++ green CI (+ gstack QA where there was a UI surface):
+
+1. **#191 — Backlog E step 2, batch ①.** Migrated the three saved-month **history**
+   lists onto the `components/table-controls` kit: `AllowanceHistoryView` (raw
+   Input/Select → `SearchInput`/`FilterBar`/`FilterSelect` + Clear-filters),
+   `FreelancerHistoryView` (added Search + Position filter + per-column `SortTh`
+   over each period group + empty-after-filter state), and `RunHistoryShell`
+   (powers **Commission + Coaching** history — added Search + Year filter +
+   per-column sort incl. one key per dynamic stat column + empty state). No data
+   behavior change; grouping + newest-first default order preserved.
+   **gstack-QA'd** (phone 390px + desktop 1280px, seeded data): search, all
+   filters, Clear, sort asc→desc by row order, year filter, empty state — zero bugs.
+2. **#192 — System review → ROADMAP P2 (docs only).** Operator asked for a
+   four-dimension review (product / code-quality / UI-UX / security) and to fold
+   **every** finding into the plan with an agent-decided order. Ran 4 parallel
+   review agents; consolidated + de-duped into **`ROADMAP.md` → P2** with a
+   12-step execution order (correctness + security first → high-value product →
+   cleanup), integrated with the in-flight E rollout + P0 go-live. Two items
+   flagged for an **owner decision** (outbound notifications; bulk-overwrite
+   password-reset blast radius).
+3. **#193 — P2 #1: lesson-plan center-scope IDOR fix (security, confirmed).**
+   `GET /api/lesson-plans/[id]` + the PDF route only checked `canViewPlan`, which
+   returned true for ANY reviewer regardless of center — a center-scoped reviewer
+   could read/export plans outside their centers. Made `canViewPlan` center-aware
+   (creator always sees own; reviewer only via `canManageCenter`, `null` =
+   unrestricted/super_admin unchanged). New `lib/lesson-plan/access.test.ts`
+   (7 cases; **vitest 539→546**). Pure lib + API behavior, no rendered surface →
+   browser QA N/A per the SOP.
+
+**Next build item: ROADMAP P2 order, resuming at #2** — `allowance-calculator`
+**stable-`_key` fix** (a confirmed correctness bug surfaced by the review:
+editable teaching/other rows reconcile by **array index**, ~L117-141, violating
+the project's stable-`_key` rule — removing a middle row shifts focus/values to a
+neighbour; freelancer already does it right). It's a **UI** change → needs a real
+gstack browser-QA pass. Then continue down the P2 list (payroll-correctness
+guards, payee PII scoping, monthly-close dashboard, allowance bank XLSX, then the
+remaining **E batches ②③④** folded in as P2 #7, code/UI cleanup, larger refactors).
+
+**Follow-ups (carry):**
+- **The full P2 backlog + ordered plan now lives in `ROADMAP.md`** — that's the
+  source of truth for "what's next"; the per-finding detail is there.
+- Still NOT browser-QA'd from earlier sessions: **A (#175), B (#176).**
+- **DB cold-start (operator env change, NOT code):** point `POSTGRES_URL` at the
+  Neon **pooled** (`-pooler`) endpoint; re-check `/system/errors` is clean + clear old rows.
+- **gstack bridge re-verified working this session** (rev 1208→1194 symlink + `CI=1`);
+  the seed-then-QA pattern (insert rows via a throwaway `tsx` script against `./.pglite`
+  while dev is stopped, then drive the UI) worked well for control-less lists.
 
 ## This session (2026-06-14, continuation 6) — Backlog D + G shipped (#188, #189)
 
