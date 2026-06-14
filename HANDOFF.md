@@ -1,9 +1,47 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-14**). `main` is green:
-**vitest 523/523**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
+**vitest 538/538**, typecheck + lint clean, `next build` OK. Read `CLAUDE.md` for
 architecture + the frozen Settings IA rules (it now opens with a TOC + a
 "Non-negotiable rules" quick-ref); read `AGENTS.md` before touching Next.js APIs.
+
+## This session (2026-06-14, continuation 5) — Center-scope UI QA'd + Backlog E kit shipped (#186)
+
+Short session, one build PR + one carried QA, both done by the loop (`/code-review`
++ green CI + gstack browser QA):
+
+1. **#180 Center-scope UI — browser-QA'd (the carried follow-up).** Drove the
+   `/system/permissions` "User overrides" → **Center scope** card in gstack at phone
+   width (390px) AND desktop: Restrict → reveal the 9 configured-center chips → select
+   (PATCH 200, badge "Manages 1 of 9", chip turns indigo) → add a 2nd (persists across
+   reload) → **select all 9 collapses to NULL** server-side ("Manages all centers" after
+   reload) → **Reset to all** (PATCH null). super_admin row locked. Both responsive
+   layouts render. **Zero bugs** — #180 is now QA-clean.
+2. **#186 — Backlog E: list-control PR-kit (first step).** Extended
+   `components/table-controls.tsx` with **`SearchInput`** (icon + clear, composes
+   `ui.tsx` `Input`), **`FilterSelect` / `FilterBar`** (dropdown filters + "Clear
+   filters", composes `ui.tsx` `Select`), **`useRowSelection`** (`Set<id>` +
+   `toggle`/`toggleMany`/`selectOnly`/`clear` + `stateOf`/`allSelected`),
+   **`SelectAllCheckbox`** (tri-state) and the pure **`triState`**. **Migrated
+   `components/timesheet-review.tsx`** onto the hook as the reference impl + added a
+   top-level "Select all records"; per-coach-group/per-window boxes now show a correct
+   **indeterminate** state (was unchecked-until-all). Pure helpers Vitest-locked in
+   `components/table-controls.test.ts` (**+15 → 538**). CLAUDE.md Conventions records the
+   list-control standard. **gstack-QA'd** the review queue (window grouping 4 rows → 3
+   records, tri-state, Approve → queue empties). **`permissions-form.tsx` was judged NOT
+   applicable** (its "matrix" is a 2-D role×capability config grid, not id-based row
+   selection — `useRowSelection` doesn't fit; a per-column "check all caps" belongs to D).
+
+**Follow-ups (carry):** the **E kit is now in `main`**, so the two things that build on
+it are unblocked. Next build items: **D (Permissions-page redesign)** — add
+search/sort/filter + bulk check/uncheck to BOTH overrides cards (category + center) on
+`/system/permissions`, built on the E kit; **G** (default-deny categories + drop the
+Visibility column — pairs with D ask #6); and **E step 2** — convert the ~15 control-less
+lists in per-module batches (one PR each) onto the kit (Allowance/Freelancer/Commission
+history → `/progress` · `/system/audit` · `/system/errors` · `/timesheets/schedules` →
+`/lesson-plans/history` → KPI run detail · `/staff/payees`). Still NOT browser-QA'd: A
+(#175) and B (#176) from earlier sessions. DB cold-start: re-check `/system/errors` is
+clean, then the operator points `POSTGRES_URL` at the Neon **pooled** endpoint.
 
 ## This session (2026-06-14, continuation 4) — F shipped, gstack-QA made mandatory, CLAUDE.md restructured (#182–#184)
 
