@@ -1,11 +1,11 @@
 # Session Handoff — Optimum People Hub
 
 Snapshot for the next session (last updated **2026-06-13**, end of a long
-continuation session). `main` is green: **vitest 502/502**, typecheck + lint
+continuation session). `main` is green: **vitest 508/508**, typecheck + lint
 clean, `next build` OK. Read `CLAUDE.md` for architecture + the frozen Settings
 IA rules; read `AGENTS.md` before touching Next.js APIs.
 
-## This session (2026-06-13, continuation 3) — SOP + backlog A & B (#174–#176)
+## This session (2026-06-13→14, continuation 3) — SOP + backlog A & B + DB fix (#174–#178)
 
 A **development SOP** was added (CLAUDE.md → "Development SOP — per-feature loop"):
 per feature → build + `/code-review` + lint/typecheck/test/build → **auto-merge when
@@ -32,10 +32,30 @@ each, all squash-merged after `/code-review` + green CI:
    Lesson Plan→History; capability-gated (super_admin = all), best-effort,
    non-reviewers run **zero** queries. Badge sits on the launcher icon corner + the
    matching tab. New queries `countTimesheetsForReview` / `countLessonPlansForReview`.
+4. **#178 — DB cold-start resilience (not a backlog item; triaged from the error
+   log).** The 17 `database init failed: Failed query: CREATE SCHEMA "drizzle"`
+   errors were `migrate()`'s first statement failing under a **serverless cold-start
+   connection storm** (compute waking / connection limit), self-healing on the next
+   request but logged because `migrateWithFallback` only retried migration-RACE
+   codes. Fix: `isTransientConnectionError` (`57P03`/`53300`/`ECONNRESET`/… —
+   `lib/db/index.ts`) is now retried too; `serializeError` (`lib/observability.ts`)
+   appends `Caused by: [code: …]` so the SQLSTATE on `err.cause` is finally captured.
+   Both Vitest-locked.
 
 **QA note:** A and B passed typecheck/lint/test/build + a `/code-review`/reviewer
 pass, but were **NOT browser-QA'd (gstack)** this session — worth a real-device pass
 (esp. A's multi-line lesson form + the badge placement on phones).
+
+**Follow-ups for the NEXT session (carry these):**
+- **DB errors — verify, then maybe root-cause.** #178 makes new cold-start errors
+  self-heal (should stop appearing). **Re-check `/system/errors` in a day or two**;
+  if clean, the old 17 can be cleared (operator "Clear all"). The *root* fix is an
+  **operator env change** (NOT done yet): point `POSTGRES_URL` at the Neon **pooled**
+  endpoint (`-pooler` host, Production + Preview) to remove the connection-storm
+  class entirely.
+- **Backlog C is START-HERE** (see below) — first confirm with the operator: center-
+  assignment UI on `/system/users` vs `/system/permissions`.
+- Backlog **D**, **E** still queued; Marketing-card visibility is a no-code operator toggle.
 
 ## This session (2026-06-13, continuation 2) — merged to `main` as #170–#172
 
