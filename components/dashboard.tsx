@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download, FileUp, Link2, Save, Sparkles, TriangleAlert } from "lucide-react";
 import { CoachResultPdfButton } from "@/components/coach-result-pdf-button";
 import { Drawer } from "@/components/drawer";
@@ -112,6 +112,33 @@ function monthsAgo(iso: string | null): string {
   return `${Math.floor(days / 30)} mo ago`;
 }
 
+/** Currency comparison tolerance — half a sen, so float dust never reads as a divergence. */
+const ALLOWANCE_EPSILON = 0.005;
+
+/**
+ * The saved Allowance-run amount that DIFFERS from a coach's entered allowance (a
+ * payroll-risk divergence to flag), or null when it matches / is blank / has no saved
+ * record. One source of truth so the headline count and the per-row marker never disagree.
+ */
+function divergedAllowance(
+  saved: Map<string, number>,
+  g: { id: string; meta: GroupInputs },
+): number | null {
+  if (g.meta.allowanceSource !== "manual" || g.meta.allowance == null) return null;
+  const amt = saved.get(g.id);
+  return amt != null && Math.abs(amt - g.meta.allowance) > ALLOWANCE_EPSILON ? amt : null;
+}
+
+/** Inline amber advisory banner (warning icon + message) shared by the dashboard notices. */
+function AmberAlert({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 /** A staged machine-pushed delivery to seed the dashboard with (/kpi?ingest=<id>). */
 export interface IngestSeed {
   ingestId: number;
@@ -141,6 +168,10 @@ export function Dashboard({
   const [allowanceRecs, setAllowanceRecs] = useState<AllowanceRec[]>([]);
   /** coachIds the user marked "not applicable" this session — hidden from the panel. */
   const [naRecs, setNaRecs] = useState<Set<number>>(() => new Set());
+  /** True once the period's allowance fetch has resolved — gates the "no allowance saved" prompt. */
+  const [allowanceChecked, setAllowanceChecked] = useState(false);
+  /** Monotonic id of the latest allowance fetch — a stale (superseded) response is ignored. */
+  const allowanceReq = useRef(0);
   const [accts, setAccts] = useState<Acct[]>([]);
   const [meta, setMeta] = useState<Record<string, GroupInputs>>({});
   const [aiStatus, setAiStatus] = useState<"idle" | "matching" | "done">("idle");
@@ -335,13 +366,21 @@ export function Dashboard({
     override?: { profiles: CoachProfile[]; accts: Acct[] },
   ) {
     if (!p) return;
+    // A quick period change fires overlapping fetches; only the latest may write state,
+    // so a slow earlier response can't clobber the current period's allowances/banners.
+    const reqId = ++allowanceReq.current;
+    setAllowanceChecked(false);
     let list: AllowanceRec[];
     try {
       list = await fetchJson<AllowanceRec[]>(`/api/allowance/runs?period=${encodeURIComponent(p)}`);
     } catch {
-      setAllowanceRecs([]);
+      if (allowanceReq.current === reqId) {
+        setAllowanceRecs([]);
+        setAllowanceChecked(true);
+      }
       return; // no allowances saved for this period — keep carry-over values
     }
+    if (allowanceReq.current !== reqId) return; // superseded by a newer period fetch
     // Enrich each record with its coach profile's account aliases so a short KPI
     // name (VASSEN) can still link to a full allowance name (VASSENTHAN).
     const profiles = override?.profiles ?? coachList;
@@ -392,6 +431,7 @@ export function Dashboard({
       }
       return next;
     });
+    setAllowanceChecked(true);
   }
 
   const groups = useMemo(() => {
@@ -461,6 +501,31 @@ export function Dashboard({
       nonLinkableCount,
     };
   }, [allowanceRecs, groups, naRecs]);
+
+  // The saved Allowance-run amount that auto-links to each coach, keyed by group id.
+  // Lets the editor flag a MANUAL allowance that diverges from this authoritative value
+  // (a payroll risk: a typed number that won't match what the Allowance Calculator paid).
+  // Mirrors the auto-overlay link in applyAllowanceForPeriod so "what would have
+  // auto-linked" stays consistent between the two.
+  const savedAllowanceByGroup = useMemo(() => {
+    const map = new Map<string, number>();
+    if (allowanceRecs.length === 0) return map;
+    for (const g of groups) {
+      const linked = linkAllowance(allowanceRecs, {
+        coachId: g.meta.coachId,
+        canonicalName: g.meta.canonicalName,
+        accounts: g.accounts.map((a) => a.name),
+      }).rec;
+      if (linked) map.set(g.id, linked.teaching);
+    }
+    return map;
+  }, [allowanceRecs, groups]);
+
+  // Coaches whose manually-entered allowance differs from the saved Allowance run.
+  const overriddenAllowanceCount = useMemo(
+    () => ranked.filter((g) => divergedAllowance(savedAllowanceByGroup, g) !== null).length,
+    [ranked, savedAllowanceByGroup],
+  );
 
   // Display-only sort/filter — save() and exportCsv() always use the full `ranked` list.
   const [q, setQ] = useState("");
@@ -727,28 +792,34 @@ export function Dashboard({
       <option value="Pool Supervisor">Supervisor</option>
     </Select>
   );
-  const allowanceField = (g: Row, inputClass = "w-24 py-1 text-xs") => (
-    <>
-      <Input
-        type="number"
-        value={g.meta.allowance ?? ""}
-        placeholder="—"
-        onChange={(e) =>
-          updateMeta(g.id, {
-            allowance: e.target.value === "" ? null : Number(e.target.value),
-            allowanceSource: "manual",
-          })
-        }
-        className={inputClass}
-      />
-      {g.meta.allowanceSource === "auto" && (
-        <div className="text-[10px] font-medium text-brand">auto-linked</div>
-      )}
-      {g.meta.allowanceSource === "carryover" && (
-        <div className="text-[10px] text-gray-400">last month</div>
-      )}
-    </>
-  );
+  const allowanceField = (g: Row, inputClass = "w-24 py-1 text-xs") => {
+    const diverged = divergedAllowance(savedAllowanceByGroup, g);
+    return (
+      <>
+        <Input
+          type="number"
+          value={g.meta.allowance ?? ""}
+          placeholder="—"
+          onChange={(e) =>
+            updateMeta(g.id, {
+              allowance: e.target.value === "" ? null : Number(e.target.value),
+              allowanceSource: "manual",
+            })
+          }
+          className={inputClass}
+        />
+        {g.meta.allowanceSource === "auto" && (
+          <div className="text-[10px] font-medium text-brand">auto-linked</div>
+        )}
+        {g.meta.allowanceSource === "carryover" && (
+          <div className="text-[10px] text-gray-400">last month</div>
+        )}
+        {diverged != null && (
+          <div className="text-[10px] font-medium text-amber-600">⚠ saved {rm(diverged)}</div>
+        )}
+      </>
+    );
+  };
   // Mgmt % is locked when an assessment record drives it — no manual override.
   const mgmtField = (g: Row, inputClass = "w-20 py-1 text-xs") => (
     <>
@@ -877,13 +948,33 @@ export function Dashboard({
 
       {/* Readiness banner */}
       {incompleteCount > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            <strong>{incompleteCount}</strong> coach(es) still need management data (assessment /
-            group hours). They&apos;re highlighted below.
-          </span>
-        </div>
+        <AmberAlert>
+          <strong>{incompleteCount}</strong>{" "}coach(es) still need management data (assessment /
+          group hours). They&apos;re highlighted below.
+        </AmberAlert>
+      )}
+      {/* No allowance saved for this period at all — prompt to enter it. The values
+          below are carry-over (where a profile has one) and may not be this month's pay. */}
+      {allowanceChecked && period && allowanceRecs.length === 0 && groups.length > 0 && (
+        <AmberAlert>
+          No allowance saved for <strong>{period}</strong>{" "}yet. The allowance values below are last
+          month&apos;s carry-over (where available) and may not be this month&apos;s pay.{" "}
+          <a className="font-medium underline" href="/allowance">
+            Save this month in the Allowance Calculator
+          </a>{" "}
+          so it links automatically, or enter each coach&apos;s teaching allowance below before
+          saving.
+        </AmberAlert>
+      )}
+
+      {/* A manual allowance that diverges from the saved Allowance run — a payroll risk
+          (the typed number won't match what the Allowance Calculator paid). */}
+      {period && overriddenAllowanceCount > 0 && (
+        <AmberAlert>
+          <strong>{overriddenAllowanceCount}</strong>{" "}coach(es) have a teaching allowance that
+          differs from the saved Allowance run for {period}. The manual value is used as entered —
+          rows that differ are marked below with the saved amount. Confirm it&apos;s intentional.
+        </AmberAlert>
       )}
       {hiddenCount > 0 && (
         <p className="text-xs text-gray-500">
