@@ -1,16 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, History, Trash2 } from "lucide-react";
+import { Download, History, Search, Trash2 } from "lucide-react";
 import { Button, Card, Spinner } from "@/components/ui";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/modal";
 import { useToast } from "@/components/toast";
 import { DesktopTable, MobileCards } from "@/components/responsive-table";
+import {
+  FilterBar,
+  FilterSelect,
+  SearchInput,
+  SortTh,
+  TableToolbar,
+  includesText,
+  makeComparator,
+  useSortState,
+} from "@/components/table-controls";
 import type { FreelancerRunSummary } from "@/lib/db/queries";
 import { rm2 } from "@/lib/utils";
+
+const ACCESSORS = {
+  name: (r: FreelancerRunSummary) => r.canonicalName,
+  position: (r: FreelancerRunSummary) => r.position,
+  hours: (r: FreelancerRunSummary) => r.totalServiceHours,
+  commitment: (r: FreelancerRunSummary) => r.commitment,
+  attendance: (r: FreelancerRunSummary) => r.attendance,
+  total: (r: FreelancerRunSummary) => r.grandTotal,
+} as const;
 
 function DeleteRunButton({ id, name, onDeleted }: { id: number; name: string; onDeleted?: () => void }) {
   const router = useRouter();
@@ -66,6 +85,45 @@ export function FreelancerHistoryView({
   rows: FreelancerRunSummary[];
   canEdit: boolean;
 }) {
+  const [q, setQ] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const { sort, toggleSort } = useSortState<keyof typeof ACCESSORS>();
+  const filterActive = q.trim() !== "" || positionFilter !== "";
+  function resetFilters() {
+    setQ("");
+    setPositionFilter("");
+  }
+
+  const positionOptions = useMemo(
+    () =>
+      [...new Set(rows.map((r) => r.position))]
+        .sort()
+        .map((p) => ({ value: p as string, label: p })),
+    [rows],
+  );
+
+  // Group by period, newest first (rows arrive ordered by createdAt desc); the
+  // search/filter narrow each group's rows, then the active sort orders them.
+  const periodOrder = useMemo(() => [...new Set(rows.map((r) => r.periodLabel))], [rows]);
+  const groups = useMemo(() => {
+    const filtered = rows.filter((r) => {
+      if (!includesText(r.canonicalName, q)) return false;
+      if (positionFilter && r.position !== positionFilter) return false;
+      return true;
+    });
+    const byPeriod = new Map<string, FreelancerRunSummary[]>();
+    for (const r of filtered) {
+      const list = byPeriod.get(r.periodLabel) ?? [];
+      list.push(r);
+      byPeriod.set(r.periodLabel, list);
+    }
+    const compare = makeComparator(ACCESSORS, sort);
+    return periodOrder
+      .map((p) => byPeriod.get(p))
+      .filter((list): list is FreelancerRunSummary[] => !!list && list.length > 0)
+      .map((list) => [...list].sort(compare));
+  }, [rows, q, positionFilter, sort, periodOrder]);
+
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -76,13 +134,36 @@ export function FreelancerHistoryView({
     );
   }
 
-  // Group by period, newest first (rows arrive ordered by createdAt desc).
-  const periodOrder = [...new Set(rows.map((r) => r.periodLabel))];
-  const groups = periodOrder.map((p) => rows.filter((r) => r.periodLabel === p));
-
   return (
     <div className="space-y-4">
-      {groups.map((list) => {
+      <Card className="overflow-hidden">
+        <TableToolbar className="flex-col items-stretch border-b-0 lg:flex-row lg:items-center">
+          <SearchInput
+            value={q}
+            onChange={setQ}
+            placeholder="Search freelancer…"
+            className="lg:max-w-xs"
+          />
+          <FilterBar active={filterActive} onClear={resetFilters}>
+            <FilterSelect
+              label="Position"
+              value={positionFilter}
+              onChange={setPositionFilter}
+              options={positionOptions}
+              allLabel="All positions"
+            />
+          </FilterBar>
+        </TableToolbar>
+      </Card>
+
+      {groups.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No records match the current filters"
+          body="Try clearing a filter or widening the search."
+        />
+      ) : (
+        groups.map((list) => {
         const period = list[0].periodLabel;
         const total = list.reduce((s, r) => s + r.grandTotal, 0);
         return (
@@ -161,13 +242,13 @@ export function FreelancerHistoryView({
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                   <tr>
-                    <th className="px-4 py-2 text-left">Freelancer</th>
-                    <th className="px-4 py-2 text-left">Position</th>
-                    <th className="px-4 py-2 text-right">Hours</th>
-                    <th className="px-4 py-2 text-right">Commit.</th>
-                    <th className="px-4 py-2 text-right">Attend.</th>
+                    <SortTh label="Freelancer" sortKey="name" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Position" sortKey="position" sort={sort} onSort={toggleSort} />
+                    <SortTh label="Hours" sortKey="hours" sort={sort} onSort={toggleSort} align="right" />
+                    <SortTh label="Commit." sortKey="commitment" sort={sort} onSort={toggleSort} align="right" />
+                    <SortTh label="Attend." sortKey="attendance" sort={sort} onSort={toggleSort} align="right" />
                     <th className="px-4 py-2 text-left">Paid by</th>
-                    <th className="px-4 py-2 text-right">Total</th>
+                    <SortTh label="Total" sortKey="total" sort={sort} onSort={toggleSort} align="right" />
                     <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
@@ -225,7 +306,8 @@ export function FreelancerHistoryView({
             </DesktopTable>
           </Card>
         );
-      })}
+      })
+      )}
     </div>
   );
 }
