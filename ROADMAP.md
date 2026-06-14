@@ -73,13 +73,15 @@ Operator feedback batched faster than build; do **one PR at a time**, in order.
   reviewer's approve/request-changes act on the **whole window together**. Chose
   group-by-window-key (no `sessionId` migration); persistence stays one row per
   class line so payroll aggregation/reconcile are untouched.
-- **D. Permissions / User-overrides redesign** — the "User overrides" tab lists
-  **203 accounts with NO search / sort / filter and NO select-all/clear** (operator
-  flagged 2026-06-14), on BOTH the category-overrides card AND the new Center-scope
-  card (#180). Add: full name; **search + per-column sort/filter**; **bulk
-  check/uncheck (一键勾选/取消) the filtered rows**; move category control off the
-  Roles tab; rename "User overrides"; drop the Visibility column. Build the controls
-  on the **E list-control kit**, so **E-kit lands first**.
+- **D. Permissions / User-overrides redesign** — list-controls portion ✅ DONE:
+  both cards (now the **"Per-account access" tab**, renamed from "User overrides")
+  ship **Full Name + Search + per-column Sort + Role/state/Status Filter + select-all
+  + a bulk action bar** (一键勾选/取消 — bulk grant/revoke a category or center, or
+  reset, across the filtered selection), built on the E list-control kit. Asks #1
+  (full name), #2 (search/sort/filter), #3 (bulk check/uncheck), #5 (rename) are
+  shipped. **Still open:** ask #4 (move the category control OFF the Roles tab /
+  remove the role-default categories) and ask #6 (drop the Visibility column) — both
+  entangle with **G** (default-deny categories) so do them together in that PR.
 - **E. List-control standardization** — every data list must ship Search + Sort +
   Filter, plus select-all/clear where it has row checkboxes; all via the shared
   `components/table-controls.tsx` kit (no more one-off `useState("")` + `.filter()`).

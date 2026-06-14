@@ -61,8 +61,9 @@ type Tab = "roles" | "overrides";
 /**
  * System Setting → Permissions: one page for the whole access model.
  * "Roles" = the role → capability matrix plus per-role default launcher
- * categories; "User overrides" = per-account category overrides (an account
- * inherits its role's defaults until explicitly overridden).
+ * categories; "Per-account access" = per-account category + center-scope
+ * overrides (an account inherits its role's defaults until explicitly
+ * overridden).
  */
 export function PermissionsForm({
   initial,
@@ -153,7 +154,7 @@ export function PermissionsForm({
         {(
           [
             { id: "roles", label: "Roles" },
-            { id: "overrides", label: "User overrides" },
+            { id: "overrides", label: "Per-account access" },
           ] as const
         ).map((t) => (
           <button
